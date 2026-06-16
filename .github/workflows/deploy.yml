@@ -1,0 +1,46 @@
+name: Deploy to GreenGeeks
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy via FTPS
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          port: ${{ secrets.FTP_PORT || 21 }}
+          server-dir: ${{ secrets.FTP_REMOTE_DIR }}
+          exclude: |
+            **/.git*
+            **/.git*/**
+            .github/**
+            .env
+            .env.*
+            credentials.json
+            README.md
+            claude.md
+            deploy_note.md
+            project-overview
+            project-revision
+            **/__pycache__/**
+            **/*.pyc
+
+      - name: Verify site is live
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ secrets.SITE_URL }}")
+          echo "Site responded with HTTP $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Site check failed — expected HTTP 200, got $STATUS"
+            exit 1
+          fi
