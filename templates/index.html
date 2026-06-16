@@ -1,0 +1,1579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Buddhist Vocabulary · Translation Review</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;900&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+  <style>
+    /* ── RESET & TOKENS ─────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --gold: #c9a84c; --gold-light: #e8c97a; --gold-pale: rgba(201,168,76,0.12);
+      --ink: #1a1208; --ink-soft: #2d2010;
+      --paper: #f5f0e8; --paper-dark: #ede7d5;
+      --red: #8b2020; --red-soft: #b03a2e;
+      --text: #2a1f0a; --text-soft: #6b5a3a;
+      --border: rgba(201,168,76,0.25);
+      --shadow: 0 4px 24px rgba(26,18,8,0.12);
+    }
+    body { background: var(--paper); color: var(--text); font-family: 'EB Garamond', serif; min-height: 100vh; }
+
+    /* ── HEADER ─────────────────────────────────────────────────────────── */
+    header {
+      background: var(--ink); padding: 0 2rem;
+      display: flex; align-items: center; justify-content: space-between;
+      height: 64px; position: sticky; top: 0; z-index: 100;
+      border-bottom: 1px solid rgba(201,168,76,0.3);
+    }
+    .header-brand { display: flex; align-items: center; gap: 0.75rem; }
+    .header-brand .wheel { font-size: 1.5rem; }
+    .brand-text { line-height: 1.2; }
+    .brand-tcat { font-family: 'Cormorant Garamond', serif; font-size: 1.3rem; font-weight: 700; color: var(--gold-light); letter-spacing: 0.06em; line-height: 1.15; }
+    .brand-en { font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 0.88rem; color: rgba(240,232,213,0.65); }
+    .header-right { display: flex; align-items: center; gap: 1rem; }
+    .user-badge { font-size: 0.82rem; color: rgba(201,168,76,0.7); font-style: italic; }
+    .btn-logout { font-family: 'EB Garamond', serif; font-size: 0.85rem; color: rgba(201,168,76,0.6); background: none; border: 1px solid rgba(201,168,76,0.25); padding: 0.3rem 0.9rem; border-radius: 2px; cursor: pointer; text-decoration: none; transition: all 0.2s; }
+    .btn-logout:hover { color: var(--gold); border-color: var(--gold); }
+
+    /* ── LAYOUT ─────────────────────────────────────────────────────────── */
+    .app-layout { display: grid; grid-template-columns: 260px 1fr; min-height: calc(100vh - 64px); }
+
+    /* ── SIDEBAR ────────────────────────────────────────────────────────── */
+    .sidebar {
+      background: var(--paper-dark); border-right: 1px solid rgba(26,18,8,0.12);
+      padding: 1.5rem; display: flex; flex-direction: column; gap: 1.5rem;
+      position: sticky; top: 64px; height: calc(100vh - 64px); overflow-y: auto;
+    }
+    .sidebar-section-title { font-family: 'Cormorant Garamond', serif; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.15em; color: var(--ink-soft); margin-bottom: 0.75rem; }
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+    .stat-box { background: rgba(255,255,255,0.5); border: 1px solid rgba(26,18,8,0.1); border-radius: 3px; padding: 0.6rem; text-align: center; }
+    .stat-num { font-size: 1.4rem; color: var(--ink); font-family: 'Cormorant Garamond', serif; }
+    .stat-label { font-size: 0.68rem; color: var(--text-soft); letter-spacing: 0.1em; text-transform: uppercase; }
+    .filter-group { display: flex; flex-direction: column; gap: 0.4rem; }
+    .filter-btn { background: none; border: 1px solid transparent; padding: 0.5rem 0.75rem; text-align: left; font-family: 'EB Garamond', serif; font-size: 0.9rem; color: var(--text); border-radius: 3px; cursor: pointer; transition: all 0.2s; }
+    .filter-btn:hover, .filter-btn.active { background: rgba(201,168,76,0.15); border-color: rgba(201,168,76,0.4); color: var(--ink); }
+    .filter-btn .count { float: right; font-size: 0.75rem; color: var(--text-soft); }
+    .sidebar-source-sel { width: 100%; font-family: 'EB Garamond', serif; font-size: 0.88rem; padding: 0.35rem 0.5rem; border: 1px solid rgba(26,18,8,0.18); border-radius: 3px; background: rgba(255,255,255,0.6); color: var(--text); cursor: pointer; }
+    .sidebar-source-sel:focus { outline: none; border-color: var(--gold); }
+
+    /* ── SHARED PANEL STYLES ────────────────────────────────────────────── */
+    .main { padding: 2rem; overflow-y: auto; }
+    .main-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem; }
+    .main-title { font-family: 'Cormorant Garamond', serif; font-size: 1.6rem; font-style: italic; color: var(--ink); }
+    .main-title span { color: var(--red); }
+    .toolbar-actions { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+    .search-box { background: rgba(255,255,255,0.8); border: 1px solid rgba(26,18,8,0.15); border-radius: 3px; padding: 0.5rem 0.85rem; color: var(--text); font-family: 'EB Garamond', serif; font-size: 0.95rem; width: 280px; }
+    .search-box::placeholder { color: var(--text-soft); }
+    .search-box:focus { outline: none; border-color: var(--gold); }
+
+    /* ── BUTTONS ────────────────────────────────────────────────────────── */
+    .btn { font-family: 'EB Garamond', serif; font-size: 0.95rem; padding: 0.55rem 1.2rem; border-radius: 3px; cursor: pointer; border: 1px solid; transition: all 0.2s; white-space: nowrap; }
+    .btn-primary { background: var(--ink); color: var(--gold-light); border-color: rgba(201,168,76,0.4); }
+    .btn-primary:hover { background: #2a1f0a; border-color: var(--gold); }
+    .btn-secondary { background: transparent; color: var(--text); border-color: rgba(26,18,8,0.25); }
+    .btn-secondary:hover { border-color: var(--text); }
+    .btn-gold { background: var(--gold); color: var(--ink); border-color: var(--gold); font-weight: 600; }
+    .btn-gold:hover { background: var(--gold-light); }
+    .btn-sm { font-size: 0.82rem; padding: 0.28rem 0.65rem; }
+    .btn-back { font-family: 'EB Garamond', serif; background: rgba(26,18,8,0.05); border: 1px solid rgba(26,18,8,0.28); color: var(--ink-soft); padding: 0.35rem 0.9rem; border-radius: 3px; cursor: pointer; font-size: 0.9rem; transition: all 0.2s; align-self: flex-start; white-space: nowrap; }
+    .btn-back:hover { background: rgba(26,18,8,0.11); border-color: rgba(26,18,8,0.5); color: var(--ink); text-decoration: underline; }
+
+    /* ── TAGS ───────────────────────────────────────────────────────────── */
+    .tag { font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 2px; border: 1px solid; letter-spacing: 0.05em; text-transform: uppercase; display: inline-block; }
+    .tag-pali    { color: #1e6a8a; border-color: rgba(30,106,138,0.3); background: rgba(30,106,138,0.08); }
+    .tag-skt     { color: #2d5fa0; border-color: rgba(45,95,160,0.3);  background: rgba(45,95,160,0.08); }
+    .tag-cat     { color: var(--red); border-color: rgba(139,32,32,0.3); background: rgba(139,32,32,0.06); }
+    .tag-final   { color: #1a6b35; border-color: rgba(26,107,53,0.4);  background: rgba(26,107,53,0.08); }
+    .tag-pending { color: #7a5010; border-color: rgba(122,80,16,0.3);  background: rgba(201,168,76,0.1); }
+    .tag-id      { color: var(--text-soft); border-color: rgba(107,90,58,0.2); background: transparent; }
+    .tag-leader  { color: #7a5c10; border-color: rgba(201,168,76,0.5); background: rgba(201,168,76,0.18); }
+    .tag-admin   { color: var(--red); border-color: rgba(139,32,32,0.3); background: rgba(139,32,32,0.06); }
+
+    /* ── VOCAB TABLE ────────────────────────────────────────────────────── */
+    .table-wrap { background: white; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; box-shadow: var(--shadow); }
+    .vocab-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .vocab-table thead { position: sticky; top: 0; z-index: 5; }
+    .vocab-table th { background: var(--ink); color: rgba(201,168,76,0.72); font-family: 'Cormorant Garamond', serif; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.14em; padding: 0.7rem 0.9rem; text-align: left; white-space: nowrap; }
+    .vocab-table th.sortable { cursor: pointer; user-select: none; }
+    .vocab-table th.sortable:hover { color: var(--gold-light); }
+    .vocab-table th.sort-active { color: var(--gold-light); }
+    .sort-icon { margin-left: 0.25rem; font-size: 0.6rem; opacity: 0.5; }
+    .sort-active .sort-icon { opacity: 1; }
+    .vocab-table td { padding: 0.6rem 0.9rem; border-bottom: 1px solid rgba(201,168,76,0.1); vertical-align: middle; }
+    .vocab-table tbody tr { cursor: pointer; transition: background 0.15s; }
+    .vocab-table tbody tr:hover td { background: rgba(201,168,76,0.06); }
+    .vocab-table tbody tr.row-finalized { border-left: 3px solid var(--gold); }
+    .vocab-table tbody tr:last-child td { border-bottom: none; }
+    .cell-zh { font-family: 'Noto Serif TC', serif; font-size: 1.15rem; font-weight: 600; color: var(--ink); line-height: 1.2; display: block; }
+    .cell-id { font-size: 0.65rem; color: rgba(107,90,58,0.45); display: block; }
+    .cell-py { font-size: 0.96rem; color: var(--text-soft); font-style: italic; line-height: 1.45; }
+    .py-editable { font-family: 'EB Garamond', serif; font-style: italic; font-size: 1.7rem; color: var(--text-soft); background: transparent; border: none; border-bottom: 1px dashed rgba(201,168,76,0.25); outline: none; padding: 0.1rem 0.2rem; min-width: 80px; max-width: 340px; width: auto; line-height: 1.2; transition: border-color 0.2s, background 0.2s; }
+    .py-editable:focus { border-bottom-color: var(--gold); background: rgba(255,253,245,0.5); }
+    .py-editable::placeholder { color: rgba(107,90,58,0.4); font-style: italic; }
+    .cell-trans { max-width: 180px; font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+    .cell-trans.empty { color: var(--text-soft); font-style: italic; }
+    .vote-pill { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.82rem; color: var(--text-soft); }
+    .voted-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gold); display: inline-block; flex-shrink: 0; }
+
+    /* ── EDIT VIEW ──────────────────────────────────────────────────────── */
+    .edit-view { display: none; padding: 2rem; overflow-y: auto; }
+    .edit-header { display: flex; align-items: flex-start; gap: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--border); margin-bottom: 1.75rem; flex-wrap: wrap; }
+    .edit-header-term { flex: 1; min-width: 200px; }
+    .edit-header-term .zh { font-family: 'Noto Serif TC', serif; font-size: 2rem; font-weight: 600; color: var(--ink); line-height: 1; }
+    .edit-header-term .py { font-style: italic; font-size: 1rem; color: var(--text-soft); margin-left: 0.5rem; }
+    .edit-header-meta { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-top: 0.4rem; }
+    .edit-header-right { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+    .edit-header-actions { display: flex; flex-direction: column; gap: 0.55rem; align-items: flex-end; align-self: flex-start; flex-shrink: 0; }
+    .edit-header-source { display: flex; flex-direction: column; gap: 0.2rem; align-items: flex-end; }
+    .edit-header-source-lbl { font-size: 0.67rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-soft); }
+    .source-select { font-family: 'EB Garamond', serif; font-size: 0.82rem; border: 1px solid rgba(26,18,8,0.18); border-radius: 2px; background: rgba(255,255,255,0.7); color: var(--text-soft); padding: 0.25rem 0.5rem; cursor: pointer; }
+    .source-select:focus { outline: none; border-color: var(--gold); }
+    .edit-context { background: rgba(201,168,76,0.06); border: 1px solid var(--border); border-radius: 3px; padding: 0.7rem 1rem; margin-bottom: 1.25rem; font-size: 0.88rem; color: var(--text-soft); font-style: italic; }
+
+    /* translation panels — unified box */
+    .trans-box { border: 1px solid var(--border); border-radius: 4px; overflow: hidden; background: white; margin-bottom: 0; }
+    .trans-grid-3 { display: grid; grid-template-columns: repeat(3,1fr); }
+    .trans-panel { padding: 0.9rem 1rem; border-right: 1px solid rgba(201,168,76,0.15); position: relative; }
+    .trans-panel:last-child { border-right: none; }
+    .trans-panel.is-final { background: rgba(201,168,76,0.07); }
+    .trans-known { padding: 0.8rem 1rem; border-top: 1px solid rgba(201,168,76,0.15); }
+    .trans-known.is-final { background: rgba(201,168,76,0.07); }
+    .trans-other-grid { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid rgba(201,168,76,0.15); }
+    .trans-other { padding: 0.8rem 1rem; }
+    .trans-other:first-child { border-right: 1px solid rgba(201,168,76,0.15); }
+    .trans-other.is-final { background: rgba(201,168,76,0.07); }
+
+    .tp-label { font-size: 0.67rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-soft); display: flex; align-items: center; gap: 0.25rem; flex-wrap: wrap; margin-bottom: 0.2rem; }
+    .tp-body  { display: flex; align-items: flex-start; gap: 0.4rem; }
+    .tp-text  { flex: 1; font-size: 0.92rem; color: var(--text); line-height: 1.45; }
+    .tp-text .placeholder { color: var(--text-soft); font-style: italic; }
+    .tp-votes { display: flex; align-items: center; gap: 0.3rem; flex-shrink: 0; padding-top: 0.1rem; }
+    .vote-count { font-size: 0.76rem; color: var(--text-soft); min-width: 14px; text-align: center; }
+    .vote-btn { background: none; border: 1px solid rgba(201,168,76,0.3); border-radius: 3px; padding: 0.18rem 0.45rem; font-size: 0.75rem; cursor: pointer; color: var(--text-soft); transition: all 0.2s; font-family: 'EB Garamond', serif; white-space: nowrap; }
+    .vote-btn:hover { background: rgba(201,168,76,0.1); border-color: var(--gold); color: var(--text); }
+    .vote-btn.voted { background: var(--gold); border-color: var(--gold); color: var(--ink); font-weight: 600; }
+    .final-badge-1st { font-size: 0.63rem; background: var(--gold); color: var(--ink); padding: 0.12rem 0.35rem; border-radius: 2px; letter-spacing: 0.08em; font-weight: 700; }
+    .final-badge-2nd { font-size: 0.63rem; background: rgba(201,168,76,0.22); color: #7a5c10; border: 1px solid rgba(201,168,76,0.55); padding: 0.11rem 0.34rem; border-radius: 2px; letter-spacing: 0.08em; font-weight: 600; }
+    /* compact metadata line in edit header */
+    .edit-meta-line { font-size: 0.8rem; color: var(--text-soft); margin-top: 0.35rem; font-style: italic; line-height: 1.6; }
+    .edit-meta-line span.mv { color: var(--text); font-style: normal; font-weight: 600; }
+
+    .autopicks-bar { padding: 0.4rem 1rem; border-top: 1px solid rgba(201,168,76,0.12); background: rgba(201,168,76,0.05); font-size: 0.78rem; color: var(--text-soft); font-style: italic; }
+
+    .admin-row { margin-top: 1rem; padding: 0.6rem 1rem; background: rgba(139,32,32,0.04); border: 1px solid rgba(201,168,76,0.2); border-radius: 4px; display: flex; gap: 0.45rem; align-items: center; flex-wrap: wrap; }
+    .admin-label { font-size: 0.73rem; color: var(--red); letter-spacing: 0.08em; text-transform: uppercase; margin-right: 0.25rem; }
+    .admin-pick-btn { font-family: 'EB Garamond', serif; font-size: 0.8rem; padding: 0.22rem 0.6rem; border-radius: 2px; border: 1px solid rgba(139,32,32,0.3); background: transparent; color: var(--red-soft); cursor: pointer; transition: all 0.2s; }
+    .admin-pick-btn:hover { background: var(--red); color: white; border-color: var(--red); }
+    .admin-pick-btn.selected { background: var(--red); color: white; border-color: var(--red); }
+
+    /* inline direct editing */
+    .lock-icon { font-size: 0.68rem; color: rgba(107,90,58,0.4); cursor: default; }
+    .tp-textarea { flex: 1; min-width: 0; font-family: 'EB Garamond', serif; font-size: 0.92rem; color: var(--text); line-height: 1.45; border: none; border-bottom: 1px dashed rgba(201,168,76,0.25); background: transparent; resize: none; padding: 0.1rem 0; min-height: 1.4rem; outline: none; overflow: hidden; display: block; transition: border-color 0.2s, background 0.2s; }
+    .tp-textarea:focus { border-bottom-color: var(--gold); background: rgba(255,253,245,0.5); }
+    .tp-textarea::placeholder { color: var(--text-soft); font-style: italic; }
+    /* wider team modal + member edit row */
+    .modal-xwide { width: 1060px; max-width: 90vw; }
+    .members-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .member-edit-row { background: rgba(201,168,76,0.06); }
+    .btn-edit-member { font-family: 'EB Garamond', serif; font-size: 0.78rem; padding: 0.18rem 0.5rem; border: 1px solid rgba(26,18,8,0.2); background: transparent; color: var(--text-soft); border-radius: 2px; cursor: pointer; transition: all 0.2s; }
+    .btn-edit-member:hover { border-color: var(--gold); color: var(--text); }
+    .btn-save-member { font-family: 'EB Garamond', serif; font-size: 0.78rem; padding: 0.18rem 0.5rem; border: 1px solid rgba(201,168,76,0.5); background: var(--gold); color: var(--ink); border-radius: 2px; cursor: pointer; font-weight: 600; }
+    .btn-cancel-member { font-family: 'EB Garamond', serif; font-size: 0.78rem; padding: 0.18rem 0.5rem; border: 1px solid rgba(26,18,8,0.2); background: transparent; color: var(--text-soft); border-radius: 2px; cursor: pointer; margin-left: 0.25rem; }
+    .rank-badge  { display: inline-block; font-size: 0.6rem; font-weight: 700; padding: 0.08rem 0.3rem; border-radius: 2px; letter-spacing: 0.06em; }
+    .rank-first  { background: var(--gold); color: var(--ink); }
+    .rank-second { background: rgba(201,168,76,0.25); color: #7a5c10; border: 1px solid rgba(201,168,76,0.5); }
+    /* below-trans-box: source + editable meta fields */
+    .edit-below-box { margin-top: 1rem; display: flex; flex-direction: column; gap: 0.85rem; }
+    .edit-source-row { display: flex; align-items: center; gap: 0.75rem; }
+    .edit-source-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-soft); }
+    .edit-meta-section { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .meta-field { display: flex; flex-direction: column; gap: 0.3rem; }
+    .meta-field.full { grid-column: 1 / -1; }
+    .meta-field label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-soft); }
+    .meta-textarea { width: 100%; font-family: 'EB Garamond', serif; font-size: 0.92rem; color: var(--text); background: rgba(255,255,255,0.7); border: 1px solid rgba(26,18,8,0.15); border-radius: 3px; padding: 0.45rem 0.65rem; resize: vertical; min-height: 60px; transition: border-color 0.2s; }
+    .meta-textarea:focus { outline: none; border-color: var(--gold); }
+    .notes-display { width: 100%; box-sizing: border-box; font-family: 'EB Garamond', serif; font-size: 0.92rem; color: var(--text); background: rgba(255,255,255,0.45); border: 1px solid rgba(26,18,8,0.1); border-radius: 3px; padding: 0.45rem 0.65rem; min-height: 60px; white-space: pre-wrap; word-break: break-word; }
+    .notes-display.empty { color: var(--text-soft); font-style: italic; }
+    .btn-save-note { font-family: 'EB Garamond', serif; font-size: 0.82rem; background: transparent; border: 1px solid var(--gold); color: var(--gold); border-radius: 3px; padding: 0.28rem 0.85rem; cursor: pointer; transition: background 0.15s, color 0.15s; white-space: nowrap; }
+    .btn-save-note:hover { background: var(--gold); color: var(--ink); }
+    .btn-save-note:disabled { opacity: 0.5; cursor: default; }
+    .attach-note-msg { font-size: 0.78rem; font-family: 'EB Garamond', serif; }
+    .attach-note-msg.error   { color: #a33; }
+    .attach-note-msg.success { color: #2d7a4f; }
+    .meta-select { width: 100%; font-family: 'EB Garamond', serif; font-size: 0.92rem; color: var(--text); background: rgba(255,255,255,0.7); border: 1px solid rgba(26,18,8,0.15); border-radius: 3px; padding: 0.45rem 0.65rem; cursor: pointer; transition: border-color 0.2s; }
+    .meta-select:focus { outline: none; border-color: var(--gold); }
+
+    /* ── MODAL ──────────────────────────────────────────────────────────── */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(26,18,8,0.7); z-index: 200; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
+    .modal-overlay.open { display: flex; }
+    .modal { background: var(--paper); border: 1px solid rgba(201,168,76,0.3); border-radius: 4px; padding: 2rem; width: 560px; max-width: 95vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.4); animation: modalIn 0.3s ease; }
+    .modal-wide { width: 660px; }
+    @keyframes modalIn { from { opacity:0; transform:scale(0.95) translateY(-10px); } to { opacity:1; transform:scale(1) translateY(0); } }
+    .modal-title { font-family: 'Cormorant Garamond', serif; font-size: 1.4rem; font-style: italic; color: var(--ink); margin-bottom: 1.5rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border); }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .form-field { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.75rem; }
+    .form-field.full { grid-column: 1/-1; }
+    label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-soft); }
+    input, select, textarea { font-family: 'EB Garamond', serif; font-size: 1rem; background: white; border: 1px solid rgba(26,18,8,0.2); border-radius: 3px; padding: 0.5rem 0.75rem; color: var(--text); transition: border-color 0.2s; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--gold); }
+    textarea { resize: vertical; min-height: 70px; }
+    .modal-footer { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem; }
+    .tab-nav { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; }
+    .tab-btn { font-family: 'EB Garamond', serif; font-size: 0.95rem; padding: 0.5rem 1.25rem; border: none; background: none; cursor: pointer; color: var(--text-soft); border-bottom: 2px solid transparent; transition: all 0.2s; }
+    .tab-btn.active { color: var(--ink); border-bottom-color: var(--gold); }
+    .tab-panel { display: none; } .tab-panel.active { display: block; }
+    .csv-hint { font-size: 0.8rem; color: var(--text-soft); background: rgba(201,168,76,0.08); border: 1px solid var(--border); border-radius: 3px; padding: 0.75rem; margin-bottom: 1rem; font-style: italic; }
+    .csv-hint code { font-family: monospace; font-size: 0.78rem; background: rgba(26,18,8,0.07); padding: 0.1rem 0.3rem; border-radius: 2px; }
+    .members-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; margin-bottom: 0.5rem; }
+    .members-table th { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-soft); padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+    .members-table td { padding: 0.6rem 0.75rem; border-bottom: 1px solid rgba(201,168,76,0.1); vertical-align: middle; }
+    .members-table tr:last-child td { border-bottom: none; }
+    .members-table tr:hover td { background: rgba(201,168,76,0.05); }
+    /* team-specific fixed layout (not applied to Sources table) */
+    .team-table { min-width: 820px; table-layout: fixed; }
+    .team-table col.col-email   { width: 26%; }
+    .team-table col.col-name    { width: 16%; }
+    .team-table col.col-short   { width: 11%; }
+    .team-table col.col-role    { width: 10%; }
+    .team-table col.col-added   { width: 22%; }
+    .team-table col.col-actions { width: 15%; }
+    .team-table td { overflow: hidden; text-overflow: ellipsis; }
+    .team-table td.actions-cell { white-space: nowrap; overflow: visible; }
+    .role-select { font-family: 'EB Garamond', serif; font-size: 0.88rem; padding: 0.2rem 0.4rem; border: 1px solid rgba(26,18,8,0.2); border-radius: 2px; background: white; color: var(--text); cursor: pointer; }
+    .role-select:disabled { background: transparent; border-color: transparent; color: var(--text-soft); cursor: default; }
+    .btn-remove { font-family: 'EB Garamond', serif; font-size: 0.8rem; padding: 0.2rem 0.55rem; border: 1px solid rgba(139,32,32,0.25); background: transparent; color: var(--red-soft); border-radius: 2px; cursor: pointer; transition: all 0.2s; }
+    .btn-remove:hover { background: var(--red); color: white; border-color: var(--red); }
+    .add-member-section { border-top: 1px solid var(--border); padding-top: 1.25rem; margin-top: 1.25rem; }
+
+    /* inline inputs in team modal edit row */
+    .member-input { font-family: 'EB Garamond', serif; font-size: 0.88rem; background: white; border: 1px solid rgba(201,168,76,0.35); border-radius: 2px; padding: 0.18rem 0.45rem; width: 100%; min-width: 70px; color: var(--text); transition: border-color 0.2s; }
+    .member-input:focus { outline: none; border-color: var(--gold); }
+
+    /* ── AUDIT LOG ──────────────────────────────────────────────────────── */
+    .audit-section { margin-top: 2.25rem; }
+    .audit-section-title { font-family: 'Cormorant Garamond', serif; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.2em; color: var(--text-soft); padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); margin-bottom: 1rem; }
+    .audit-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .audit-table th { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-soft); padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    .audit-table td { padding: 0.5rem 0.75rem; border-bottom: 1px solid rgba(201,168,76,0.08); vertical-align: top; color: var(--text); }
+    .audit-table tr:last-child td { border-bottom: none; }
+    .audit-table tr:hover td { background: rgba(201,168,76,0.04); }
+    .audit-action { display: inline-block; font-size: 0.67rem; text-transform: uppercase; letter-spacing: 0.07em; padding: 0.1rem 0.4rem; border-radius: 2px; border: 1px solid; white-space: nowrap; }
+    .audit-action.created           { color: #1a6b35; border-color: rgba(26,107,53,0.35);  background: rgba(26,107,53,0.06); }
+    .audit-action.updated           { color: #2d5fa0; border-color: rgba(45,95,160,0.35);  background: rgba(45,95,160,0.06); }
+    .audit-action.voted             { color: #7a5010; border-color: rgba(122,80,16,0.35);  background: rgba(201,168,76,0.1); }
+    .audit-action.vote_updated      { color: #7a5010; border-color: rgba(122,80,16,0.35);  background: rgba(201,168,76,0.1); }
+    .audit-action.finalized_first   { color: #7a5c10; border-color: rgba(201,168,76,0.55); background: rgba(201,168,76,0.14); font-weight: 600; }
+    .audit-action.finalized_second  { color: #7a5c10; border-color: rgba(201,168,76,0.4);  background: rgba(201,168,76,0.08); }
+    .audit-action.reset_final       { color: var(--red-soft); border-color: rgba(139,32,32,0.3); background: rgba(139,32,32,0.05); }
+    .audit-action.ai_translated     { color: #1e6a8a; border-color: rgba(30,106,138,0.3);  background: rgba(30,106,138,0.06); }
+
+    /* ── PAGINATION ─────────────────────────────────────────────────────── */
+    .pagination-bar { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0; flex-wrap: wrap; gap: 0.5rem; }
+    .page-size-wrap { display: flex; align-items: center; gap: 0.4rem; }
+    .page-size-lbl  { font-size: 0.78rem; color: var(--text-soft); }
+    .page-size-sel  { font-family: 'EB Garamond', serif; font-size: 0.85rem; padding: 0.18rem 0.4rem; border: 1px solid rgba(26,18,8,0.18); border-radius: 2px; background: rgba(255,255,255,0.7); color: var(--text); cursor: pointer; }
+    .page-size-sel:focus { outline: none; border-color: var(--gold); }
+    .pagination-nav { display: flex; align-items: center; gap: 0.6rem; }
+    .btn-page { font-family: 'EB Garamond', serif; font-size: 0.85rem; padding: 0.22rem 0.7rem; border: 1px solid rgba(26,18,8,0.2); border-radius: 2px; background: transparent; color: var(--text-soft); cursor: pointer; transition: all 0.2s; }
+    .btn-page:hover:not([disabled]) { border-color: var(--gold); color: var(--text); background: rgba(201,168,76,0.1); }
+    .btn-page[disabled] { opacity: 0.35; cursor: default; }
+    .page-info { font-size: 0.82rem; color: var(--text-soft); font-style: italic; white-space: nowrap; }
+
+    /* ── MISC ───────────────────────────────────────────────────────────── */
+    .toast { position: fixed; bottom: 2rem; right: 2rem; background: var(--ink); color: var(--gold-light); border: 1px solid rgba(201,168,76,0.4); border-radius: 3px; padding: 0.75rem 1.25rem; font-size: 0.9rem; z-index: 999; opacity: 0; transform: translateY(10px); transition: all 0.3s; pointer-events: none; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .loading { text-align: center; padding: 4rem 2rem; color: var(--text-soft); font-style: italic; font-size: 1.1rem; }
+    .empty-state { text-align: center; padding: 5rem 2rem; color: var(--text-soft); }
+    .empty-state .wheel { font-size: 3rem; margin-bottom: 1rem; display: block; }
+    .empty-state h3 { font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 1.5rem; margin-bottom: 0.5rem; color: var(--ink); }
+
+    /* ── MOBILE NAV ─────────────────────────────────────────────────────── */
+    .btn-hamburger { display: none; align-items: center; justify-content: center; background: none; border: 1px solid rgba(201,168,76,0.3); border-radius: 3px; color: rgba(201,168,76,0.7); font-size: 1.3rem; width: 36px; height: 36px; cursor: pointer; flex-shrink: 0; padding: 0; line-height: 1; }
+    .btn-hamburger:hover { border-color: var(--gold); color: var(--gold); }
+    .btn-sidebar-close { display: none; }
+    .mobile-overlay { display: none; position: fixed; inset: 0; background: rgba(26,18,8,0.55); z-index: 250; opacity: 0; pointer-events: none; transition: opacity 0.25s; }
+    .mobile-overlay.visible { opacity: 1; pointer-events: auto; }
+
+    /* ── VOCAB CARDS (mobile list view) ─────────────────────────────────── */
+    .vocab-card-list { background: white; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; box-shadow: var(--shadow); }
+    .vocab-card { padding: 0.85rem 1rem; border-bottom: 1px solid rgba(201,168,76,0.1); cursor: pointer; transition: background 0.15s; }
+    .vocab-card:last-child { border-bottom: none; }
+    .vocab-card:hover, .vocab-card:active { background: rgba(201,168,76,0.06); }
+    .vocab-card.card-finalized { border-left: 3px solid var(--gold); }
+    .vc-head { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.2rem; }
+    .vc-zh { font-family: 'Noto Serif TC', serif; font-size: 1.2rem; font-weight: 600; color: var(--ink); line-height: 1.2; }
+    .vc-py { font-style: italic; font-size: 0.9rem; color: var(--text-soft); margin-bottom: 0.25rem; }
+    .vc-first { font-size: 0.9rem; color: var(--text); margin-bottom: 0.45rem; }
+    .vc-foot { display: flex; align-items: center; justify-content: space-between; }
+    .vc-id { font-size: 0.65rem; color: rgba(107,90,58,0.45); }
+    .vc-foot-right { display: flex; align-items: center; gap: 0.5rem; }
+
+    /* ── RESPONSIVE @ 768px ─────────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      /* Header */
+      header { padding: 0 1rem; height: 52px; }
+      .brand-en { display: none; }
+      .user-badge { display: none; }
+      .header-right { gap: 0.5rem; }
+      .btn-hamburger { display: flex; }
+
+      /* Sidebar → slide-in fixed overlay */
+      .app-layout { grid-template-columns: 1fr; }
+      .sidebar {
+        position: fixed; left: 0; top: 0; height: 100dvh; width: 280px;
+        z-index: 300; transform: translateX(-100%); transition: transform 0.25s ease;
+        padding-top: 0.75rem; box-shadow: 4px 0 24px rgba(0,0,0,0.25);
+      }
+      .sidebar.mobile-open { transform: translateX(0); }
+      .mobile-overlay { display: block; }
+      .btn-sidebar-close { display: flex; align-items: center; gap: 0.3rem; font-family: 'EB Garamond', serif; font-size: 0.9rem; background: none; border: none; color: var(--text-soft); cursor: pointer; padding: 0.3rem 0; margin-bottom: 0.35rem; }
+
+      /* List view */
+      .main { padding: 1rem; }
+      .main-toolbar { flex-direction: column; align-items: stretch; gap: 0.6rem; }
+      .toolbar-actions { flex-direction: column; align-items: stretch; gap: 0.5rem; }
+      .search-box { width: 100%; }
+      .toolbar-actions > .btn { width: 100%; justify-content: center; }
+
+      /* Pagination */
+      .pagination-bar { flex-direction: column; gap: 0.45rem; }
+      .pagination-nav { justify-content: space-between; }
+
+      /* Edit view: back/source bar first (column-reverse), then term */
+      .edit-view { padding: 1rem; }
+      .edit-header { flex-direction: column-reverse; gap: 0.75rem; }
+      .edit-header-actions { flex-direction: row; justify-content: space-between; align-items: center; width: 100%; align-self: auto; }
+      .edit-header-source { flex-direction: row; align-items: center; gap: 0.4rem; }
+      .py-editable { font-size: 1.3rem; }
+      .trans-grid-3 { grid-template-columns: 1fr; }
+      .trans-panel { border-right: none; border-bottom: 1px solid rgba(201,168,76,0.15); }
+      .trans-panel:last-child { border-bottom: none; }
+      .autopicks-bar { flex-direction: column; gap: 0.5rem; align-items: flex-start; }
+      .edit-meta-section { grid-template-columns: 1fr; }
+      .meta-field.full { grid-column: auto; }
+      .admin-row { flex-wrap: wrap; }
+      .admin-pick-btn { flex: 1 1 30%; min-height: 40px; text-align: center; }
+
+      /* Modals */
+      .modal, .modal-wide, .modal-xwide { width: 95vw; max-width: 95vw; padding: 1.25rem 1rem; }
+      .form-row { grid-template-columns: 1fr; }
+      .form-field.full { grid-column: auto; }
+      .modal-footer { flex-direction: column-reverse; gap: 0.5rem; }
+      .modal-footer .btn { width: 100%; justify-content: center; }
+
+      /* Touch targets ≥ 44px */
+      .btn { min-height: 44px; }
+      .btn-sm { min-height: 36px; }
+      .filter-btn { min-height: 44px; }
+      .sidebar-source-sel { min-height: 40px; }
+      .vote-btn { min-height: 36px; padding: 0.35rem 0.65rem; }
+      .btn-page { min-height: 40px; }
+      .btn-back { min-height: 40px; display: inline-flex; align-items: center; }
+      select { min-height: 40px; }
+      .source-select { min-height: 36px; }
+
+      /* Prevent iOS input zoom — inputs must be ≥16px */
+      input:not(.py-editable), select, textarea { font-size: 1rem; }
+      .search-box { font-size: 1rem; }
+
+      /* Team modal table: controlled horizontal scroll */
+      .members-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── HEADER ─────────────────────────────────────────────────────────────── -->
+<header>
+  <div class="header-brand">
+    <span class="wheel">☸</span>
+    <div class="brand-text">
+      <div class="brand-tcat">T-CAT</div>
+      <div class="brand-en">Buddhist Vocabulary</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span class="user-badge">{{ user_name or user }}</span>
+    {% if user_role == 'admin' %}<span class="tag tag-admin" style="font-size:0.65rem">Admin</span>
+    {% elif user_role == 'leader' %}<span class="tag tag-leader" style="font-size:0.65rem">Leader</span>
+    {% elif user_role == 'depositor' %}<span class="tag tag-id" style="font-size:0.65rem">Depositor</span>
+    {% elif user_role == 'viewer' %}<span class="tag tag-id" style="font-size:0.65rem">Viewer</span>{% endif %}
+    <a href="/logout" class="btn-logout">Sign out</a>
+    <button class="btn-hamburger" id="btn-hamburger" onclick="openMobileMenu()" aria-label="Open menu">☰</button>
+  </div>
+</header>
+
+<!-- ── MOBILE OVERLAY ─────────────────────────────────────────────────────── -->
+<div class="mobile-overlay" id="mobile-overlay" onclick="closeMobileMenu()"></div>
+
+<!-- ── LAYOUT ─────────────────────────────────────────────────────────────── -->
+<div class="app-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <button class="btn-sidebar-close" onclick="closeMobileMenu()">✕ Close menu</button>
+    <div>
+      <div class="sidebar-section-title">Overview</div>
+      <div class="stats-grid">
+        <div class="stat-box"><div class="stat-num" id="stat-total">—</div><div class="stat-label">Total</div></div>
+        <div class="stat-box"><div class="stat-num" id="stat-final">—</div><div class="stat-label">Finalized</div></div>
+        <div class="stat-box"><div class="stat-num" id="stat-pending">—</div><div class="stat-label">Pending</div></div>
+        <div class="stat-box"><div class="stat-num" id="stat-voted">—</div><div class="stat-label">My Votes</div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="sidebar-section-title">Source</div>
+      <select class="sidebar-source-sel" id="sidebar-source" onchange="setSource(this.value)">
+        <option value="">All Sources</option>
+      </select>
+    </div>
+
+    <div>
+      <div class="sidebar-section-title">Filter</div>
+      <div class="filter-group">
+        <button class="filter-btn active" onclick="setFilter('all',this)">All Terms <span class="count" id="cnt-all">0</span></button>
+        <button class="filter-btn" onclick="setFilter('pending',this)">Pending <span class="count" id="cnt-pending">0</span></button>
+        <button class="filter-btn" onclick="setFilter('finalized',this)">Finalized <span class="count" id="cnt-finalized">0</span></button>
+        <button class="filter-btn" onclick="setFilter('unvoted',this)">Not Yet Voted <span class="count" id="cnt-unvoted">0</span></button>
+        <button class="filter-btn" onclick="setFilter('voted_pending',this)">Voted (not final) <span class="count" id="cnt-voted-pending">0</span></button>
+      </div>
+    </div>
+
+    <div style="margin-top:auto;">
+      {% if is_admin %}
+      <button class="btn btn-secondary" style="width:100%;margin-bottom:0.5rem;" onclick="openTeamModal()">☷ Team</button>
+      <button class="btn btn-secondary" style="width:100%;margin-bottom:0.5rem;" onclick="openSourcesModal()">⊕ Sources</button>
+      <button class="btn btn-secondary" style="width:100%;margin-bottom:0.5rem;" onclick="initSheets()">⚙ Init Sheets</button>
+      {% endif %}
+    </div>
+  </aside>
+
+  <!-- LIST VIEW -->
+  <main class="main" id="list-view">
+    <div class="main-toolbar">
+      <h1 class="main-title">Vocabulary <span>List</span></h1>
+      <div class="toolbar-actions">
+        <input class="search-box" id="search-input" type="text" placeholder="Search terms &amp; all translations…" oninput="onSearchInput()">
+        <button class="btn btn-secondary" onclick="loadTerms()">↻ Refresh</button>
+        {% if user_role != 'viewer' %}<button class="btn btn-primary" onclick="openModal()">+ Add Term</button>{% endif %}
+      </div>
+    </div>
+    <div id="terms-container"><div class="loading">☸ Loading terminology…</div></div>
+  </main>
+
+  <!-- EDIT VIEW (toggled in place of list view) -->
+  <div class="main edit-view" id="edit-view"></div>
+
+</div><!-- app-layout -->
+
+<!-- ── ADD TERM MODAL ─────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="modal" onclick="closeModalOutside(event)">
+  <div class="modal modal-wide">
+    <div class="modal-title">Add New Term</div>
+    <div class="tab-nav">
+      <button class="tab-btn active" onclick="switchTab('single',this)">Single Entry</button>
+      <button class="tab-btn" onclick="switchTab('bulk',this)">Bulk Import (CSV)</button>
+    </div>
+    <div class="tab-panel active" id="tab-single">
+      <div class="form-field full">
+        <label>Chinese Term *</label>
+        <input type="text" id="f-chinese" placeholder="e.g. 菩薩" style="font-family:'Noto Serif TC',serif;font-size:1.3rem;">
+      </div>
+      <div class="form-field full">
+        <label>Known Translation</label>
+        <input type="text" id="f-known" placeholder="e.g. bodhisattva (leave blank if unknown)">
+      </div>
+      <div class="form-field full">
+        <label>Source</label>
+        <select id="f-source"><option value="">— Select Source —</option></select>
+      </div>
+      <div class="form-field"><label>Source Content Chinese</label><textarea id="f-source-content-zh" rows="3" placeholder="Paste the original Chinese passage containing this term…"></textarea></div>
+      <div class="form-field"><label>Source Content English</label><textarea id="f-source-content-en" rows="3" placeholder="Paste the English translation of the passage (if available)…"></textarea></div>
+      <div class="form-field"><label>Notes for Translator</label><textarea id="f-notes" rows="2" placeholder="Translation hints, preferred style…"></textarea></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-gold" onclick="submitSingleTerm()" id="submit-btn">Translate and Save ✦</button>
+      </div>
+    </div>
+    <div class="tab-panel" id="tab-bulk">
+      <div class="csv-hint">Upload a CSV with columns:<br><code>chinese, pinyin, pali, sanskrit, context, category, notes, source, trans_known, added_by</code><br>Only <code>chinese</code> is required. Pinyin, Pali, Sanskrit, and AI Translate 1–3 are auto-generated. <code>source</code> accepts a SourceID (e.g. <code>S001</code>). <code>added_by</code> defaults to the logged-in user if blank.</div>
+      <div class="form-field"><label>CSV File</label><input type="file" id="f-csv" accept=".csv"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-gold" onclick="submitBulk()" id="bulk-btn">Import & Translate ✦</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── TEAM MODAL ─────────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="team-modal" onclick="closeTeamModalOutside(event)">
+  <div class="modal modal-xwide">
+    <div class="modal-title">Team Members</div>
+    <div id="members-list"><div class="loading" style="padding:1.5rem;">☸ Loading…</div></div>
+    <div class="add-member-section">
+      <div class="sidebar-section-title" style="margin-bottom:0.75rem;">Add Member</div>
+      <div class="form-row">
+        <div class="form-field"><label>Email *</label><input type="email" id="new-email" placeholder="colleague@gmail.com"></div>
+        <div class="form-field"><label>Role</label><select id="new-role"><option value="viewer">Viewer</option><option value="depositor">Depositor</option><option value="member" selected>Member</option><option value="leader">Leader</option><option value="admin">Admin</option></select></div>
+        <div class="form-field"><label>Name</label><input type="text" id="new-name" placeholder="Full name"></div>
+        <div class="form-field"><label>Short Name</label><input type="text" id="new-short-name" placeholder="e.g. Vincent"></div>
+      </div>
+      <div class="modal-footer" style="margin-top:0.75rem;">
+        <button class="btn btn-secondary" onclick="closeTeamModal()">Close</button>
+        <button class="btn btn-gold" onclick="addMember()">Add Member ✦</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── SOURCES MODAL ──────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="sources-modal" onclick="closeSourcesModalOutside(event)">
+  <div class="modal modal-wide">
+    <div class="modal-title">Sources</div>
+    <div id="sources-list"><div class="loading" style="padding:1.5rem;">☸ Loading…</div></div>
+    <div class="add-member-section">
+      <div class="sidebar-section-title" style="margin-bottom:0.75rem;">Add Source</div>
+      <div class="form-row">
+        <div class="form-field full"><label>Source Name *</label><input type="text" id="src-name" placeholder="e.g. Mahāparinibbāna Sutta"></div>
+        <div class="form-field"><label>Type</label><select id="src-type"><option value="">— Select —</option><option>Scripture</option><option>Commentary</option><option>Dictionary</option><option>Encyclopedia</option><option>Other</option></select></div>
+        <div class="form-field"><label>Notes</label><input type="text" id="src-notes" placeholder="Optional notes"></div>
+      </div>
+      <div class="modal-footer" style="margin-top:0.75rem;">
+        <button class="btn btn-secondary" onclick="closeSourcesModal()">Close</button>
+        <button class="btn btn-gold" onclick="addSource()">Add Source ✦</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+  // ── STATE ────────────────────────────────────────────────────────────────
+  const isAdmin           = {{ 'true' if is_admin else 'false' }};
+  const userRole          = '{{ user_role }}';
+  const superAdmin        = '{{ super_admin }}';
+  const currentUserEmail  = '{{ user }}';
+  const canVote           = ['member','leader','admin'].includes(userRole);
+  const canEdit           = ['member','leader','admin'].includes(userRole);
+  const canCreate         = ['depositor','member','leader','admin'].includes(userRole);
+  let allTerms          = [];
+  let allSources        = [];
+  let allDirectory      = [];
+  let membersData       = [];
+  let editingMemberEmail = null;
+  let currentFilter = 'all';
+  let currentSource = '';
+  let currentPage   = 1;
+  let pageSize      = 20;
+
+  function isMobile() { return window.innerWidth <= 768; }
+
+  function openMobileMenu() {
+    document.getElementById('sidebar').classList.add('mobile-open');
+    document.getElementById('mobile-overlay').classList.add('visible');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeMobileMenu() {
+    document.getElementById('sidebar').classList.remove('mobile-open');
+    document.getElementById('mobile-overlay').classList.remove('visible');
+    document.body.style.overflow = '';
+  }
+
+  function displayName(email) {
+    if (!email) return '—';
+    const m = allDirectory.find(d => d.email.toLowerCase() === email.toLowerCase());
+    if (m) return m.short_name || m.name || email;
+    return email;
+  }
+
+  function escHtml(s) {
+    return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function findKeyByText(t, text) {
+    if (!text) return null;
+    const map = {
+      'Translation1': t.trans1, 'Translation2': t.trans2, 'Translation3': t.trans3,
+      'TranslationKnown': t.trans_known, 'TranslationOther1': t.trans_other1, 'TranslationOther2': t.trans_other2,
+    };
+    for (const [key, val] of Object.entries(map)) {
+      if (val && val.trim() === text.trim()) return key;
+    }
+    return null;
+  }
+  let sortField   = 'timestamp';
+  let sortDir     = 'desc';
+  let editingTermId = null;
+
+  const VALID_VOTES = ['Translation1','Translation2','Translation3','TranslationKnown','TranslationOther1','TranslationOther2'];
+  const PICK_LABELS = { Translation1:'AI Translate 1', Translation2:'AI Translate 2', Translation3:'AI Translate 3', TranslationKnown:'Known', TranslationOther1:'Suggested 1', TranslationOther2:'Suggested 2' };
+  const FIELD_TO_TERM_KEY = { trans1:'Translation1', trans2:'Translation2', trans3:'Translation3', trans_known:'TranslationKnown', trans_other1:'TranslationOther1', trans_other2:'TranslationOther2' };
+
+  // ── DATA ─────────────────────────────────────────────────────────────────
+  async function loadTerms() {
+    document.getElementById('terms-container').innerHTML = '<div class="loading">☸ Loading terminology…</div>';
+    try {
+      const [tr, sr, dr] = await Promise.all([fetch('/api/terms'), fetch('/api/sources'), fetch('/api/members/directory')]);
+      allTerms     = tr.ok ? await tr.json() : [];
+      allSources   = sr.ok ? await sr.json() : [];
+      allDirectory = dr.ok ? await dr.json() : [];
+      populateSidebarSource();
+      updateStats();
+      applyView();
+    } catch(e) {
+      document.getElementById('terms-container').innerHTML = '<div class="loading">⚠ Failed to load. Please refresh.</div>';
+    }
+  }
+
+  function updateStats() {
+    const base      = currentSource ? allTerms.filter(t => t.source === currentSource) : allTerms;
+    const total     = base.length;
+    const finalized = base.filter(t => t.status === 'finalized').length;
+    const pending   = total - finalized;
+    const myVoted   = base.filter(t => t.my_vote).length;
+    const unvoted   = base.filter(t => !t.my_vote && t.status !== 'finalized').length;
+    const votedPending = base.filter(t =>
+      (t.my_vote || VALID_VOTES.reduce((s,k) => s + (t.votes[k]||0), 0) > 0) && t.status !== 'finalized'
+    ).length;
+    document.getElementById('stat-total').textContent        = total;
+    document.getElementById('stat-final').textContent        = finalized;
+    document.getElementById('stat-pending').textContent      = pending;
+    document.getElementById('stat-voted').textContent        = myVoted;
+    document.getElementById('cnt-all').textContent           = total;
+    document.getElementById('cnt-pending').textContent       = pending;
+    document.getElementById('cnt-finalized').textContent     = finalized;
+    document.getElementById('cnt-unvoted').textContent       = unvoted;
+    document.getElementById('cnt-voted-pending').textContent = votedPending;
+  }
+
+  // ── FILTER / SORT / SEARCH ───────────────────────────────────────────────
+  function setFilter(f, btn) {
+    currentFilter = f;
+    currentPage   = 1;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    if (isMobile()) closeMobileMenu();
+    applyView();
+  }
+
+  function setSource(val) {
+    currentSource = val;
+    currentPage   = 1;
+    updateStats();
+    if (isMobile()) closeMobileMenu();
+    applyView();
+  }
+
+  function populateSidebarSource() {
+    const sel = document.getElementById('sidebar-source');
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">All Sources</option>' +
+      allSources.map(s => `<option value="${s.SourceID}"${s.SourceID === cur ? ' selected' : ''}>${s.SourceName}</option>`).join('');
+  }
+
+  function setSort(field) {
+    sortDir = sortField === field ? (sortDir === 'asc' ? 'desc' : 'asc') : (field === 'timestamp' ? 'desc' : 'asc');
+    sortField   = field;
+    currentPage = 1;
+    applyView();
+  }
+
+  function getTermText(t, voteKey) {
+    return { Translation1:t.trans1, Translation2:t.trans2, Translation3:t.trans3, TranslationKnown:t.trans_known, TranslationOther1:t.trans_other1, TranslationOther2:t.trans_other2 }[voteKey] || '';
+  }
+
+  function sourceName(id) {
+    if (!id) return '';
+    const s = allSources.find(x => x.SourceID === id);
+    return s ? s.SourceName : id;
+  }
+
+  function getFilteredSorted() {
+    const q = (document.getElementById('search-input')?.value || '').toLowerCase().trim();
+    let terms = allTerms.slice();
+
+    if (currentSource) terms = terms.filter(t => t.source === currentSource);
+
+    if (currentFilter === 'pending')       terms = terms.filter(t => t.status !== 'finalized');
+    if (currentFilter === 'finalized')     terms = terms.filter(t => t.status === 'finalized');
+    if (currentFilter === 'unvoted')       terms = terms.filter(t => !t.my_vote && t.status !== 'finalized');
+    if (currentFilter === 'voted_pending') terms = terms.filter(t =>
+      (t.my_vote || VALID_VOTES.reduce((s,k) => s + (t.votes[k]||0), 0) > 0) && t.status !== 'finalized'
+    );
+
+    if (q) {
+      const words = q.split(/\s+/).filter(Boolean);
+      terms = terms.filter(t => {
+        const hay = [
+          t.chinese, t.pinyin, t.romanization_plain || '',
+          t.trans1, t.trans2, t.trans3,
+          t.trans_known, t.trans_other1, t.trans_other2,
+          t.trans_first  ? getTermText(t, t.trans_first)  : '',
+          t.trans_second ? getTermText(t, t.trans_second) : '',
+          sourceName(t.source)
+        ].join(' ').toLowerCase();
+        return words.every(w => hay.includes(w));
+      });
+    }
+
+    terms.sort((a, b) => {
+      let av = a[sortField] || '', bv = b[sortField] || '';
+      if (sortField === 'timestamp') {
+        av = av ? new Date(av).getTime() : 0;
+        bv = bv ? new Date(bv).getTime() : 0;
+        return sortDir === 'asc' ? av - bv : bv - av;
+      }
+      const cmp = av.toString().localeCompare(bv.toString(), 'zh');
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return terms;
+  }
+
+  function applyView() {
+    if (editingTermId) return;
+    const all        = getFilteredSorted();
+    const totalPages = Math.max(1, Math.ceil(all.length / pageSize));
+    if (currentPage > totalPages) currentPage = totalPages;
+    const start      = (currentPage - 1) * pageSize;
+    renderTable(all.slice(start, start + pageSize), all.length, totalPages);
+  }
+
+  function onSearchInput() {
+    currentPage = 1;
+    applyView();
+  }
+
+  function changePageSize(n) {
+    pageSize    = parseInt(n, 10);
+    currentPage = 1;
+    applyView();
+  }
+
+  function goToPage(n) {
+    const all        = getFilteredSorted();
+    const totalPages = Math.max(1, Math.ceil(all.length / pageSize));
+    currentPage      = Math.max(1, Math.min(n, totalPages));
+    const start      = (currentPage - 1) * pageSize;
+    renderTable(all.slice(start, start + pageSize), all.length, totalPages);
+  }
+
+  function paginationBar(totalCount, totalPages) {
+    const start   = Math.min((currentPage - 1) * pageSize + 1, totalCount);
+    const end     = Math.min(currentPage * pageSize, totalCount);
+    const prevDis = currentPage <= 1           ? ' disabled' : '';
+    const nextDis = currentPage >= totalPages  ? ' disabled' : '';
+    const sizeOpts = [20, 50, 100].map(n =>
+      `<option value="${n}"${pageSize === n ? ' selected' : ''}>${n}</option>`
+    ).join('');
+    return `<div class="pagination-bar">
+      <div class="page-size-wrap">
+        <span class="page-size-lbl">Per page:</span>
+        <select class="page-size-sel" onchange="changePageSize(this.value)">${sizeOpts}</select>
+      </div>
+      <div class="pagination-nav">
+        <button class="btn-page" onclick="goToPage(${currentPage - 1})"${prevDis}>← Prev</button>
+        <span class="page-info">Page ${currentPage} of ${totalPages} &nbsp;·&nbsp; ${start}–${end} of ${totalCount}</span>
+        <button class="btn-page" onclick="goToPage(${currentPage + 1})"${nextDis}>Next →</button>
+      </div>
+    </div>`;
+  }
+
+  // ── TABLE ────────────────────────────────────────────────────────────────
+  function sortIcon(f) {
+    if (sortField !== f) return '<span class="sort-icon">⇅</span>';
+    return `<span class="sort-icon">${sortDir === 'asc' ? '▲' : '▼'}</span>`;
+  }
+  function thClass(f) { return `sortable${sortField===f?' sort-active':''}`; }
+
+  function renderTable(terms, totalCount, totalPages) {
+    const el = document.getElementById('terms-container');
+    if (!terms.length) {
+      el.innerHTML = `<div class="empty-state"><span class="wheel">☸</span><h3>No terms found</h3><p>Try a different filter or add your first term.</p></div>`;
+      return;
+    }
+    const pgBar = paginationBar(totalCount, totalPages);
+    const body  = isMobile()
+      ? `<div class="vocab-card-list">${terms.map(vocabCard).join('')}</div>`
+      : `<div class="table-wrap"><table class="vocab-table">
+          <thead><tr>
+            <th class="${thClass('chinese')}" onclick="setSort('chinese')">Term ${sortIcon('chinese')}</th>
+            <th class="${thClass('pinyin')}"  onclick="setSort('pinyin')">Romanization ${sortIcon('pinyin')}</th>
+            <th>First Choice</th>
+            <th>Second Choice</th>
+            <th>Status</th>
+            <th>Source</th>
+            <th class="${thClass('timestamp')}" onclick="setSort('timestamp')">Added ${sortIcon('timestamp')}</th>
+            <th>Votes</th>
+            <th></th>
+          </tr></thead>
+          <tbody>${terms.map(tableRow).join('')}</tbody>
+        </table></div>`;
+    el.innerHTML = pgBar + body + pgBar;
+  }
+
+  function vocabCard(t) {
+    const firstText   = t.trans_first ? (getTermText(t, t.trans_first) || t.trans_first) : '';
+    const totalVotes  = VALID_VOTES.reduce((s,k) => s + (t.votes[k]||0), 0);
+    const statusBadge = t.status === 'finalized'
+      ? '<span class="tag tag-final">✓ Final</span>'
+      : '<span class="tag tag-pending">Pending</span>';
+    const votedDot = t.my_vote ? '<span class="voted-dot" title="You voted"></span>' : '';
+    const cardClass = t.status === 'finalized' ? 'vocab-card card-finalized' : 'vocab-card';
+    return `
+      <div class="${cardClass}" onclick="openEditView('${t.id}')">
+        <div class="vc-head">
+          <span class="vc-zh">${t.chinese}</span>
+          ${statusBadge}
+        </div>
+        ${t.pinyin ? `<div class="vc-py">${t.pinyin}</div>` : ''}
+        ${firstText ? `<div class="vc-first">${firstText}</div>` : ''}
+        <div class="vc-foot">
+          <span class="vc-id">${t.id}</span>
+          <div class="vc-foot-right">
+            <span class="vote-pill">${votedDot}${totalVotes}</span>
+            <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openEditView('${t.id}')">${canEdit ? 'Edit' : 'View'}</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function tableRow(t) {
+    const totalVotes = VALID_VOTES.reduce((s,k) => s + (t.votes[k]||0), 0);
+    const firstText  = t.trans_first  ? (getTermText(t, t.trans_first)  || t.trans_first)  : '';
+    const secondText = t.trans_second ? (getTermText(t, t.trans_second) || t.trans_second) : '';
+    const src        = sourceName(t.source);
+    const dateStr    = t.timestamp ? t.timestamp.slice(0,10) : '';
+    const statusBadge = t.status === 'finalized'
+      ? '<span class="tag tag-final">✓ Final</span>'
+      : '<span class="tag tag-pending">Pending</span>';
+    const row = t.status === 'finalized' ? 'row-finalized' : '';
+    const votedDot = t.my_vote ? '<span class="voted-dot" title="You voted"></span>' : '';
+    return `
+      <tr class="${row}" onclick="openEditView('${t.id}')">
+        <td><span class="cell-zh">${t.chinese}</span><span class="cell-id">${t.id}</span></td>
+        <td class="cell-py">${t.pinyin || '<span style="color:var(--text-soft);font-style:italic;">—</span>'}</td>
+        <td><span class="cell-trans${firstText?'':' empty'}" title="${firstText}">${firstText || '—'}</span></td>
+        <td><span class="cell-trans${secondText?'':' empty'}" title="${secondText}">${secondText || '—'}</span></td>
+        <td>${statusBadge}</td>
+        <td style="font-size:0.82rem;color:var(--text-soft);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${src}">${src||'—'}</td>
+        <td style="font-size:0.78rem;color:var(--text-soft);white-space:nowrap;">${dateStr}</td>
+        <td class="cell-votes"><span class="vote-pill">${votedDot}${totalVotes}</span></td>
+        <td><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openEditView('${t.id}')">${canEdit ? 'Edit' : 'View'}</button></td>
+      </tr>`;
+  }
+
+  // ── EDIT VIEW ────────────────────────────────────────────────────────────
+  function openEditView(termId) {
+    const term = allTerms.find(t => t.id === termId);
+    if (!term) return;
+    editingTermId = termId;
+    document.getElementById('list-view').style.display = 'none';
+    const ev = document.getElementById('edit-view');
+    ev.style.display = 'block';
+    ev.innerHTML = buildEditView(term);
+    ev.scrollTop = 0;
+    ev.querySelectorAll('.tp-textarea, .meta-textarea').forEach(ta => autoResizeTextarea(ta));
+    loadAuditLog(termId);
+  }
+
+  function closeEditView() {
+    editingTermId = null;
+    document.getElementById('edit-view').style.display = 'none';
+    document.getElementById('list-view').style.display = 'block';
+    updateStats();
+    applyView();
+  }
+
+  function refreshEditView() {
+    if (!editingTermId) return;
+    const term = allTerms.find(t => t.id === editingTermId);
+    if (term) {
+      const ev = document.getElementById('edit-view');
+      ev.innerHTML = buildEditView(term);
+      ev.querySelectorAll('.tp-textarea, .meta-textarea').forEach(ta => autoResizeTextarea(ta));
+      loadAuditLog(editingTermId);
+    }
+  }
+
+  const AUDIT_ACTION_LABELS = {
+    created:          'Created',
+    updated:          'Updated',
+    voted:            'Voted',
+    vote_updated:     'Vote Changed',
+    finalized_first:  'Finalized 1st',
+    finalized_second: 'Finalized 2nd',
+    reset_final:      'Reset Final',
+    ai_translated:    'AI Translated',
+  };
+
+  async function loadAuditLog(termId) {
+    const el = document.getElementById(`audit-log-${termId}`);
+    if (!el) return;
+    try {
+      const res = await fetch(`/api/terms/${termId}/audit`);
+      if (!res.ok) throw new Error('fetch failed');
+      const entries = await res.json();
+      if (entries.error) throw new Error(entries.error);
+      if (!entries.length) {
+        el.innerHTML = '<p style="font-size:0.82rem;color:var(--text-soft);font-style:italic;padding:0.35rem 0;">No history yet.</p>';
+        return;
+      }
+      const rows = entries.map(e => {
+        const action = e.ActionType || '';
+        const label  = AUDIT_ACTION_LABELS[action] || action;
+        const user   = e.UserName || e.UserEmail || '—';
+        const dt     = (e.Timestamp || '').slice(0, 16);
+        let detail   = e.Details || '';
+        if (!detail && e.FieldChanged) {
+          detail = e.FieldChanged;
+          if (e.OldValue !== undefined || e.NewValue !== undefined) {
+            const from = e.OldValue ? ` from "${e.OldValue}"` : '';
+            detail += `${from} → "${e.NewValue}"`;
+          }
+        }
+        return `<tr>
+          <td style="white-space:nowrap;font-size:0.79rem;color:var(--text-soft);">${dt}</td>
+          <td style="white-space:nowrap;">${user}</td>
+          <td><span class="audit-action ${action}">${label}</span></td>
+          <td style="font-size:0.82rem;">${detail || '—'}</td>
+        </tr>`;
+      }).join('');
+      el.innerHTML = `<table class="audit-table"><thead><tr><th>Time</th><th>User</th><th>Action</th><th>Details</th></tr></thead><tbody>${rows}</tbody></table>`;
+    } catch(e) {
+      el.innerHTML = '<p style="font-size:0.82rem;color:var(--text-soft);font-style:italic;padding:0.35rem 0;">Could not load history.</p>';
+    }
+  }
+
+  function rankBadge(label, first, second) {
+    if (label === first)  return '<span class="rank-badge rank-first">★ 1st</span>';
+    if (label === second) return '<span class="rank-badge rank-second">★ 2nd</span>';
+    return '';
+  }
+
+  function buildEditView(t) {
+    const totalVotes = VALID_VOTES.reduce((s,k) => s + (t.votes[k]||0), 0);
+    const isLeaderOrAdmin = isAdmin || userRole === 'leader';
+    const firstKey  = t.final || '';
+    const secondKey = findKeyByText(t, t.trans_second) || '';
+    const hasFirst  = !!(t.trans_first);
+
+    const srcOpts = allSources.map(s =>
+      `<option value="${s.SourceID}"${t.source===s.SourceID?' selected':''}>${s.SourceName}</option>`
+    ).join('');
+    const srcSelect = canEdit
+      ? `<select class="source-select" data-term-id="${t.id}" data-field="source" onchange="autoSaveMeta(this)"><option value="">— Source —</option>${srcOpts}</select>`
+      : `<select class="source-select" disabled><option value="">— Source —</option>${srcOpts}</select>`;
+
+    const statusBadge = t.status === 'finalized'
+      ? '<span class="tag tag-final">✓ Finalized</span>'
+      : '<span class="tag tag-pending">Pending</span>';
+
+    function transPanel(field, label, displayLabel, extraClass) {
+      const text        = t[field] || '';
+      const vc          = t.votes[label] || 0;
+      const isVoted     = t.my_vote === label;
+      const isFirst     = firstKey  === label;
+      const isSecond    = secondKey === label;
+      const isLocked    = vc > 0;
+      const isFinalized = t.status === 'finalized';
+      const safeOrig    = text.replace(/"/g,'&quot;');
+      const bold        = isFirst || isSecond;
+      const textEl = (!canEdit || isLocked || isFinalized)
+        ? `<div class="tp-text"${bold ? ' style="font-weight:600;"' : ''}>${text || '<span class="placeholder">—</span>'}</div>`
+        : `<textarea class="tp-textarea" data-term-id="${t.id}" data-field="${field}" data-orig="${safeOrig}" onblur="autoSaveField(this)" oninput="autoResizeTextarea(this)" placeholder="Enter translation…">${text}</textarea>`;
+      const voteEl = !isFinalized
+        ? (canVote
+            ? `<div class="tp-votes"><span class="vote-count">${vc}</span><button class="vote-btn${isVoted?' voted':''}" onclick="vote('${t.id}','${label}',this)"${isVoted?' title="Click to remove your vote"':''}>${isVoted?'✓':'Vote'}</button></div>`
+            : (vc ? `<div class="tp-votes"><span class="vote-count">${vc}</span></div>` : ''))
+        : (vc ? `<div class="tp-votes"><span class="vote-count">${vc}</span></div>` : '');
+      return `
+        <div class="${extraClass}${isFirst||isSecond?' is-final':''}">
+          <div class="tp-label">
+            ${displayLabel}
+            ${isLocked ? `<span class="lock-icon" title="${vc} vote(s) — locked">🔒</span>` : ''}
+            ${rankBadge(label, t.trans_first, t.trans_second)}
+            ${isFirst  ? '<span class="final-badge-1st">Final · 1st</span>' : ''}
+            ${isSecond ? '<span class="final-badge-2nd">Final · 2nd</span>' : ''}
+          </div>
+          <div class="tp-body">${textEl}${voteEl}</div>
+        </div>`;
+    }
+
+    const topRow = `
+      <div class="trans-grid-3" style="border-bottom:1px solid rgba(201,168,76,0.15);">
+        ${transPanel('trans1','Translation1','AI Translate 1','trans-panel')}
+        ${transPanel('trans2','Translation2','AI Translate 2','trans-panel')}
+        ${transPanel('trans3','Translation3','AI Translate 3','trans-panel')}
+      </div>`;
+
+    const bottomRow = `
+      <div class="trans-grid-3">
+        ${transPanel('trans_known',  'TranslationKnown',  'Known Translation', 'trans-panel')}
+        ${transPanel('trans_other1', 'TranslationOther1', 'Suggested 1',       'trans-panel')}
+        ${transPanel('trans_other2', 'TranslationOther2', 'Suggested 2',       'trans-panel')}
+      </div>`;
+
+    let apText;
+    if (t.status === 'finalized' && t.trans_first) {
+      apText = `<span style="color:var(--gold);font-weight:600;">✓ Finalized</span> &nbsp;—&nbsp; 1st: <strong>${t.trans_first}</strong>${t.trans_second ? ` &nbsp;·&nbsp; 2nd: <strong>${t.trans_second}</strong>` : ''}`;
+    } else if (t.trans_first || t.trans_second) {
+      const p1 = t.trans_first  ? `<strong>${PICK_LABELS[t.trans_first]  || t.trans_first}</strong>`  : '';
+      const p2 = t.trans_second ? `<span>${PICK_LABELS[t.trans_second] || t.trans_second}</span>` : '';
+      apText = `Likely picks: ${p1}${p1 && p2 ? ' · ' : ''}${p2}`;
+    } else {
+      apText = `<span style="opacity:0.5;">No auto-picks yet — needs 2+ votes on the same option</span>`;
+    }
+
+    const finalOpts = [['Translation1','AI Translate 1'],['Translation2','AI Translate 2'],['Translation3','AI Translate 3'],
+                       ['TranslationKnown','Known'],['TranslationOther1','Suggested 1'],['TranslationOther2','Suggested 2']];
+    const hasEmptyOpts   = !t.trans1 || !t.trans2 || !t.trans3;
+    const aiTranslateBtn = canEdit && hasEmptyOpts
+      ? `<button class="btn btn-secondary btn-sm" id="ai-btn-${t.id}" onclick="aiTranslate('${t.id}')">✦ AI Translate</button>`
+      : '';
+    const adminReset = isLeaderOrAdmin && (t.trans_first || t.trans_second) ? `
+      <div style="display:flex;justify-content:flex-end;padding:0.35rem 0.75rem 0.5rem;">
+        <button class="btn btn-secondary btn-sm" onclick="resetFinal('${t.id}')" style="color:var(--red-soft);border-color:rgba(139,32,32,0.25);" title="Clear finalization and revert to Pending">↺ Final Reset</button>
+      </div>` : '';
+    const adminFinalFirst = isLeaderOrAdmin ? `
+      <div class="admin-row">
+        <span class="admin-label">✦ Set Final (First):</span>
+        ${finalOpts.map(([lbl,txt]) =>
+          `<button class="admin-pick-btn${firstKey===lbl?' selected':''}" onclick="setFinal('${t.id}','${lbl}','first',this)">${txt}</button>`
+        ).join('')}
+      </div>` : '';
+    const adminFinalSecond = isLeaderOrAdmin ? `
+      <div class="admin-row" id="final-second-row-${t.id}"${hasFirst ? '' : ' style="display:none"'}>
+        <span class="admin-label">✦ Set Final (Second):</span>
+        ${finalOpts.map(([lbl,txt]) =>
+          `<button class="admin-pick-btn${secondKey===lbl?' selected':''}" onclick="setFinal('${t.id}','${lbl}','second',this)">${txt}</button>`
+        ).join('')}
+      </div>` : '';
+
+    const lmBy  = t.last_modified_by   || '';
+    const lmAt  = t.last_modified_time || '';
+    return `
+      <div class="edit-header">
+        <div class="edit-header-term">
+          <div style="display:flex;align-items:baseline;gap:0.6rem;flex-wrap:wrap;">
+            <span class="zh">${t.chinese}</span>
+            <input class="py-editable" type="text"
+              data-term-id="${t.id}" data-field="pinyin" data-orig="${(t.pinyin||'').replace(/"/g,'&quot;')}"
+              onblur="autoSaveField(this)" value="${(t.pinyin||'').replace(/"/g,'&quot;')}" placeholder="pinyin…"
+              ${canEdit ? '' : 'readonly'}>
+          </div>
+          <div class="edit-header-meta">
+            <span class="tag tag-id">${t.id}</span>
+            ${t.pali     ? `<span class="tag tag-pali">Pali: ${t.pali}</span>` : ''}
+            ${t.sanskrit ? `<span class="tag tag-skt">Skt: ${t.sanskrit}</span>` : ''}
+            ${statusBadge}
+          </div>
+          <div class="edit-meta-line">
+            Created by <span class="mv">${displayName(t.added_by)}</span> at <span class="mv">${t.timestamp ? t.timestamp.slice(0,10) : '—'}</span>
+            &nbsp;·&nbsp;
+            Modified by <span class="mv" id="ev-lm-by-${t.id}">${lmBy ? displayName(lmBy) : '—'}</span> at <span class="mv" id="ev-lm-at-${t.id}">${lmAt ? lmAt.slice(0,10) : '—'}</span>
+          </div>
+        </div>
+        <div class="edit-header-actions">
+          <button class="btn-back" onclick="closeEditView()">← Back to list</button>
+          <div class="edit-header-source">
+            <span class="edit-header-source-lbl">Source</span>
+            ${srcSelect}
+          </div>
+        </div>
+      </div>
+      <div class="trans-box">
+        ${topRow}
+        ${bottomRow}
+        <div class="autopicks-bar" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
+          <span>${apText}</span>${aiTranslateBtn}
+        </div>
+      </div>
+      <div class="edit-below-box">
+        <div class="edit-meta-section">
+          <div class="meta-field">
+            <label>Source Content Chinese</label>
+            <textarea class="meta-textarea" data-term-id="${t.id}" data-field="source_content_chinese" onblur="autoSaveMeta(this)" oninput="autoResizeTextarea(this)" placeholder="Original Chinese passage containing this term…" ${canEdit ? '' : 'readonly'}>${t.source_content_chinese||''}</textarea>
+          </div>
+          <div class="meta-field">
+            <label>Source Content English</label>
+            <textarea class="meta-textarea" data-term-id="${t.id}" data-field="source_content_english" onblur="autoSaveMeta(this)" oninput="autoResizeTextarea(this)" placeholder="English translation of the passage…" ${canEdit ? '' : 'readonly'}>${t.source_content_english||''}</textarea>
+          </div>
+          <div class="meta-field full">
+            <label>Notes</label>
+            <div class="notes-display${t.notes ? '' : ' empty'}" id="notes-display-${t.id}">${escHtml(t.notes) || 'No notes yet.'}</div>
+          </div>
+          ${canEdit ? `<div class="meta-field full">
+            <label>Attach Note</label>
+            <textarea class="meta-textarea" id="attach-note-${t.id}" rows="2" placeholder="Add a new note…" oninput="autoResizeTextarea(this)"></textarea>
+            <div style="display:flex;align-items:center;gap:0.75rem;margin-top:0.35rem;">
+              <button class="btn-save-note" onclick="attachNote('${t.id}', this)">Save to Note</button>
+              <span class="attach-note-msg" id="attach-note-msg-${t.id}"></span>
+            </div>
+          </div>` : ''}
+        </div>
+      </div>
+      ${adminFinalFirst}${adminFinalSecond}${adminReset}
+      <div class="audit-section">
+        <div class="audit-section-title">Editing History</div>
+        <div id="audit-log-${t.id}"><div style="font-size:0.82rem;color:var(--text-soft);font-style:italic;padding:0.35rem 0;">☸ Loading history…</div></div>
+      </div>`;
+  }
+
+  // ── VOTE ─────────────────────────────────────────────────────────────────
+  async function vote(termId, chosen, btn) {
+    const term = allTerms.find(t => t.id === termId);
+    if (term && term.my_vote === chosen) {
+      await unvote(termId, chosen, btn);
+      return;
+    }
+    try {
+      const res  = await fetch('/api/vote', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({term_id:termId, chosen}) });
+      const data = await res.json();
+      if (data.error) { showToast('⚠ ' + data.error); return; }
+      if (term) {
+        if (term.my_vote && term.my_vote !== chosen)
+          term.votes[term.my_vote] = Math.max(0, (term.votes[term.my_vote]||1) - 1);
+        if (!term.my_vote || term.my_vote !== chosen)
+          term.votes[chosen] = (term.votes[chosen]||0) + 1;
+        term.my_vote      = chosen;
+        term.trans_first  = data.trans_first  || '';
+        term.trans_second = data.trans_second || '';
+        updateStats();
+        if (editingTermId === termId) refreshEditView();
+      }
+      showToast(data.status === 'updated' ? '↻ Vote updated!' : '✓ Vote recorded!');
+    } catch(e) { showToast('⚠ Error recording vote'); }
+  }
+
+  async function unvote(termId, chosen, btn) {
+    try {
+      const res  = await fetch('/api/unvote', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({term_id:termId, chosen}) });
+      const data = await res.json();
+      if (data.error) { showToast('⚠ ' + data.error); return; }
+      const term = allTerms.find(t => t.id === termId);
+      if (term) {
+        term.votes[chosen] = Math.max(0, (term.votes[chosen]||1) - 1);
+        term.my_vote       = '';
+        term.trans_first   = data.trans_first  || '';
+        term.trans_second  = data.trans_second || '';
+        updateStats();
+        if (editingTermId === termId) refreshEditView();
+      }
+      showToast('✗ Vote removed');
+    } catch(e) { showToast('⚠ Error removing vote'); }
+  }
+
+  // ── SET FINAL ────────────────────────────────────────────────────────────
+  async function setFinal(termId, label, which, btn) {
+    try {
+      const res  = await fetch(`/api/terms/${termId}/final`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({final:label, which}) });
+      const data = await res.json();
+      if (data.error) { showToast('⚠ ' + data.error); return; }
+      const term = allTerms.find(t => t.id === termId);
+      if (term) {
+        if (which === 'first') {
+          term.final      = label;
+          term.trans_first = data.text;
+          term.status     = 'finalized';
+        } else {
+          term.trans_second = data.text;
+        }
+        if (data.last_modified_by) { term.last_modified_by = data.last_modified_by; term.last_modified_time = data.last_modified_time; }
+        updateStats();
+        if (editingTermId === termId) refreshEditView();
+      }
+      showToast(which === 'first' ? '✓ First choice finalized!' : '✓ Second choice saved!');
+    } catch(e) { showToast('⚠ Error setting final'); }
+  }
+
+  // ── RESET FINALIZATION ───────────────────────────────────────────────────
+  async function resetFinal(termId) {
+    if (!confirm('Reset finalization? This will clear First and Second choices and set status back to Pending.')) return;
+    try {
+      const res  = await fetch(`/api/terms/${termId}/final/reset`, {method:'POST', headers:{'Content-Type':'application/json'}});
+      const data = await res.json();
+      if (data.error) { showToast('⚠ ' + data.error); return; }
+      const term = allTerms.find(t => t.id === termId);
+      if (term) {
+        term.final = ''; term.trans_first = ''; term.trans_second = ''; term.status = 'pending';
+        if (data.last_modified_by) { term.last_modified_by = data.last_modified_by; term.last_modified_time = data.last_modified_time; }
+        updateStats(); if (editingTermId === termId) refreshEditView();
+      }
+      showToast('↺ Finalization reset');
+    } catch(e) { showToast('⚠ Error resetting'); }
+  }
+
+  // ── AI TRANSLATE (fill empty options) ────────────────────────────────────
+  async function aiTranslate(termId) {
+    const btn = document.getElementById(`ai-btn-${termId}`);
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Generating…'; }
+    try {
+      const res  = await fetch(`/api/terms/${termId}/translate`, {method:'POST', headers:{'Content-Type':'application/json'}});
+      const data = await res.json();
+      if (data.error) { showToast('⚠ ' + data.error); return; }
+      const term = allTerms.find(t => t.id === termId);
+      if (term) {
+        const tr = data.translations || {};
+        if (tr.Translation1) term.trans1 = tr.Translation1;
+        if (tr.Translation2) term.trans2 = tr.Translation2;
+        if (tr.Translation3) term.trans3 = tr.Translation3;
+        if (data.last_modified_by) { term.last_modified_by = data.last_modified_by; term.last_modified_time = data.last_modified_time; }
+        if (editingTermId === termId) refreshEditView();
+      }
+      const filled  = Object.keys(data.translations || {}).length;
+      const skipped = (data.skipped || []).length;
+      if (filled === 0) showToast('⚠ No unique AI translation found. Please enter manually.');
+      else if (skipped > 0) showToast(`✓ ${filled} translation(s) generated. ${skipped} duplicate(s) skipped.`);
+      else showToast('✓ Translations generated!');
+    } catch(e) { showToast('⚠ AI translation failed'); }
+    finally { if (btn) { btn.disabled = false; btn.textContent = '✦ AI Translate'; } }
+  }
+
+  // ── DIRECT INLINE SAVE ───────────────────────────────────────────────────
+  function autoResizeTextarea(ta) {
+    ta.style.height = 'auto';
+    ta.style.height = ta.scrollHeight + 'px';
+  }
+
+  async function autoSaveField(ta) {
+    const termId = ta.dataset.termId;
+    const field  = ta.dataset.field;
+    const orig   = ta.dataset.orig || '';
+    const value  = ta.value.trim();
+    if (value === orig) return;
+    try {
+      const res  = await fetch(`/api/terms/${termId}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({field, value}) });
+      const data = await res.json();
+      if (data.error === 'locked') {
+        showToast('🔒 ' + data.message);
+        ta.value = orig;
+        if (editingTermId === termId) refreshEditView();
+        return;
+      }
+      if (data.error) { showToast('⚠ ' + data.error); ta.value = orig; return; }
+      const term = allTerms.find(t => t.id === termId);
+      if (term) {
+        term[field] = value; ta.dataset.orig = value;
+        if (data.romanization_plain !== undefined) term.romanization_plain = data.romanization_plain;
+        if (data.last_modified_by) { term.last_modified_by = data.last_modified_by; term.last_modified_time = data.last_modified_time; updateModifiedDisplay(termId); }
+      }
+      showToast('✓ Saved');
+    } catch(e) { showToast('⚠ Failed to save'); ta.value = orig; }
+  }
+
+  async function autoSaveMeta(el) {
+    const termId = el.dataset.termId;
+    const field  = el.dataset.field;
+    const value  = el.tagName === 'TEXTAREA' ? el.value.trim() : el.value;
+    const term   = allTerms.find(t => t.id === termId);
+    const orig   = term ? (term[field] || '') : '';
+    if (value === orig) return;
+    try {
+      const res  = await fetch(`/api/terms/${termId}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({field, value}) });
+      const data = await res.json();
+      if (data.error) { showToast('⚠ ' + data.error); return; }
+      if (term) {
+        term[field] = value;
+        if (data.last_modified_by) { term.last_modified_by = data.last_modified_by; term.last_modified_time = data.last_modified_time; updateModifiedDisplay(termId); }
+      }
+      showToast('✓ Saved');
+    } catch(e) { showToast('⚠ Failed to save'); }
+  }
+
+  async function attachNote(termId, btn) {
+    const ta   = document.getElementById(`attach-note-${termId}`);
+    const msg  = document.getElementById(`attach-note-msg-${termId}`);
+    const text = ta ? ta.value.trim() : '';
+    if (!text) {
+      msg.textContent = 'Please enter a note.';
+      msg.className   = 'attach-note-msg error';
+      return;
+    }
+    msg.textContent = '';
+    const now   = new Date();
+    const pad   = n => String(n).padStart(2, '0');
+    const stamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const name  = displayName(currentUserEmail);
+    const line  = `${stamp} - [${name}]: ${text}`;
+    const term  = allTerms.find(t => t.id === termId);
+    const prev  = term ? (term.notes || '') : '';
+    const combined = prev ? `${prev}\n${line}` : line;
+    btn.disabled = true;
+    try {
+      const res  = await fetch(`/api/terms/${termId}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({field:'notes', value:combined}) });
+      const data = await res.json();
+      if (data.error) { msg.textContent = '⚠ ' + data.error; msg.className = 'attach-note-msg error'; return; }
+      if (term) {
+        term.notes = combined;
+        if (data.last_modified_by) { term.last_modified_by = data.last_modified_by; term.last_modified_time = data.last_modified_time; updateModifiedDisplay(termId); }
+      }
+      const display = document.getElementById(`notes-display-${termId}`);
+      if (display) {
+        display.textContent = combined;
+        display.classList.remove('empty');
+      }
+      ta.value = '';
+      autoResizeTextarea(ta);
+      msg.textContent = '✓ Note saved';
+      msg.className   = 'attach-note-msg success';
+      setTimeout(() => { if (msg) msg.textContent = ''; }, 2500);
+    } catch(e) { msg.textContent = '⚠ Failed to save'; msg.className = 'attach-note-msg error'; }
+    finally    { btn.disabled = false; }
+  }
+
+  function updateModifiedDisplay(termId) {
+    const term = allTerms.find(t => t.id === termId);
+    if (!term) return;
+    const byEl = document.getElementById(`ev-lm-by-${termId}`);
+    const atEl = document.getElementById(`ev-lm-at-${termId}`);
+    if (byEl) byEl.textContent = term.last_modified_by ? displayName(term.last_modified_by) : '—';
+    if (atEl) atEl.textContent = term.last_modified_time ? term.last_modified_time.slice(0,10) : '—';
+  }
+
+  // ── ADD TERM MODAL ───────────────────────────────────────────────────────
+  function openModal() {
+    const sel = document.getElementById('f-source');
+    sel.innerHTML = '<option value="">— Select Source —</option>' +
+      allSources.map(s => `<option value="${s.SourceID}">${s.SourceName}</option>`).join('');
+    document.getElementById('modal').classList.add('open');
+  }
+  function closeModal()          { document.getElementById('modal').classList.remove('open'); }
+  function closeModalOutside(e)  { if (e.target.id === 'modal') closeModal(); }
+  function switchTab(tab, btn) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-'+tab).classList.add('active');
+  }
+
+  async function submitSingleTerm() {
+    const chinese = document.getElementById('f-chinese').value.trim();
+    if (!chinese) { showToast('⚠ Chinese term is required'); return; }
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true; btn.textContent = '⏳ Generating…';
+    let newTermId = null;
+    try {
+      const payload = {
+        chinese,
+        trans_known:            document.getElementById('f-known').value.trim(),
+        source:                 document.getElementById('f-source').value,
+        source_content_chinese: document.getElementById('f-source-content-zh').value.trim(),
+        source_content_english: document.getElementById('f-source-content-en').value.trim(),
+        notes:                  document.getElementById('f-notes').value.trim(),
+      };
+      const res  = await fetch('/api/terms', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      newTermId = data.id;
+      closeModal();
+      clearForm();
+      await loadTerms();
+      openEditView(newTermId);
+      showToast(`✓ "${chinese}" added!`);
+    } catch(e) { showToast('⚠ ' + (e.message||'Failed')); }
+    finally { btn.disabled = false; btn.textContent = 'Translate and Save ✦'; }
+  }
+
+  async function submitBulk() {
+    const file = document.getElementById('f-csv').files[0];
+    if (!file) { showToast('⚠ Please select a CSV file'); return; }
+    const btn = document.getElementById('bulk-btn');
+    btn.disabled = true; btn.textContent = '⏳ Importing…';
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      const res  = await fetch('/api/terms/bulk', { method:'POST', body:fd });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      closeModal(); showToast(`✓ ${data.added} terms imported!${data.errors?.length?` (${data.errors.length} errors)`:''}`);
+      await loadTerms();
+    } catch(e) { showToast('⚠ ' + (e.message||'Import failed')); }
+    finally { btn.disabled = false; btn.textContent = 'Import & Translate ✦'; }
+  }
+
+  function clearForm() {
+    ['f-chinese','f-known','f-source-content-zh','f-source-content-en','f-notes'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    const src = document.getElementById('f-source');
+    if (src) src.value = '';
+  }
+
+  // ── SOURCES MODAL ────────────────────────────────────────────────────────
+  function openSourcesModal()          { document.getElementById('sources-modal').classList.add('open'); loadSources(); }
+  function closeSourcesModal()         { document.getElementById('sources-modal').classList.remove('open'); }
+  function closeSourcesModalOutside(e) { if (e.target.id==='sources-modal') closeSourcesModal(); }
+
+  async function loadSources() {
+    document.getElementById('sources-list').innerHTML = '<div class="loading" style="padding:1.5rem;">☸ Loading…</div>';
+    try {
+      const res = await fetch('/api/sources');
+      allSources = res.ok ? await res.json() : [];
+      const rows = allSources.map(s => `<tr><td style="font-size:0.78rem;color:var(--text-soft);">${s.SourceID}</td><td>${s.SourceName}</td><td style="color:var(--text-soft);">${s.SourceType||'—'}</td><td style="color:var(--text-soft);font-style:italic;">${s.Notes||''}</td></tr>`).join('');
+      document.getElementById('sources-list').innerHTML = allSources.length
+        ? `<table class="members-table"><thead><tr><th>ID</th><th>Name</th><th>Type</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table>`
+        : '<p style="color:var(--text-soft);font-style:italic;padding:0.5rem 0;">No sources yet.</p>';
+    } catch(e) { document.getElementById('sources-list').innerHTML = '<div class="loading" style="padding:1rem;">⚠ Failed.</div>'; }
+  }
+
+  async function addSource() {
+    const name = document.getElementById('src-name').value.trim();
+    if (!name) { showToast('⚠ Source name is required'); return; }
+    try {
+      const res  = await fetch('/api/sources', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name, type:document.getElementById('src-type').value, notes:document.getElementById('src-notes').value.trim()}) });
+      const data = await res.json();
+      if (data.error) { showToast('⚠ ' + data.error); return; }
+      ['src-name','src-notes'].forEach(id=>{document.getElementById(id).value='';});
+      document.getElementById('src-type').value='';
+      showToast(`✓ Source "${name}" added`); await loadSources();
+    } catch(e) { showToast('⚠ Failed to add source'); }
+  }
+
+  // ── TEAM MODAL ───────────────────────────────────────────────────────────
+  function openTeamModal()          { document.getElementById('team-modal').classList.add('open'); loadMembers(); }
+  function closeTeamModal()         { document.getElementById('team-modal').classList.remove('open'); }
+  function closeTeamModalOutside(e) { if (e.target.id==='team-modal') closeTeamModal(); }
+
+  async function loadMembers() {
+    document.getElementById('members-list').innerHTML = '<div class="loading" style="padding:1.5rem;">☸ Loading…</div>';
+    try {
+      const res = await fetch('/api/members');
+      membersData = res.ok ? await res.json() : [];
+      editingMemberEmail = null;
+      renderMembersTable();
+    } catch(e) { document.getElementById('members-list').innerHTML = '<div class="loading" style="padding:1rem;">⚠ Failed.</div>'; }
+  }
+
+  function renderMembersTable() {
+    if (!membersData.length) {
+      document.getElementById('members-list').innerHTML = '<p style="color:var(--text-soft);font-style:italic;padding:0.5rem 0;">No members yet.</p>';
+      return;
+    }
+    const roleOpts = sel => ['viewer','depositor','member','leader','admin'].map(v => `<option value="${v}"${sel===v?' selected':''}>${v[0].toUpperCase()+v.slice(1)}</option>`).join('');
+    const rows = membersData.map(m => {
+      const sup     = m.Email.toLowerCase() === superAdmin.toLowerCase();
+      const editing = isAdmin && !sup && editingMemberEmail === m.Email;
+      if (editing) {
+        return `<tr class="member-edit-row">
+          <td style="font-size:0.82rem;">${m.Email}</td>
+          <td><input class="member-input" id="medit-name"  type="text" value="${(m.Name||'').replace(/"/g,'&quot;')}"     placeholder="Full name"></td>
+          <td><input class="member-input" id="medit-short" type="text" value="${(m.ShortName||'').replace(/"/g,'&quot;')}" placeholder="Short name"></td>
+          <td><select class="role-select" id="medit-role">${roleOpts(m.Role)}</select></td>
+          <td style="font-size:0.78rem;color:var(--text-soft);">${m.AddedBy||'—'}</td>
+          <td class="actions-cell">
+            <button class="btn-save-member"   onclick="saveMemberEdit('${m.Email}')">Save</button>
+            <button class="btn-cancel-member" onclick="cancelMemberEdit()">Cancel</button>
+          </td>
+        </tr>`;
+      }
+      return `<tr>
+        <td style="font-size:0.82rem;">${m.Email}</td>
+        <td style="font-size:0.88rem;">${m.Name||'—'}</td>
+        <td style="font-size:0.88rem;">${m.ShortName||'—'}</td>
+        <td><span class="tag tag-${m.Role==='admin'?'admin':m.Role==='leader'?'leader':'id'}" style="font-size:0.68rem;">${m.Role}</span></td>
+        <td style="font-size:0.78rem;color:var(--text-soft);">${m.AddedBy||'—'}</td>
+        <td class="actions-cell">
+          ${isAdmin && !sup ? `<button class="btn-edit-member" onclick="startMemberEdit('${m.Email}')">Edit</button> ` : ''}
+          ${!sup            ? `<button class="btn-remove"      onclick="removeMember('${m.Email}')">Remove</button>` : ''}
+        </td>
+      </tr>`;
+    }).join('');
+    document.getElementById('members-list').innerHTML = `<div class="members-table-wrap"><table class="members-table team-table"><colgroup><col class="col-email"><col class="col-name"><col class="col-short"><col class="col-role"><col class="col-added"><col class="col-actions"></colgroup><thead><tr><th>Email</th><th>Name</th><th>Short Name</th><th>Role</th><th>Added By</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+
+  function startMemberEdit(email)  { editingMemberEmail = email; renderMembersTable(); }
+  function cancelMemberEdit()      { editingMemberEmail = null;  renderMembersTable(); }
+
+  async function saveMemberEdit(email) {
+    const name      = document.getElementById('medit-name')?.value.trim()  || '';
+    const shortName = document.getElementById('medit-short')?.value.trim() || '';
+    const role      = document.getElementById('medit-role')?.value         || '';
+    try {
+      const res  = await fetch('/api/members', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email, name, short_name: shortName, role}) });
+      const data = await res.json();
+      if (data.error) { showToast('⚠ ' + data.error); return; }
+      const m = membersData.find(x => x.Email.toLowerCase() === email.toLowerCase());
+      if (m) { m.Name = name; m.ShortName = shortName; m.Role = role; }
+      const d = allDirectory.find(x => x.email.toLowerCase() === email.toLowerCase());
+      if (d) { d.name = name; d.short_name = shortName; }
+      editingMemberEmail = null;
+      renderMembersTable();
+      showToast('✓ Member updated');
+    } catch(e) { showToast('⚠ Failed to save'); }
+  }
+
+  async function addMember() {
+    const email     = document.getElementById('new-email').value.trim().toLowerCase();
+    const role      = document.getElementById('new-role').value;
+    const name      = document.getElementById('new-name').value.trim();
+    const shortName = document.getElementById('new-short-name').value.trim();
+    if (!email) { showToast('⚠ Email is required'); return; }
+    try {
+      const res  = await fetch('/api/members', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email, role, name, short_name: shortName}) });
+      const data = await res.json();
+      if (data.error) { showToast('⚠ ' + data.error); return; }
+      ['new-email','new-name','new-short-name'].forEach(id => { document.getElementById(id).value=''; });
+      allDirectory.push({email, name, short_name: shortName});
+      showToast(`✓ ${email} added as ${role}`); loadMembers();
+    } catch(e) { showToast('⚠ Failed to add member'); }
+  }
+
+  async function removeMember(email) {
+    if (!confirm(`Remove ${email}?`)) return;
+    try {
+      const res  = await fetch('/api/members', { method:'DELETE', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email}) });
+      const data = await res.json();
+      if (data.error) { showToast('⚠ ' + data.error); return; }
+      membersData  = membersData.filter(m => m.Email.toLowerCase() !== email.toLowerCase());
+      allDirectory = allDirectory.filter(d => d.email.toLowerCase() !== email.toLowerCase());
+      renderMembersTable();
+      showToast(`✓ ${email} removed`);
+    } catch(e) { showToast('⚠ Failed'); }
+  }
+
+  async function updateMemberField(email, field, value) {
+    const body = {email};
+    body[field] = value;
+    try {
+      const res  = await fetch('/api/members', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      const data = await res.json();
+      if (data.error) { showToast('⚠ ' + data.error); return; }
+      const d = allDirectory.find(x => x.email.toLowerCase() === email.toLowerCase());
+      if (d) d[field] = value;
+    } catch(e) { showToast('⚠ Failed'); }
+  }
+
+  // ── INIT SHEETS ──────────────────────────────────────────────────────────
+  async function initSheets() {
+    if (!confirm('Initialize Google Sheets with headers? Only run once.')) return;
+    const res  = await fetch('/api/init', {method:'POST'});
+    const data = await res.json();
+    showToast(data.status || data.error);
+  }
+
+  // ── TOAST ────────────────────────────────────────────────────────────────
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  // ── INIT ─────────────────────────────────────────────────────────────────
+  let _resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(_resizeTimer);
+    _resizeTimer = setTimeout(() => { if (!editingTermId) applyView(); }, 200);
+  });
+
+  loadTerms();
+</script>
+</body>
+</html>

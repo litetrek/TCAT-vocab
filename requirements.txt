@@ -1,0 +1,9 @@
+flask
+flask-cors
+authlib
+requests
+gspread
+google-auth
+google-auth-oauthlib
+anthropic
+python-dotenv

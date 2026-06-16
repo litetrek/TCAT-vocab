@@ -1,0 +1,307 @@
+# Buddhist Vocabulary Translation Review System
+Last updated: 2026-05-04 (update 10)
+
+## Purpose
+
+A collaborative web app for a team translating Chinese Buddhist texts into English.
+When a translator encounters a Buddhist term, they add it to the app. Claude AI
+automatically generates Pinyin, Pali, Sanskrit equivalents, and three English
+translation options. Team members then vote on the best translation. A leader or
+admin finalizes the winning choices (First and Second).
+
+---
+
+## Tech Stack
+
+| Layer        | Technology                                      |
+|------------- |-------------------------------------------------|
+| Backend      | Python / Flask                                  |
+| Auth         | Google OAuth 2.0 (via Authlib)                  |
+| Database     | Google Sheets (via gspread + service account)   |
+| AI           | Anthropic Claude (claude-haiku-4-5-20251001)    |
+| Frontend     | Vanilla JS + HTML/CSS (no framework)            |
+| Hosting      | GreenGeeks shared hosting via CGI (index.cgi)   |
+| Local dev    | python app.py (http://127.0.0.1:5000)           |
+
+---
+
+## File Structure
+
+```
+buddhist-vocab/
+├── app.py              # Flask entry point: OAuth setup, auth routes, blueprint registration
+├── config.py           # All constants, COL dict, schema headers, field maps, utility functions
+├── sheets.py           # Google Sheets client, sheet accessors, write_audit, term/member helpers
+├── ai.py               # Claude AI generation (generate_term_data, generate_missing_translations)
+├── auth.py             # Session helpers: is_logged_in, is_admin, is_leader
+├── routes/
+│   ├── __init__.py     # Empty package marker
+│   ├── terms.py        # Blueprint: /api/terms/* routes + /api/vote
+│   ├── members.py      # Blueprint: /api/members/* routes
+│   └── sources.py      # Blueprint: /api/sources + /api/init
+├── index.cgi           # CGI entry point for GreenGeeks production
+├── .htaccess           # Apache rewrite rules for CGI routing
+├── credentials.json    # Google service account key (never commit)
+├── .env                # Development environment variables (never commit)
+├── .env.production     # Production environment variables template
+├── requirements.txt    # Python dependencies
+├── import-template.csv # CSV template for bulk term import
+├── templates/
+│   ├── index.html      # Main app UI (single-page, vanilla JS)
+│   ├── login.html      # Google Sign-In landing page
+│   └── denied.html     # Access denied page (non-whitelisted users)
+├── project-overview    # This file
+└── project-revision    # Changelog
+```
+
+---
+
+## Google Sheets Structure
+
+Five worksheets inside one Google Sheet (SHEET_ID in .env):
+
+**Terms sheet** (26 columns):
+ID | Chinese | Pinyin | Pali | Sanskrit | Context | Category | Notes |
+Translation1 | Translation2 | Translation3 | Final | Status | AddedBy | Timestamp |
+TranslationKnown | Source | TranslationFirst | TranslationSecond |
+TranslationOther1 | TranslationOther2 | LastModifiedBy | LastModifiedTime |
+RomanizationPlain | SourceContentChinese | SourceContentEnglish
+
+ID format: **T000001** (1 letter prefix + 6 digits, supports up to T999999).
+RomanizationPlain: auto-generated tone-stripped Pinyin (xiūxíng → xiuxing), used for search only.
+SourceContentChinese/English: original passage context, used as AI generation hints.
+
+**Votes sheet** (3 columns):
+TermID | VoterEmail | ChosenTranslation
+
+**Members sheet** (6 columns):
+Email | Role | AddedBy | AddedAt | Name | ShortName
+
+**Sources sheet** (4 columns):
+SourceID | SourceName | SourceType | Notes
+
+**Audit_Log sheet** (11 columns):
+AuditID | Timestamp | TermID | TermChinese | UserEmail | UserName |
+ActionType | FieldChanged | OldValue | NewValue | Details
+
+AuditID uses timestamp-based format (e.g. A20260503142130123456).
+ActionType values: created, updated, voted, vote_updated, finalized_first,
+finalized_second, reset_final, ai_translated.
+
+---
+
+## User Roles
+
+Access is controlled dynamically via the **Members** Google Sheet. Role is resolved
+at login and stored in session.
+
+**Member:**
+- View all terms in sortable/searchable table
+- Open Edit View for any term
+- Vote on any of 6 translation options per term; change vote at any time
+- Edit unlocked translation fields (locked once a field receives any vote)
+- Add new terms (single form or bulk CSV)
+- View team list (read-only)
+
+**Leader:**
+- All member capabilities
+- Set Final (First) and Final (Second) translations for any term
+- Reset finalization (↺ Final Reset)
+
+**Admin:**
+- All leader capabilities
+- Manage team members: add, edit (Name/ShortName/Role), remove via ☷ Team modal
+- Manage sources via ⊕ Sources modal
+- Initialize Google Sheets headers (first-run or schema migration)
+
+`SUPER_ADMIN_EMAIL` env var (defaults to vlin77@gmail.com) always has admin access
+regardless of the Members sheet, serving as a bootstrap fallback.
+
+---
+
+## Translation Fields
+
+Each term supports six votable translation options:
+
+| Field             | Label           | Editable | Votable | Notes                          |
+|-------------------|-----------------|----------|---------|--------------------------------|
+| Translation1      | AI Translate 1  | Yes      | Yes     | AI-generated                   |
+| Translation2      | AI Translate 2  | Yes      | Yes     | AI-generated                   |
+| Translation3      | AI Translate 3  | Yes      | Yes     | AI-generated                   |
+| TranslationKnown  | Known           | Yes      | Yes     | Existing known translation     |
+| TranslationOther1 | Suggested 1     | Yes      | Yes     | Member-proposed alternative    |
+| TranslationOther2 | Suggested 2     | Yes      | Yes     | Member-proposed alternative    |
+
+**Locking rule:** Any translation field with ≥1 vote becomes read-only (enforced in
+both backend and frontend).
+
+**Auto-selection:** TranslationFirst and TranslationSecond are recalculated after
+every vote on pending terms. A field qualifies only if it has >1 vote; ties go to the
+higher-ranked option. Written back to the Terms sheet automatically.
+
+**Manual finalization:** Leaders/admins can override auto-selection by setting Final
+(First) and Final (Second) explicitly. Finalized terms store actual translation text
+in TranslationFirst/Second (not vote keys). `recalculate_auto_selections()` skips
+finalized terms to preserve manual choices.
+
+---
+
+## Workflow
+
+1. Translator finds a Chinese Buddhist term in the source text
+2. Clicks "+ Add Term", enters: Chinese term (required), Source, Source Content Chinese,
+   Source Content English, Notes for Translator. Pinyin/Pali/Sanskrit are not entered —
+   always AI-generated.
+3. Claude AI generates: Pinyin, Pali, Sanskrit, and AI Translate 1/2/3. App
+   auto-navigates to the Edit View for the new term.
+4. All team members see the term in the table and open its Edit View
+5. Members vote on any of the 6 translation options; they can also edit unlocked fields.
+   If any AI Translate option is empty, the ✦ AI Translate button re-generates missing slots.
+6. Leader or admin reviews vote tallies, sets Final (First) and optionally Final (Second)
+7. Term is marked "finalized" and shown with a gold border in the table
+8. All edits, votes, and finalizations are recorded in the Audit_Log sheet and displayed
+   in the Editing History section at the bottom of every Edit View
+
+---
+
+## UI Layout
+
+**Header:**
+- Branding: T-CAT (bold) / Buddhist Vocabulary (subtitle)
+- Right: user name, role badge, Sign out
+
+**List View (main):**
+- Sortable table: Term (Chinese + ID), Romanization, First Choice, Second Choice,
+  Status, Source, Added date, Total votes, Edit button
+- Sort by: Chinese, Pinyin, or Timestamp (default: latest first)
+- Filter sidebar: All / Pending / Finalized / Not Yet Voted (labels bold and dark)
+- Search: splits query on spaces; all words must appear across Chinese, Pinyin,
+  all 6 translation texts, and source name
+- Pagination: default 20 per page; page size selector (20/50/100); Prev/Next buttons;
+  "Page X of Y · N–M of Total" indicator; controls rendered above and below the table.
+  Search/filter/sort all operate over the full in-memory dataset before slicing.
+  Changing search, filter, sort, or page size resets to page 1.
+
+**Edit View (per-term):**
+- Header (left): Chinese term, Pinyin (inline editable), Pali/Sanskrit tags, status badge,
+  Created/Modified metadata line
+- Header (right): ← Back to list button + Source dropdown stacked below it
+- Translation box top row: AI Translate 1 | AI Translate 2 | AI Translate 3
+- Translation box bottom row: Known Translation | Suggested 1 | Suggested 2
+- Each panel: label, inline editable textarea (locked if voted), vote count, Vote button;
+  Final 1st / Final 2nd badges on winning panels
+- Autopicks bar: shows computed First/Second choice or finalized text; ✦ AI Translate
+  button appears when any of AI Translate 1–3 is empty
+- Below box (2-col grid): Source Content Chinese | Source Content English (side by side),
+  then Notes (full width)
+- Set Final (First) row: visible to leader/admin; 6 option buttons
+- Set Final (Second) row: visible after First is set; 6 option buttons
+- ↺ Final Reset button: visible to leader/admin when finalization exists
+- Editing History table: timestamped audit log, newest first
+
+**Design aesthetic:** Dark ink header (#1a1208), gold accents (#c9a84c), warm paper
+background (#f5f0e8). T-CAT in Cormorant Garamond bold gold. Noto Serif TC for Chinese;
+Cormorant Garamond + EB Garamond for English.
+
+---
+
+## API Routes
+
+| Method | Route                          | Auth          | Description                          |
+|--------|--------------------------------|---------------|--------------------------------------|
+| GET    | /                              | Member        | Main app UI                          |
+| GET    | /login                         | Public        | Login page                           |
+| GET    | /auth/google                   | Public        | Start Google OAuth flow              |
+| GET    | /callback                      | Public        | OAuth callback                       |
+| GET    | /logout                        | Member        | Clear session                        |
+| GET    | /api/terms                     | Member        | Fetch all terms + vote data          |
+| POST   | /api/terms                     | Member        | Add a single term (AI-powered)       |
+| POST   | /api/terms/bulk                | Member        | Bulk import from CSV                 |
+| PATCH  | /api/terms/<id>                | Member        | Edit a term field (with lock check)  |
+| POST   | /api/vote                      | Member        | Cast or update a vote                |
+| POST   | /api/terms/<id>/final          | Leader/Admin  | Set final translation (First/Second) |
+| POST   | /api/terms/<id>/final/reset    | Leader/Admin  | Clear finalization, revert to Pending|
+| POST   | /api/terms/<id>/translate      | Member        | AI-fill empty translation options    |
+| GET    | /api/terms/<id>/audit          | Member        | Fetch audit log entries for a term   |
+| POST   | /api/init                      | Admin         | Initialize/migrate sheet headers     |
+| GET    | /api/sources                   | Member        | List all sources                     |
+| POST   | /api/sources                   | Admin         | Add a source                         |
+| GET    | /api/members                   | Admin         | List all team members (full)         |
+| GET    | /api/members/directory         | Member        | Email→name lookup for all users      |
+| POST   | /api/members                   | Admin         | Add a member                         |
+| DELETE | /api/members                   | Admin         | Remove a member                      |
+| PATCH  | /api/members                   | Admin         | Update member role/name/short name   |
+
+---
+
+## Bulk CSV Import
+
+Upload a CSV via the Add Term modal → Bulk Import tab.
+
+**Supported columns:**
+
+| Column         | Aliases              | Required | Behaviour                                      |
+|----------------|----------------------|----------|------------------------------------------------|
+| `chinese`      | `Chinese`            | Yes      | The Chinese term                               |
+| `pinyin`       | `Pinyin`             | No       | If blank, AI-generated                         |
+| `pali`         | `Pali`               | No       | If blank, AI-generated                         |
+| `sanskrit`     | `Sanskrit`           | No       | If blank, AI-generated                         |
+| `context`      | `Context`            | No       | Passed to AI as translation context hint       |
+| `category`     | `Category`           | No       | Stored as-is                                   |
+| `notes`        | `Notes`              | No       | Passed to AI as translator notes hint          |
+| `source`       | `Source`             | No       | SourceID (e.g. `S001`); stored in Source col   |
+| `trans_known`  | `TranslationKnown`, `known` | No | Known translation; stored in TranslationKnown |
+| `added_by`     | `AddedBy`                   | No | Email to record as creator; defaults to the logged-in user if blank |
+
+AI Translate 1–3 are **always** generated by Claude during import and cannot be
+pre-supplied via CSV.
+
+---
+
+## Environment Configuration
+
+**Development (.env):**
+- FLASK_ENV=development → debug mode on
+- GOOGLE_REDIRECT_URI=http://127.0.0.1:5000/callback
+- Run with: python app.py
+
+**Production (.env.production → upload as .env on GreenGeeks):**
+- FLASK_ENV=production → debug mode off
+- GOOGLE_REDIRECT_URI=https://app.cyber-tech.com/callback
+- Served via CGI through index.cgi
+
+Shared: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SECRET_KEY, ANTHROPIC_API_KEY,
+SHEET_ID, SUPER_ADMIN_EMAIL
+
+---
+
+## First-Run Setup (new installation)
+
+1. Create a Google Sheet, share it with the service account
+2. Set SHEET_ID (and optionally SUPER_ADMIN_EMAIL) in .env
+3. Run app, log in as super admin, click "⚙ Init Sheets" — creates all five
+   worksheet headers (Terms, Votes, Members, Sources, Audit_Log) and seeds
+   super admin in Members sheet
+4. Open ⊕ Sources modal to add reference sources
+5. Open ☷ Team modal to add team members, set Name/ShortName, assign roles
+6. Add terms or bulk import via CSV
+
+## Schema Migration (existing installation)
+
+Run "⚙ Init Sheets" again — it is idempotent:
+- Adds missing columns to Terms (up to col 26) without touching existing data
+- Renames LastModifiedDate → LastModifiedTime if found
+- Adds Name/ShortName columns to Members if missing
+- Creates Sources worksheet if missing
+- Creates Audit_Log worksheet if missing
+- Backfills RomanizationPlain for existing rows where Pinyin is set but plain is blank
+- Rewrites old short Term IDs (T001) to 6-digit format (T000001) in Terms and Votes sheets
+
+## future to-do lists
+
+1. Add two user roles
+   -- Viewer: only can view data
+   -- Depositor: Only can create new record, cannot edit data.
+
+2. Migrate data from google sheet to MySQL database hosted by GreenGeek for better data access efficiency
+
