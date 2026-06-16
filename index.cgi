@@ -1,4 +1,4 @@
-#!/home/dorjecha/public_html/app.cyber-tech.com/venv/bin/python
+#!/home/dorjecha/public_html/app.cyber-tech.com/venv310/bin/python3.10
 import sys
 import os
 
