@@ -17,9 +17,5 @@ def can_create_term():
     return session.get("user_role") in ("depositor", "member", "leader", "admin")
 
 
-def can_vote():
-    return session.get("user_role") in ("member", "leader", "admin")
-
-
 def can_edit_existing():
     return session.get("user_role") in ("member", "leader", "admin")

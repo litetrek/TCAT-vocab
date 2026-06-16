@@ -5,9 +5,9 @@ from datetime import datetime
 
 from config import (
     BASE_DIR, SHEET_ID, SUPER_ADMIN_EMAIL,
-    COL, TERMS_HEADER, VOTES_HEADER, SOURCE_HEADER,
+    COL, TERMS_HEADER, SOURCE_HEADER,
     AUDIT_LOG_HEADER, MEMBERS_HEADER,
-    VALID_VOTES, strip_tone_marks,
+    strip_tone_marks,
 )
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -21,9 +21,6 @@ gs_client = gspread.authorize(creds)
 
 def get_terms_sheet():
     return gs_client.open_by_key(SHEET_ID).worksheet("Terms")
-
-def get_votes_sheet():
-    return gs_client.open_by_key(SHEET_ID).worksheet("Votes")
 
 def get_members_sheet():
     return gs_client.open_by_key(SHEET_ID).worksheet("Members")
@@ -65,34 +62,6 @@ def next_term_id(sheet):
     return f"T{(max(nums)+1):06d}" if nums else "T000001"
 
 
-def recalculate_auto_selections(term_id, votes_rows, terms_sheet):
-    """Recompute TranslationFirst/Second from votes; skips finalized terms."""
-    tallies = {k: 0 for k in VALID_VOTES}
-    for v in votes_rows:
-        t = v.get("ChosenTranslation", "")
-        if v.get("TermID") == term_id and t in tallies:
-            tallies[t] += 1
-
-    ranked = sorted(tallies.items(), key=lambda x: x[1], reverse=True)
-    first  = ranked[0][0] if ranked[0][1] > 1 else ""
-    second = ranked[1][0] if len(ranked) > 1 and ranked[1][1] > 1 else ""
-
-    rows = terms_sheet.get_all_values()
-    for i, row in enumerate(rows):
-        if i == 0:
-            continue
-        if row[0] == term_id:
-            status_val = row[COL["status"] - 1] if len(row) >= COL["status"] else ""
-            if status_val == "finalized":
-                ex_first  = row[COL["trans_first"]  - 1] if len(row) >= COL["trans_first"]  else ""
-                ex_second = row[COL["trans_second"] - 1] if len(row) >= COL["trans_second"] else ""
-                return ex_first, ex_second
-            terms_sheet.update_cell(i + 1, COL["trans_first"],  first)
-            terms_sheet.update_cell(i + 1, COL["trans_second"], second)
-            break
-    return first, second
-
-
 # ── Member helpers ────────────────────────────────────────────────────────
 
 def lookup_member(email):
@@ -110,28 +79,6 @@ def lookup_member(email):
 
 
 # ── Schema init / migration ───────────────────────────────────────────────
-
-def _migrate_term_ids(wb):
-    """Migrate short Term IDs (T001) to 6-digit format (T000001). Idempotent."""
-    ts = wb.worksheet("Terms")
-    vs = wb.worksheet("Votes")
-    all_rows = ts.get_all_values()
-    migrations = {}
-    for i, row in enumerate(all_rows[1:], start=2):
-        old_id = row[0] if row else ""
-        if old_id.startswith("T"):
-            suffix = old_id[1:]
-            if suffix.isdigit() and len(suffix) < 6:
-                new_id = f"T{int(suffix):06d}"
-                migrations[old_id] = new_id
-                ts.update_cell(i, 1, new_id)
-    if not migrations:
-        return
-    vote_rows = vs.get_all_values()
-    for i, row in enumerate(vote_rows[1:], start=2):
-        if row and row[0] in migrations:
-            vs.update_cell(i, 1, migrations[row[0]])
-
 
 def ensure_headers():
     """Create missing sheets and patch existing Terms sheet with any new columns."""
@@ -161,11 +108,6 @@ def ensure_headers():
                     rp_val = row[rp_idx] if rp_idx < len(row) else ""
                     if py_val and not rp_val:
                         ts.update_cell(i, rp_idx + 1, strip_tone_marks(py_val))
-        _migrate_term_ids(wb)
-
-    if "Votes" not in sheet_names:
-        vs = wb.add_worksheet(title="Votes", rows=2000, cols=5)
-        vs.append_row(VOTES_HEADER)
 
     if "Members" not in sheet_names:
         ms = wb.add_worksheet(title="Members", rows=200, cols=7)

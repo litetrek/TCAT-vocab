@@ -114,8 +114,6 @@
     .py-editable::placeholder { color: rgba(107,90,58,0.4); font-style: italic; }
     .cell-trans { max-width: 180px; font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
     .cell-trans.empty { color: var(--text-soft); font-style: italic; }
-    .vote-pill { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.82rem; color: var(--text-soft); }
-    .voted-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gold); display: inline-block; flex-shrink: 0; }
 
     /* ── EDIT VIEW ──────────────────────────────────────────────────────── */
     .edit-view { display: none; padding: 2rem; overflow-y: auto; }
@@ -149,18 +147,13 @@
     .tp-body  { display: flex; align-items: flex-start; gap: 0.4rem; }
     .tp-text  { flex: 1; font-size: 0.92rem; color: var(--text); line-height: 1.45; }
     .tp-text .placeholder { color: var(--text-soft); font-style: italic; }
-    .tp-votes { display: flex; align-items: center; gap: 0.3rem; flex-shrink: 0; padding-top: 0.1rem; }
-    .vote-count { font-size: 0.76rem; color: var(--text-soft); min-width: 14px; text-align: center; }
-    .vote-btn { background: none; border: 1px solid rgba(201,168,76,0.3); border-radius: 3px; padding: 0.18rem 0.45rem; font-size: 0.75rem; cursor: pointer; color: var(--text-soft); transition: all 0.2s; font-family: 'EB Garamond', serif; white-space: nowrap; }
-    .vote-btn:hover { background: rgba(201,168,76,0.1); border-color: var(--gold); color: var(--text); }
-    .vote-btn.voted { background: var(--gold); border-color: var(--gold); color: var(--ink); font-weight: 600; }
     .final-badge-1st { font-size: 0.63rem; background: var(--gold); color: var(--ink); padding: 0.12rem 0.35rem; border-radius: 2px; letter-spacing: 0.08em; font-weight: 700; }
     .final-badge-2nd { font-size: 0.63rem; background: rgba(201,168,76,0.22); color: #7a5c10; border: 1px solid rgba(201,168,76,0.55); padding: 0.11rem 0.34rem; border-radius: 2px; letter-spacing: 0.08em; font-weight: 600; }
     /* compact metadata line in edit header */
     .edit-meta-line { font-size: 0.8rem; color: var(--text-soft); margin-top: 0.35rem; font-style: italic; line-height: 1.6; }
     .edit-meta-line span.mv { color: var(--text); font-style: normal; font-weight: 600; }
 
-    .autopicks-bar { padding: 0.4rem 1rem; border-top: 1px solid rgba(201,168,76,0.12); background: rgba(201,168,76,0.05); font-size: 0.78rem; color: var(--text-soft); font-style: italic; }
+    .status-bar { padding: 0.4rem 1rem; border-top: 1px solid rgba(201,168,76,0.12); background: rgba(201,168,76,0.05); font-size: 0.78rem; color: var(--text-soft); font-style: italic; }
 
     .admin-row { margin-top: 1rem; padding: 0.6rem 1rem; background: rgba(139,32,32,0.04); border: 1px solid rgba(201,168,76,0.2); border-radius: 4px; display: flex; gap: 0.45rem; align-items: center; flex-wrap: wrap; }
     .admin-label { font-size: 0.73rem; color: var(--red); letter-spacing: 0.08em; text-transform: uppercase; margin-right: 0.25rem; }
@@ -350,7 +343,7 @@
       .trans-grid-3 { grid-template-columns: 1fr; }
       .trans-panel { border-right: none; border-bottom: 1px solid rgba(201,168,76,0.15); }
       .trans-panel:last-child { border-bottom: none; }
-      .autopicks-bar { flex-direction: column; gap: 0.5rem; align-items: flex-start; }
+      .status-bar { flex-direction: column; gap: 0.5rem; align-items: flex-start; }
       .edit-meta-section { grid-template-columns: 1fr; }
       .meta-field.full { grid-column: auto; }
       .admin-row { flex-wrap: wrap; }
@@ -368,7 +361,7 @@
       .btn-sm { min-height: 36px; }
       .filter-btn { min-height: 44px; }
       .sidebar-source-sel { min-height: 40px; }
-      .vote-btn { min-height: 36px; padding: 0.35rem 0.65rem; }
+
       .btn-page { min-height: 40px; }
       .btn-back { min-height: 40px; display: inline-flex; align-items: center; }
       select { min-height: 40px; }
@@ -419,8 +412,6 @@
       <div class="stats-grid">
         <div class="stat-box"><div class="stat-num" id="stat-total">—</div><div class="stat-label">Total</div></div>
         <div class="stat-box"><div class="stat-num" id="stat-final">—</div><div class="stat-label">Finalized</div></div>
-        <div class="stat-box"><div class="stat-num" id="stat-pending">—</div><div class="stat-label">Pending</div></div>
-        <div class="stat-box"><div class="stat-num" id="stat-voted">—</div><div class="stat-label">My Votes</div></div>
       </div>
     </div>
 
@@ -437,8 +428,6 @@
         <button class="filter-btn active" onclick="setFilter('all',this)">All Terms <span class="count" id="cnt-all">0</span></button>
         <button class="filter-btn" onclick="setFilter('pending',this)">Pending <span class="count" id="cnt-pending">0</span></button>
         <button class="filter-btn" onclick="setFilter('finalized',this)">Finalized <span class="count" id="cnt-finalized">0</span></button>
-        <button class="filter-btn" onclick="setFilter('unvoted',this)">Not Yet Voted <span class="count" id="cnt-unvoted">0</span></button>
-        <button class="filter-btn" onclick="setFilter('voted_pending',this)">Voted (not final) <span class="count" id="cnt-voted-pending">0</span></button>
       </div>
     </div>
 
@@ -559,7 +548,6 @@
   const userRole          = '{{ user_role }}';
   const superAdmin        = '{{ super_admin }}';
   const currentUserEmail  = '{{ user }}';
-  const canVote           = ['member','leader','admin'].includes(userRole);
   const canEdit           = ['member','leader','admin'].includes(userRole);
   const canCreate         = ['depositor','member','leader','admin'].includes(userRole);
   let allTerms          = [];
@@ -612,8 +600,7 @@
   let sortDir     = 'desc';
   let editingTermId = null;
 
-  const VALID_VOTES = ['Translation1','Translation2','Translation3','TranslationKnown','TranslationOther1','TranslationOther2'];
-  const PICK_LABELS = { Translation1:'AI Translate 1', Translation2:'AI Translate 2', Translation3:'AI Translate 3', TranslationKnown:'Known', TranslationOther1:'Suggested 1', TranslationOther2:'Suggested 2' };
+  const PICK_LABELS ={ Translation1:'AI Translate 1', Translation2:'AI Translate 2', Translation3:'AI Translate 3', TranslationKnown:'Known', TranslationOther1:'Suggested 1', TranslationOther2:'Suggested 2' };
   const FIELD_TO_TERM_KEY = { trans1:'Translation1', trans2:'Translation2', trans3:'Translation3', trans_known:'TranslationKnown', trans_other1:'TranslationOther1', trans_other2:'TranslationOther2' };
 
   // ── DATA ─────────────────────────────────────────────────────────────────
@@ -637,20 +624,11 @@
     const total     = base.length;
     const finalized = base.filter(t => t.status === 'finalized').length;
     const pending   = total - finalized;
-    const myVoted   = base.filter(t => t.my_vote).length;
-    const unvoted   = base.filter(t => !t.my_vote && t.status !== 'finalized').length;
-    const votedPending = base.filter(t =>
-      (t.my_vote || VALID_VOTES.reduce((s,k) => s + (t.votes[k]||0), 0) > 0) && t.status !== 'finalized'
-    ).length;
-    document.getElementById('stat-total').textContent        = total;
-    document.getElementById('stat-final').textContent        = finalized;
-    document.getElementById('stat-pending').textContent      = pending;
-    document.getElementById('stat-voted').textContent        = myVoted;
-    document.getElementById('cnt-all').textContent           = total;
-    document.getElementById('cnt-pending').textContent       = pending;
-    document.getElementById('cnt-finalized').textContent     = finalized;
-    document.getElementById('cnt-unvoted').textContent       = unvoted;
-    document.getElementById('cnt-voted-pending').textContent = votedPending;
+    document.getElementById('stat-total').textContent    = total;
+    document.getElementById('stat-final').textContent    = finalized;
+    document.getElementById('cnt-all').textContent       = total;
+    document.getElementById('cnt-pending').textContent   = pending;
+    document.getElementById('cnt-finalized').textContent = finalized;
   }
 
   // ── FILTER / SORT / SEARCH ───────────────────────────────────────────────
@@ -702,12 +680,8 @@
 
     if (currentSource) terms = terms.filter(t => t.source === currentSource);
 
-    if (currentFilter === 'pending')       terms = terms.filter(t => t.status !== 'finalized');
-    if (currentFilter === 'finalized')     terms = terms.filter(t => t.status === 'finalized');
-    if (currentFilter === 'unvoted')       terms = terms.filter(t => !t.my_vote && t.status !== 'finalized');
-    if (currentFilter === 'voted_pending') terms = terms.filter(t =>
-      (t.my_vote || VALID_VOTES.reduce((s,k) => s + (t.votes[k]||0), 0) > 0) && t.status !== 'finalized'
-    );
+    if (currentFilter === 'pending')   terms = terms.filter(t => t.status !== 'finalized');
+    if (currentFilter === 'finalized') terms = terms.filter(t => t.status === 'finalized');
 
     if (q) {
       const words = q.split(/\s+/).filter(Boolean);
@@ -811,7 +785,6 @@
             <th>Status</th>
             <th>Source</th>
             <th class="${thClass('timestamp')}" onclick="setSort('timestamp')">Added ${sortIcon('timestamp')}</th>
-            <th>Votes</th>
             <th></th>
           </tr></thead>
           <tbody>${terms.map(tableRow).join('')}</tbody>
@@ -821,11 +794,9 @@
 
   function vocabCard(t) {
     const firstText   = t.trans_first ? (getTermText(t, t.trans_first) || t.trans_first) : '';
-    const totalVotes  = VALID_VOTES.reduce((s,k) => s + (t.votes[k]||0), 0);
     const statusBadge = t.status === 'finalized'
       ? '<span class="tag tag-final">✓ Final</span>'
       : '<span class="tag tag-pending">Pending</span>';
-    const votedDot = t.my_vote ? '<span class="voted-dot" title="You voted"></span>' : '';
     const cardClass = t.status === 'finalized' ? 'vocab-card card-finalized' : 'vocab-card';
     return `
       <div class="${cardClass}" onclick="openEditView('${t.id}')">
@@ -838,7 +809,6 @@
         <div class="vc-foot">
           <span class="vc-id">${t.id}</span>
           <div class="vc-foot-right">
-            <span class="vote-pill">${votedDot}${totalVotes}</span>
             <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openEditView('${t.id}')">${canEdit ? 'Edit' : 'View'}</button>
           </div>
         </div>
@@ -846,7 +816,6 @@
   }
 
   function tableRow(t) {
-    const totalVotes = VALID_VOTES.reduce((s,k) => s + (t.votes[k]||0), 0);
     const firstText  = t.trans_first  ? (getTermText(t, t.trans_first)  || t.trans_first)  : '';
     const secondText = t.trans_second ? (getTermText(t, t.trans_second) || t.trans_second) : '';
     const src        = sourceName(t.source);
@@ -855,7 +824,6 @@
       ? '<span class="tag tag-final">✓ Final</span>'
       : '<span class="tag tag-pending">Pending</span>';
     const row = t.status === 'finalized' ? 'row-finalized' : '';
-    const votedDot = t.my_vote ? '<span class="voted-dot" title="You voted"></span>' : '';
     return `
       <tr class="${row}" onclick="openEditView('${t.id}')">
         <td><span class="cell-zh">${t.chinese}</span><span class="cell-id">${t.id}</span></td>
@@ -865,7 +833,6 @@
         <td>${statusBadge}</td>
         <td style="font-size:0.82rem;color:var(--text-soft);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${src}">${src||'—'}</td>
         <td style="font-size:0.78rem;color:var(--text-soft);white-space:nowrap;">${dateStr}</td>
-        <td class="cell-votes"><span class="vote-pill">${votedDot}${totalVotes}</span></td>
         <td><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openEditView('${t.id}')">${canEdit ? 'Edit' : 'View'}</button></td>
       </tr>`;
   }
@@ -959,7 +926,6 @@
   }
 
   function buildEditView(t) {
-    const totalVotes = VALID_VOTES.reduce((s,k) => s + (t.votes[k]||0), 0);
     const isLeaderOrAdmin = isAdmin || userRole === 'leader';
     const firstKey  = t.final || '';
     const secondKey = findKeyByText(t, t.trans_second) || '';
@@ -978,32 +944,26 @@
 
     function transPanel(field, label, displayLabel, extraClass) {
       const text        = t[field] || '';
-      const vc          = t.votes[label] || 0;
-      const isVoted     = t.my_vote === label;
       const isFirst     = firstKey  === label;
       const isSecond    = secondKey === label;
-      const isLocked    = vc > 0;
       const isFinalized = t.status === 'finalized';
       const safeOrig    = text.replace(/"/g,'&quot;');
       const bold        = isFirst || isSecond;
-      const textEl = (!canEdit || isLocked || isFinalized)
+      const textEl = (!canEdit || isFinalized)
         ? `<div class="tp-text"${bold ? ' style="font-weight:600;"' : ''}>${text || '<span class="placeholder">—</span>'}</div>`
         : `<textarea class="tp-textarea" data-term-id="${t.id}" data-field="${field}" data-orig="${safeOrig}" onblur="autoSaveField(this)" oninput="autoResizeTextarea(this)" placeholder="Enter translation…">${text}</textarea>`;
-      const voteEl = !isFinalized
-        ? (canVote
-            ? `<div class="tp-votes"><span class="vote-count">${vc}</span><button class="vote-btn${isVoted?' voted':''}" onclick="vote('${t.id}','${label}',this)"${isVoted?' title="Click to remove your vote"':''}>${isVoted?'✓':'Vote'}</button></div>`
-            : (vc ? `<div class="tp-votes"><span class="vote-count">${vc}</span></div>` : ''))
-        : (vc ? `<div class="tp-votes"><span class="vote-count">${vc}</span></div>` : '');
+      const finalEl = isLeaderOrAdmin && !isFinalized && text
+        ? `<button class="admin-pick-btn${isFirst?' selected':''}" onclick="setFinal('${t.id}','${label}','first',this)" title="Set as Final translation">Set Final</button>`
+        : '';
       return `
         <div class="${extraClass}${isFirst||isSecond?' is-final':''}">
           <div class="tp-label">
             ${displayLabel}
-            ${isLocked ? `<span class="lock-icon" title="${vc} vote(s) — locked">🔒</span>` : ''}
             ${rankBadge(label, t.trans_first, t.trans_second)}
             ${isFirst  ? '<span class="final-badge-1st">Final · 1st</span>' : ''}
             ${isSecond ? '<span class="final-badge-2nd">Final · 2nd</span>' : ''}
           </div>
-          <div class="tp-body">${textEl}${voteEl}</div>
+          <div class="tp-body">${textEl}${finalEl}</div>
         </div>`;
     }
 
@@ -1021,15 +981,11 @@
         ${transPanel('trans_other2', 'TranslationOther2', 'Suggested 2',       'trans-panel')}
       </div>`;
 
-    let apText;
+    let apText = '';
     if (t.status === 'finalized' && t.trans_first) {
       apText = `<span style="color:var(--gold);font-weight:600;">✓ Finalized</span> &nbsp;—&nbsp; 1st: <strong>${t.trans_first}</strong>${t.trans_second ? ` &nbsp;·&nbsp; 2nd: <strong>${t.trans_second}</strong>` : ''}`;
-    } else if (t.trans_first || t.trans_second) {
-      const p1 = t.trans_first  ? `<strong>${PICK_LABELS[t.trans_first]  || t.trans_first}</strong>`  : '';
-      const p2 = t.trans_second ? `<span>${PICK_LABELS[t.trans_second] || t.trans_second}</span>` : '';
-      apText = `Likely picks: ${p1}${p1 && p2 ? ' · ' : ''}${p2}`;
-    } else {
-      apText = `<span style="opacity:0.5;">No auto-picks yet — needs 2+ votes on the same option</span>`;
+    } else if (t.trans_second) {
+      apText = `2nd choice: <span>${PICK_LABELS[t.trans_second] || t.trans_second}</span>`;
     }
 
     const finalOpts = [['Translation1','AI Translate 1'],['Translation2','AI Translate 2'],['Translation3','AI Translate 3'],
@@ -1041,13 +997,6 @@
     const adminReset = isLeaderOrAdmin && (t.trans_first || t.trans_second) ? `
       <div style="display:flex;justify-content:flex-end;padding:0.35rem 0.75rem 0.5rem;">
         <button class="btn btn-secondary btn-sm" onclick="resetFinal('${t.id}')" style="color:var(--red-soft);border-color:rgba(139,32,32,0.25);" title="Clear finalization and revert to Pending">↺ Final Reset</button>
-      </div>` : '';
-    const adminFinalFirst = isLeaderOrAdmin ? `
-      <div class="admin-row">
-        <span class="admin-label">✦ Set Final (First):</span>
-        ${finalOpts.map(([lbl,txt]) =>
-          `<button class="admin-pick-btn${firstKey===lbl?' selected':''}" onclick="setFinal('${t.id}','${lbl}','first',this)">${txt}</button>`
-        ).join('')}
       </div>` : '';
     const adminFinalSecond = isLeaderOrAdmin ? `
       <div class="admin-row" id="final-second-row-${t.id}"${hasFirst ? '' : ' style="display:none"'}>
@@ -1092,7 +1041,7 @@
       <div class="trans-box">
         ${topRow}
         ${bottomRow}
-        <div class="autopicks-bar" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
+        <div class="status-bar" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
           <span>${apText}</span>${aiTranslateBtn}
         </div>
       </div>
@@ -1120,55 +1069,11 @@
           </div>` : ''}
         </div>
       </div>
-      ${adminFinalFirst}${adminFinalSecond}${adminReset}
+      ${adminFinalSecond}${adminReset}
       <div class="audit-section">
         <div class="audit-section-title">Editing History</div>
         <div id="audit-log-${t.id}"><div style="font-size:0.82rem;color:var(--text-soft);font-style:italic;padding:0.35rem 0;">☸ Loading history…</div></div>
       </div>`;
-  }
-
-  // ── VOTE ─────────────────────────────────────────────────────────────────
-  async function vote(termId, chosen, btn) {
-    const term = allTerms.find(t => t.id === termId);
-    if (term && term.my_vote === chosen) {
-      await unvote(termId, chosen, btn);
-      return;
-    }
-    try {
-      const res  = await fetch('/api/vote', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({term_id:termId, chosen}) });
-      const data = await res.json();
-      if (data.error) { showToast('⚠ ' + data.error); return; }
-      if (term) {
-        if (term.my_vote && term.my_vote !== chosen)
-          term.votes[term.my_vote] = Math.max(0, (term.votes[term.my_vote]||1) - 1);
-        if (!term.my_vote || term.my_vote !== chosen)
-          term.votes[chosen] = (term.votes[chosen]||0) + 1;
-        term.my_vote      = chosen;
-        term.trans_first  = data.trans_first  || '';
-        term.trans_second = data.trans_second || '';
-        updateStats();
-        if (editingTermId === termId) refreshEditView();
-      }
-      showToast(data.status === 'updated' ? '↻ Vote updated!' : '✓ Vote recorded!');
-    } catch(e) { showToast('⚠ Error recording vote'); }
-  }
-
-  async function unvote(termId, chosen, btn) {
-    try {
-      const res  = await fetch('/api/unvote', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({term_id:termId, chosen}) });
-      const data = await res.json();
-      if (data.error) { showToast('⚠ ' + data.error); return; }
-      const term = allTerms.find(t => t.id === termId);
-      if (term) {
-        term.votes[chosen] = Math.max(0, (term.votes[chosen]||1) - 1);
-        term.my_vote       = '';
-        term.trans_first   = data.trans_first  || '';
-        term.trans_second  = data.trans_second || '';
-        updateStats();
-        if (editingTermId === termId) refreshEditView();
-      }
-      showToast('✗ Vote removed');
-    } catch(e) { showToast('⚠ Error removing vote'); }
   }
 
   // ── SET FINAL ────────────────────────────────────────────────────────────

@@ -8,8 +8,8 @@ Snapshot document. Overwritten at each stage boundary to reflect current state.
 
 **T-CAT** is a collaborative web app for a small team translating Chinese Buddhist texts
 into English. Translators add terms, Claude AI generates Pinyin / Pali / Sanskrit plus
-three English translation options, team members vote on the best option, and a leader or
-admin finalises the result.
+three English translation options, and a Leader or Admin directly finalises the best option
+with a single click.
 
 - **Live URL:** https://app.cyber-tech.com
 - **GitHub repo:** https://github.com/litetrek/TCAT-vocab (private)
@@ -42,7 +42,7 @@ buddhist-vocab/
 ├── auth.py                     # Session helpers: is_logged_in, is_admin, is_leader
 ├── routes/
 │   ├── __init__.py
-│   ├── terms.py                # /api/terms/* + /api/vote endpoints
+│   ├── terms.py                # /api/terms/* endpoints
 │   ├── members.py              # /api/members/* endpoints
 │   └── sources.py              # /api/sources + /api/init endpoints
 ├── index.cgi                   # CGI entry point (shebang: venv310/bin/python3.10)
@@ -81,7 +81,7 @@ One Google Sheet with five worksheets:
 | Sheet | Key Columns |
 |-------|------------|
 | **Terms** | ID, Chinese, Pinyin, Pali, Sanskrit, Context, Category, Notes, Translation1–3, Final, Status, AddedBy, Timestamp, TranslationKnown, Source, TranslationFirst/Second, TranslationOther1/2, LastModifiedBy/Time, RomanizationPlain, SourceContentChinese/English |
-| **Votes** | TermID, VoterEmail, ChosenTranslation |
+| **Votes** | TermID, VoterEmail, ChosenTranslation *(deprecated — worksheet preserved but unused since Stage 3)* |
 | **Members** | Email, Role, AddedBy, AddedAt, Name, ShortName |
 | **Sources** | SourceID, SourceName, SourceType, Notes |
 | **Audit_Log** | AuditID, Timestamp, TermID, TermChinese, UserEmail, UserName, ActionType, FieldChanged, OldValue, NewValue, Details |
@@ -97,7 +97,7 @@ One Google Sheet with five worksheets:
 |------|-------------|
 | **Viewer** | Read-only |
 | **Depositor** | Add terms |
-| **Member** | Add terms, vote, edit unlocked fields |
+| **Member** | Add terms, edit fields, add terms |
 | **Leader** | Member + set Final (First/Second) + reset finalization |
 | **Admin** | Leader + manage members/sources + Init Sheets |
 
@@ -183,6 +183,18 @@ See `.env.example` for the full list with placeholder values.
 - Fixed `index.cgi` shebang pointing to wrong `venv/` path — corrected to `venv310/python3.10`
 - Fixed health check to follow redirects (`curl -L`) since root URL redirects to `/login`
 - **Pipeline confirmed working end-to-end** — green deploy on commit `804e56e`
+
+### Stage 3 — Voting Removal (2026-06-16)
+- Removed all voting functionality: `/api/vote` and `/api/unvote` endpoints deleted
+- Removed vote-tallying from `GET /api/terms` (no longer fetches Votes worksheet at all)
+- Removed vote-lock guard from `PATCH /api/terms/<id>` (all fields now freely editable)
+- Removed `can_vote()` from auth.py; removed `VALID_VOTES`, `FIELD_TO_VOTE_KEY`, `VOTES_HEADER` from config.py
+- Removed `get_votes_sheet()`, `recalculate_auto_selections()`, `_migrate_term_ids()` from sheets.py
+- Removed Votes worksheet auto-creation from `ensure_headers()` (existing sheet preserved with historical data)
+- Finalization is now a direct one-click action: Leader/Admin sees a "Set Final" button on each of the six translation candidates in the edit view
+- Overview panel reduced to 2 stats: Total and Finalized
+- Filter list reduced to: All Terms, Pending, Finalized
+- Audit Log: no new `voted`/`vote_updated` rows written; historical rows remain and still render correctly
 
 ---
 

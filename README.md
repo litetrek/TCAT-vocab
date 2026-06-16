@@ -2,7 +2,7 @@
 
 A collaborative web app for a team translating Chinese Buddhist texts into English.
 Translators add terms; Claude AI generates Pinyin, Pali, Sanskrit, and three English
-translation options; team members vote; a leader or admin finalises the winning choices.
+translation options; a Leader or Admin directly finalises the best choice with one click.
 
 ---
 
@@ -29,7 +29,7 @@ buddhist-vocab/
 ├── ai.py               # Claude AI generation functions
 ├── auth.py             # is_logged_in, is_admin, is_leader
 ├── routes/
-│   ├── terms.py        # /api/terms/* + /api/vote
+│   ├── terms.py        # /api/terms/*
 │   ├── members.py      # /api/members/*
 │   └── sources.py      # /api/sources + /api/init
 ├── index.cgi           # CGI entry point for GreenGeeks production
@@ -115,7 +115,7 @@ Five worksheets inside one Google Sheet:
 `TranslationOther1 | TranslationOther2 | LastModifiedBy | LastModifiedTime |`
 `RomanizationPlain | SourceContentChinese | SourceContentEnglish`
 
-**Votes** (3 columns): `TermID | VoterEmail | ChosenTranslation`
+**Votes** (3 columns): `TermID | VoterEmail | ChosenTranslation` *(worksheet preserved with historical data; no longer written by the app)*
 
 **Members** (6 columns): `Email | Role | AddedBy | AddedAt | Name | ShortName`
 
@@ -154,7 +154,7 @@ automatically strips the BOM (`utf-8-sig`).
 
 | Role | Capabilities |
 |------|-------------|
-| **Member** | View terms, vote, edit unlocked fields, add terms |
+| **Member** | View terms, edit fields, add terms |
 | **Leader** | All member capabilities + set Final (First/Second) + reset finalization |
 | **Admin** | All leader capabilities + manage team members and sources + Init Sheets |
 

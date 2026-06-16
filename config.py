@@ -33,7 +33,6 @@ TERMS_HEADER = [
     "SourceContentChinese", "SourceContentEnglish",
 ]
 
-VOTES_HEADER   = ["TermID", "VoterEmail", "ChosenTranslation"]
 SOURCE_HEADER  = ["SourceID", "SourceName", "SourceType", "Notes"]
 MEMBERS_HEADER = ["Email", "Role", "AddedBy", "AddedAt", "Name", "ShortName"]
 
@@ -43,8 +42,6 @@ AUDIT_LOG_HEADER = [
     "FieldChanged", "OldValue", "NewValue", "Details",
 ]
 
-VALID_VOTES  = ("Translation1", "Translation2", "Translation3",
-                "TranslationKnown", "TranslationOther1", "TranslationOther2")
 SOURCE_TYPES = ["Scripture", "Commentary", "Dictionary", "Encyclopedia", "Other"]
 VALID_ROLES  = ("viewer", "depositor", "member", "leader", "admin")
 
@@ -73,16 +70,6 @@ VOTE_LABELS = {
     "TranslationKnown":  "Known",
     "TranslationOther1": "Suggested 1",
     "TranslationOther2": "Suggested 2",
-}
-
-# Maps PATCH field name → vote key used in the Votes sheet
-FIELD_TO_VOTE_KEY = {
-    "trans1":      "Translation1",
-    "trans2":      "Translation2",
-    "trans3":      "Translation3",
-    "trans_known": "TranslationKnown",
-    "trans_other1":"TranslationOther1",
-    "trans_other2":"TranslationOther2",
 }
 
 # Maps vote key → COL key (used in api_set_final)
