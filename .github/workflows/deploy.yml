@@ -21,6 +21,7 @@ jobs:
           protocol: ftps
           port: ${{ secrets.FTP_PORT || 21 }}
           server-dir: ${{ secrets.FTP_REMOTE_DIR }}
+          log-level: verbose
           exclude: |
             **/.git*
             **/.git*/**
