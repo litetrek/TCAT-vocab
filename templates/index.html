@@ -357,11 +357,13 @@
     .btn-ext-switch:hover { color: var(--ink); }
     .term-known { background: rgba(201,168,76,0.18); border-bottom: 1.5px solid rgba(201,168,76,0.65); border-radius: 1px; cursor: default; }
     .term-known:hover { background: rgba(201,168,76,0.32); }
-    .ext-candidate-panel { background: white; border: 1px solid var(--border); border-radius: 4px; padding: 1.25rem 1.5rem; box-shadow: var(--shadow); margin-top: 1.5rem; }
-    .ext-candidate-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.9rem; }
-    .ext-candidate-zh { font-family: 'Noto Serif TC', serif; font-size: 1.5rem; font-weight: 600; color: var(--ink); line-height: 1.2; }
-    .ext-candidate-clear { font-family: 'EB Garamond', serif; font-size: 0.82rem; background: transparent; border: 1px solid rgba(26,18,8,0.2); border-radius: 3px; color: var(--text-soft); padding: 0.2rem 0.65rem; cursor: pointer; transition: all 0.15s; }
-    .ext-candidate-clear:hover { border-color: rgba(26,18,8,0.5); color: var(--ink); }
+    .ext-candidate-panel { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(26,18,8,0.45); z-index: 500; display: flex; align-items: center; justify-content: center; }
+    .ext-term-modal { background: white; border: 1px solid var(--border); border-radius: 4px; padding: 1.5rem 1.75rem; box-shadow: 0 8px 32px rgba(26,18,8,0.22); min-width: 300px; max-width: 520px; width: 90vw; max-height: 80vh; overflow-y: auto; }
+    .ext-candidate-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.9rem; gap: 1rem; }
+    .ext-candidate-zh { font-family: 'Noto Serif TC', serif; font-size: 1.5rem; font-weight: 600; color: var(--ink); line-height: 1.2; flex: 1; }
+    .ext-candidate-clear { font-family: 'EB Garamond', serif; font-size: 1rem; line-height: 1; background: transparent; border: none; color: var(--text-soft); padding: 0.2rem 0.4rem; cursor: pointer; transition: color 0.15s; flex-shrink: 0; }
+    .ext-candidate-clear:hover { color: var(--ink); }
+    .ext-candidate-hint { font-family: 'EB Garamond', serif; font-size: 0.92rem; color: var(--text-soft); font-style: italic; margin: 0 0 0.9rem; line-height: 1.5; }
     .ext-candidate-badge { font-family: 'Cormorant Garamond', serif; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; padding: 0.22rem 0.6rem; border-radius: 2px; display: inline-block; margin-bottom: 0.9rem; }
     .ext-candidate-known { background: rgba(201,168,76,0.15); color: var(--ink-soft); border: 1px solid rgba(201,168,76,0.45); }
     .ext-candidate-new { background: rgba(26,18,8,0.05); color: var(--text-soft); border: 1px solid rgba(26,18,8,0.18); }
@@ -625,7 +627,7 @@
         </div>
       </div>
 
-      <div id="ext-candidate-panel" style="display:none;"></div>
+      <div id="ext-candidate-panel" style="display:none;" onclick="extClearSelection()"></div>
 
     </div><!-- #ext-working -->
   </div>
@@ -779,7 +781,9 @@
   let extSourceTitle   = '';
   let extDocumentId    = null;
   let extDocumentsCache = {};
-  let extKnownTerms    = [];
+  let extKnownTerms             = [];
+  let extCurrentCandidateIsNew  = false;
+  let extCapturedEnglish        = '';
 
   const PICK_LABELS ={ Translation1:'AI Translate 1', Translation2:'AI Translate 2', Translation3:'AI Translate 3', TranslationKnown:'Known', TranslationOther1:'Suggested 1', TranslationOther2:'Suggested 2' };
   const FIELD_TO_TERM_KEY = { trans1:'Translation1', trans2:'Translation2', trans3:'Translation3', trans_known:'TranslationKnown', trans_other1:'TranslationOther1', trans_other2:'TranslationOther2' };
@@ -1966,14 +1970,18 @@
   }
 
   function extShowCandidatePanel(selectedText) {
+    extCapturedEnglish = '';
     const match = extKnownTerms.find(t => t.chinese === selectedText);
-    let html = `<div class="ext-candidate-header">`;
-    html += `<span class="ext-candidate-zh">${escHtml(selectedText)}</span>`;
-    html += `<button class="ext-candidate-clear" onclick="extClearSelection()">✕ Clear</button>`;
-    html += `</div>`;
+    extCurrentCandidateIsNew = !match;
+
+    let inner = `<div class="ext-term-modal" onclick="event.stopPropagation()">`;
+    inner += `<div class="ext-candidate-header">`;
+    inner += `<span class="ext-candidate-zh">${escHtml(selectedText)}</span>`;
+    inner += `<button class="ext-candidate-clear" onclick="extClearSelection()" title="Close">✕</button>`;
+    inner += `</div>`;
 
     if (match) {
-      html += `<div class="ext-candidate-badge ext-candidate-known">Already in database</div>`;
+      inner += `<div class="ext-candidate-badge ext-candidate-known">Already in database</div>`;
       const fields = [
         ['Known Translation', match.trans_known],
         ['Translation 1',     match.trans1],
@@ -1984,21 +1992,27 @@
         ['Sanskrit',          match.sanskrit],
       ].filter(([, v]) => v);
       if (fields.length) {
-        html += `<div class="ext-candidate-fields">`;
+        inner += `<div class="ext-candidate-fields">`;
         for (const [label, value] of fields) {
-          html += `<span class="ext-cfield-label">${escHtml(label)}</span><span class="ext-cfield-value">${escHtml(value)}</span>`;
+          inner += `<span class="ext-cfield-label">${escHtml(label)}</span><span class="ext-cfield-value">${escHtml(value)}</span>`;
         }
-        html += `</div>`;
+        inner += `</div>`;
       }
     } else {
-      html += `<div class="ext-candidate-badge ext-candidate-new">New term — not yet in database</div>`;
+      inner += `<div class="ext-candidate-badge ext-candidate-new">New term — not yet in database</div>`;
+      inner += `<p class="ext-candidate-hint">Select the matching English text in the paragraph to capture it as the Known Translation.</p>`;
+      inner += `<div id="ext-captured-en-area"></div>`;
     }
 
+    inner += `</div>`;
+
     const panel = document.getElementById('ext-candidate-panel');
-    if (panel) { panel.innerHTML = html; panel.style.display = ''; }
+    if (panel) { panel.innerHTML = inner; panel.style.display = 'flex'; }
   }
 
   function extHideCandidatePanel() {
+    extCurrentCandidateIsNew = false;
+    extCapturedEnglish       = '';
     const panel = document.getElementById('ext-candidate-panel');
     if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
   }
@@ -2006,6 +2020,26 @@
   function extClearSelection() {
     if (window.getSelection) window.getSelection().removeAllRanges();
     extHideCandidatePanel();
+  }
+
+  function extHandleEnglishSelection() {
+    if (!extCurrentCandidateIsNew) return;
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) return;
+    const text = sel.toString().trim();
+    if (!text) return;
+    const enContainer = document.getElementById('ext-text-en');
+    if (!enContainer) return;
+    const range = sel.getRangeAt(0);
+    if (!enContainer.contains(range.commonAncestorContainer)) return;
+    extCapturedEnglish = text;
+    const area = document.getElementById('ext-captured-en-area');
+    if (!area) return;
+    area.innerHTML =
+      `<div class="ext-candidate-fields">` +
+      `<span class="ext-cfield-label">Known Translation (selected)</span>` +
+      `<span class="ext-cfield-value" style="font-family:'EB Garamond',serif;">${escHtml(text)}</span>` +
+      `</div>`;
   }
 
   // ── INIT ─────────────────────────────────────────────────────────────────
@@ -2017,6 +2051,8 @@
 
   loadTerms();
   document.getElementById('ext-text-zh').addEventListener('mouseup', extHandleSelection);
+  document.getElementById('ext-text-en').addEventListener('mouseup', extHandleEnglishSelection);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') extClearSelection(); });
 </script>
 </body>
 </html>
