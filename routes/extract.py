@@ -1,13 +1,14 @@
 import re
 from datetime import datetime
 from flask import Blueprint, jsonify, request, session
-from auth import is_logged_in
-from ai import find_known_translation
+from auth import is_logged_in, can_create_term, can_edit_existing
+from ai import find_known_translation, generate_term_data
+from config import COL, FIELD_LABELS, strip_tone_marks
 from sheets import (
     get_terms_sheet,
     get_extraction_documents_sheet,
     get_extraction_paragraphs_sheet,
-    next_doc_id,
+    next_doc_id, next_term_id, write_audit,
 )
 
 extract_bp = Blueprint('extract', __name__)
@@ -67,6 +68,107 @@ def api_extract_lookup():
     try:
         result = find_known_translation(chinese_term, chinese_paragraph, english_paragraph)
         return jsonify({"suggested_translation": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@extract_bp.route("/api/extract/generate", methods=["POST"])
+def api_extract_generate():
+    if not is_logged_in():
+        return jsonify({"error": "Unauthorized"}), 401
+    data         = request.get_json(silent=True) or {}
+    chinese_term = (data.get("chinese_term")           or "").strip()
+    src_zh       = (data.get("source_content_chinese") or "").strip()
+    src_en       = (data.get("source_content_english") or "").strip()
+    trans_known  = (data.get("known_translation")      or "").strip()
+    if not chinese_term:
+        return jsonify({"error": "chinese_term is required"}), 400
+    try:
+        pinyin, pali, sanskrit, t1, t2, t3 = generate_term_data(
+            chinese_term, "", "", src_zh, src_en, trans_known
+        )
+        return jsonify({"pinyin": pinyin, "pali": pali, "sanskrit": sanskrit,
+                        "trans1": t1, "trans2": t2, "trans3": t3})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@extract_bp.route("/api/extract/save", methods=["POST"])
+def api_extract_save():
+    if not is_logged_in():
+        return jsonify({"error": "Unauthorized"}), 401
+    data              = request.get_json(silent=True) or {}
+    chinese_term      = (data.get("chinese_term")           or "").strip()
+    known_translation = (data.get("known_translation")      or "").strip()
+    translation1      = (data.get("translation1")           or "").strip()
+    translation2      = (data.get("translation2")           or "").strip()
+    translation3      = (data.get("translation3")           or "").strip()
+    pinyin            = (data.get("pinyin")                 or "").strip()
+    pali              = (data.get("pali")                   or "").strip()
+    sanskrit          = (data.get("sanskrit")               or "").strip()
+    source_name       = (data.get("source_name")            or "").strip()
+    src_zh            = (data.get("source_content_chinese") or "").strip()
+    src_en            = (data.get("source_content_english") or "").strip()
+    if not chinese_term:
+        return jsonify({"error": "chinese_term is required"}), 400
+    try:
+        ts       = get_terms_sheet()
+        all_rows = ts.get_all_values()
+        # Server-side existence check — find by Chinese column (col 2, index 1)
+        existing_row_num     = None
+        existing_term_id     = ""
+        existing_trans_known = ""
+        existing_chinese     = ""
+        for i, row in enumerate(all_rows):
+            if i == 0:
+                continue
+            if len(row) >= 2 and row[1].strip() == chinese_term:
+                existing_row_num     = i + 1   # 1-based for gspread
+                existing_term_id     = row[0]
+                existing_chinese     = row[COL["chinese"] - 1]
+                existing_trans_known = row[COL["trans_known"] - 1] if len(row) >= COL["trans_known"] else ""
+                break
+
+        now_str    = datetime.now().strftime("%Y-%m-%d %H:%M")
+        user_email = session["user_email"]
+        user_name  = session.get("user_name", "")
+
+        if existing_row_num is None:
+            # ── INSERT path ──
+            if not can_create_term():
+                return jsonify({"error": "You need Depositor access or higher to add new terms"}), 403
+            term_id = next_term_id(ts)
+            ts.append_row([
+                term_id, chinese_term,
+                pinyin, pali, sanskrit,
+                "", "",                  # Context, Category
+                "",                      # Notes
+                translation1, translation2, translation3,
+                "", "pending",           # Final, Status
+                user_email, now_str,     # AddedBy, Timestamp
+                known_translation,       # TranslationKnown
+                source_name,             # Source
+                "", "", "", "",          # TranslationFirst/Second, Other1/2
+                user_email, now_str,     # LastModifiedBy, LastModifiedTime
+                strip_tone_marks(pinyin),
+                src_zh,
+                src_en,
+            ])
+            write_audit(term_id, chinese_term, user_email, user_name,
+                        "created", details=f"Term created via Extraction (Pinyin={pinyin})")
+            return jsonify({"path": "insert", "id": term_id})
+        else:
+            # ── UPDATE path — only TranslationKnown + LastModified ──
+            if not can_edit_existing():
+                return jsonify({"error": "You need Member access or higher to update an existing term"}), 403
+            ts.update_cell(existing_row_num, COL["trans_known"],        known_translation)
+            ts.update_cell(existing_row_num, COL["last_modified_by"],   user_email)
+            ts.update_cell(existing_row_num, COL["last_modified_time"], now_str)
+            write_audit(existing_term_id, existing_chinese, user_email, user_name,
+                        "updated",
+                        field_changed=FIELD_LABELS.get("trans_known", "trans_known"),
+                        old_value=existing_trans_known, new_value=known_translation)
+            return jsonify({"path": "update", "id": existing_term_id})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

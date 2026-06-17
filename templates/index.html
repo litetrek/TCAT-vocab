@@ -378,6 +378,8 @@
     .btn-ext-find:hover:not([disabled]) { background: rgba(201,168,76,0.12); border-color: var(--gold); color: var(--ink); }
     .btn-ext-find[disabled] { opacity: 0.5; cursor: default; }
     .ext-find-msg { font-family: 'EB Garamond', serif; font-size: 0.88rem; font-style: italic; color: var(--text-soft); }
+    .ext-save-row { display: flex; align-items: center; gap: 0.75rem; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border); flex-wrap: wrap; }
+    .ext-save-msg { font-family: 'EB Garamond', serif; font-size: 0.9rem; }
 
     /* ── RESPONSIVE @ 768px ─────────────────────────────────────────────── */
     @media (max-width: 768px) {
@@ -794,6 +796,7 @@
   let extCurrentCandidateIsNew  = false;
   let extCapturedEnglish        = '';
   let extCurrentChineseTerm     = '';
+  let extGeneratedFields        = null;
 
   const PICK_LABELS ={ Translation1:'AI Translate 1', Translation2:'AI Translate 2', Translation3:'AI Translate 3', TranslationKnown:'Known', TranslationOther1:'Suggested 1', TranslationOther2:'Suggested 2' };
   const FIELD_TO_TERM_KEY = { trans1:'Translation1', trans2:'Translation2', trans3:'Translation3', trans_known:'TranslationKnown', trans_other1:'TranslationOther1', trans_other2:'TranslationOther2' };
@@ -1994,6 +1997,7 @@
 
   function extShowCandidatePanel(selectedText) {
     extCurrentChineseTerm    = selectedText;
+    extGeneratedFields       = null;
     const match = extKnownTerms.find(t => t.chinese === selectedText);
     extCurrentCandidateIsNew = !match;
     extCapturedEnglish = match ? (match.trans_known || '') : '';
@@ -2025,7 +2029,17 @@
     } else {
       inner += `<div class="ext-candidate-badge ext-candidate-new">New term — not yet in database</div>`;
       inner += extEnPassageHtml('Select text in the English passage below to capture it as the Known Translation.', '');
+      inner += `<div class="ext-find-row" style="margin-top:0.65rem;">`;
+      inner += `<button class="btn-ext-find" id="ext-gen-btn" onclick="extGenerateTranslations()">✨ Generate 3 AI Translations</button>`;
+      inner += `<span class="ext-find-msg" id="ext-gen-msg"></span>`;
+      inner += `</div>`;
+      inner += `<div id="ext-gen-fields"></div>`;
     }
+
+    inner += `<div class="ext-save-row">`;
+    inner += `<button class="btn btn-primary" id="ext-save-btn" onclick="extSaveTerm()">${extCurrentCandidateIsNew ? 'Add to Database' : 'Save Update'}</button>`;
+    inner += `<span class="ext-save-msg" id="ext-save-msg"></span>`;
+    inner += `</div>`;
 
     inner += `</div>`;
 
@@ -2060,6 +2074,110 @@
     extCapturedEnglish = text;
     const msg = document.getElementById('ext-find-msg');
     if (msg) msg.textContent = '';
+  }
+
+  async function extGenerateTranslations() {
+    const btn = document.getElementById('ext-gen-btn');
+    const msg = document.getElementById('ext-gen-msg');
+    if (!btn) return;
+    btn.disabled = true; btn.textContent = 'Generating…';
+    if (msg) msg.textContent = '';
+    const knownInput = document.getElementById('ext-known-input');
+    const zhText = extParagraphs.length ? extParagraphs[extCurrentIndex].chinese : '';
+    const enText = extParagraphs.length ? extParagraphs[extCurrentIndex].english : '';
+    try {
+      const res = await fetch('/api/extract/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chinese_term:           extCurrentChineseTerm,
+          source_content_chinese: zhText,
+          source_content_english: enText,
+          known_translation:      knownInput ? knownInput.value.trim() : '',
+        }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        if (msg) msg.textContent = 'Generation failed — try again.';
+      } else {
+        extGeneratedFields = {
+          trans1: data.trans1 || '', trans2: data.trans2 || '', trans3: data.trans3 || '',
+          pinyin: data.pinyin || '', pali:   data.pali   || '', sanskrit: data.sanskrit || '',
+        };
+        const genArea = document.getElementById('ext-gen-fields');
+        if (genArea) {
+          const rows = [
+            ['Translation 1', data.trans1], ['Translation 2', data.trans2],
+            ['Translation 3', data.trans3], ['Pinyin', data.pinyin],
+            ['Pali', data.pali], ['Sanskrit', data.sanskrit],
+          ].filter(([, v]) => v);
+          if (rows.length) {
+            let html = `<div class="ext-candidate-fields" style="margin-top:0.85rem;">`;
+            for (const [label, value] of rows)
+              html += `<span class="ext-cfield-label">${escHtml(label)}</span><span class="ext-cfield-value">${escHtml(value)}</span>`;
+            html += `</div>`;
+            genArea.innerHTML = html;
+          }
+        }
+      }
+    } catch(e) {
+      if (msg) msg.textContent = 'Generation failed — try again.';
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '✨ Generate 3 AI Translations'; }
+    }
+  }
+
+  async function extSaveTerm() {
+    const btn = document.getElementById('ext-save-btn');
+    const msg = document.getElementById('ext-save-msg');
+    if (!btn) return;
+    btn.disabled = true; btn.textContent = 'Saving…';
+    if (msg) { msg.textContent = ''; msg.style.color = ''; }
+    const knownInput = document.getElementById('ext-known-input');
+    const knownTrans = knownInput ? knownInput.value.trim() : '';
+    const gen        = extGeneratedFields || {};
+    const sourceDoc  = extDocumentsCache[extDocumentId] || {};
+    const zhText     = extParagraphs.length ? extParagraphs[extCurrentIndex].chinese : '';
+    const enText     = extParagraphs.length ? extParagraphs[extCurrentIndex].english : '';
+    try {
+      const res = await fetch('/api/extract/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chinese_term:           extCurrentChineseTerm,
+          known_translation:      knownTrans,
+          translation1:           gen.trans1   || '',
+          translation2:           gen.trans2   || '',
+          translation3:           gen.trans3   || '',
+          pinyin:                 gen.pinyin   || '',
+          pali:                   gen.pali     || '',
+          sanskrit:               gen.sanskrit || '',
+          source_name:            sourceDoc.SourceName || '',
+          source_content_chinese: zhText,
+          source_content_english: enText,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        if (msg) { msg.textContent = data.error; msg.style.color = 'var(--red-soft)'; }
+        if (btn) { btn.disabled = false; btn.textContent = extCurrentCandidateIsNew ? 'Add to Database' : 'Save Update'; }
+      } else {
+        if (msg) { msg.textContent = data.path === 'insert' ? '✓ Added to database' : '✓ Updated'; msg.style.color = 'var(--text-soft)'; }
+        setTimeout(async () => {
+          extClearSelection();
+          try {
+            const r = await fetch('/api/extract/known-terms');
+            if (r.ok) {
+              extKnownTerms = await r.json();
+              if (extParagraphs.length) extRenderParagraph();
+            }
+          } catch(e) {}
+        }, 900);
+      }
+    } catch(e) {
+      if (msg) { msg.textContent = 'Network error — please try again.'; msg.style.color = 'var(--red-soft)'; }
+      if (btn) { btn.disabled = false; btn.textContent = extCurrentCandidateIsNew ? 'Add to Database' : 'Save Update'; }
+    }
   }
 
   function extOnKnownInput(el) {
