@@ -98,3 +98,37 @@ Term: {chinese}
             key, _, val = line.partition(":")
             parsed[key.strip()] = val.strip()
     return [parsed.get(f"TRANSLATION{i+1}", "") for i in range(count)]
+
+
+def find_known_translation(chinese_term, chinese_paragraph, english_paragraph):
+    """Return the verbatim English phrase in english_paragraph that translates chinese_term.
+    Validates the result is an actual substring; returns "" if not found or not verifiable."""
+    ai = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    response = ai.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=200,
+        messages=[{
+            "role": "user",
+            "content": f"""You are an expert in Buddhist studies and Chinese Buddhist terminology.
+A translator is reviewing a Chinese Buddhist text and needs to locate how a specific term is rendered in the existing English translation.
+
+Chinese term: {chinese_term}
+Chinese paragraph (context for how the term is used): {chinese_paragraph}
+English paragraph (the translation of the above): {english_paragraph}
+
+Find the English phrase in the English paragraph that translates the Chinese term "{chinese_term}".
+The phrase MUST be copied verbatim from the English paragraph — do not paraphrase, summarise, or invent.
+If you cannot identify a confident verbatim match, reply with NOT_FOUND.
+
+Reply in this exact format with no other text:
+TRANSLATION: [verbatim phrase copied from the English paragraph, or NOT_FOUND]"""
+        }]
+    )
+    for line in response.content[0].text.strip().splitlines():
+        if line.startswith("TRANSLATION:"):
+            _, _, val = line.partition(":")
+            val = val.strip()
+            if val and val != "NOT_FOUND" and val in english_paragraph:
+                return val
+            return ""
+    return ""

@@ -373,6 +373,11 @@
     .ext-candidate-en-block { font-family: 'EB Garamond', serif; font-size: 1rem; line-height: 1.7; color: var(--text); background: rgba(245,240,232,0.7); border: 1px solid var(--border); border-radius: 3px; padding: 0.75rem 1rem; margin-bottom: 1rem; max-height: 130px; overflow-y: auto; user-select: text; cursor: text; white-space: pre-wrap; word-break: break-word; }
     .ext-known-input { font-family: 'EB Garamond', serif; font-size: 1rem; width: 100%; color: var(--text); background: white; border: 1px solid rgba(26,18,8,0.2); border-radius: 3px; padding: 0.5rem 0.75rem; resize: vertical; min-height: 2.4rem; display: block; margin-top: 0.3rem; transition: border-color 0.2s; }
     .ext-known-input:focus { outline: none; border-color: var(--gold); }
+    .ext-find-row { display: flex; align-items: center; gap: 0.65rem; margin-top: 0.5rem; flex-wrap: wrap; }
+    .btn-ext-find { font-family: 'EB Garamond', serif; font-size: 0.88rem; background: transparent; border: 1px solid rgba(201,168,76,0.5); border-radius: 3px; color: var(--ink-soft); padding: 0.25rem 0.75rem; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+    .btn-ext-find:hover:not([disabled]) { background: rgba(201,168,76,0.12); border-color: var(--gold); color: var(--ink); }
+    .btn-ext-find[disabled] { opacity: 0.5; cursor: default; }
+    .ext-find-msg { font-family: 'EB Garamond', serif; font-size: 0.88rem; font-style: italic; color: var(--text-soft); }
 
     /* ── RESPONSIVE @ 768px ─────────────────────────────────────────────── */
     @media (max-width: 768px) {
@@ -788,6 +793,7 @@
   let extKnownTerms             = [];
   let extCurrentCandidateIsNew  = false;
   let extCapturedEnglish        = '';
+  let extCurrentChineseTerm     = '';
 
   const PICK_LABELS ={ Translation1:'AI Translate 1', Translation2:'AI Translate 2', Translation3:'AI Translate 3', TranslationKnown:'Known', TranslationOther1:'Suggested 1', TranslationOther2:'Suggested 2' };
   const FIELD_TO_TERM_KEY = { trans1:'Translation1', trans2:'Translation2', trans3:'Translation3', trans_known:'TranslationKnown', trans_other1:'TranslationOther1', trans_other2:'TranslationOther2' };
@@ -1978,11 +1984,16 @@
     let html = `<p class="ext-candidate-hint">${escHtml(instruction)}</p>`;
     html += `<div class="ext-candidate-en-block" id="ext-modal-en-text">${escHtml(enText)}</div>`;
     html += `<label class="ext-cfield-label" for="ext-known-input" style="display:block;margin-bottom:0.3rem;">Known Translation</label>`;
-    html += `<textarea class="ext-known-input" id="ext-known-input" rows="2" placeholder="Select text above, or type here…" oninput="extCapturedEnglish=this.value">${escHtml(prefill)}</textarea>`;
+    html += `<textarea class="ext-known-input" id="ext-known-input" rows="2" placeholder="Select text above, or type here…" oninput="extOnKnownInput(this)">${escHtml(prefill)}</textarea>`;
+    html += `<div class="ext-find-row">`;
+    html += `<button class="btn-ext-find" id="ext-find-btn" onclick="extFindTranslation()">🔍 Find Translation</button>`;
+    html += `<span class="ext-find-msg" id="ext-find-msg"></span>`;
+    html += `</div>`;
     return html;
   }
 
   function extShowCandidatePanel(selectedText) {
+    extCurrentChineseTerm    = selectedText;
     const match = extKnownTerms.find(t => t.chinese === selectedText);
     extCurrentCandidateIsNew = !match;
     extCapturedEnglish = match ? (match.trans_known || '') : '';
@@ -2047,6 +2058,49 @@
     if (!input) return;
     input.value = text;
     extCapturedEnglish = text;
+    const msg = document.getElementById('ext-find-msg');
+    if (msg) msg.textContent = '';
+  }
+
+  function extOnKnownInput(el) {
+    extCapturedEnglish = el.value;
+    const msg = document.getElementById('ext-find-msg');
+    if (msg) msg.textContent = '';
+  }
+
+  async function extFindTranslation() {
+    const btn = document.getElementById('ext-find-btn');
+    const msg = document.getElementById('ext-find-msg');
+    if (!btn) return;
+    btn.disabled = true;
+    btn.textContent = 'Finding…';
+    if (msg) msg.textContent = '';
+    const zhText = extParagraphs.length ? extParagraphs[extCurrentIndex].chinese : '';
+    const enText = extParagraphs.length ? extParagraphs[extCurrentIndex].english : '';
+    try {
+      const res = await fetch('/api/extract/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chinese_term:      extCurrentChineseTerm,
+          chinese_paragraph: zhText,
+          english_paragraph: enText,
+        }),
+      });
+      const data = await res.json();
+      if (data.suggested_translation) {
+        const input = document.getElementById('ext-known-input');
+        if (input) { input.value = data.suggested_translation; extCapturedEnglish = data.suggested_translation; }
+      } else if (!data.error) {
+        if (msg) msg.textContent = 'No clear match found — try selecting it manually.';
+      } else {
+        if (msg) msg.textContent = 'Error — please try again.';
+      }
+    } catch(e) {
+      if (msg) msg.textContent = 'Error — please try again.';
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '🔍 Find Translation'; }
+    }
   }
 
   // ── INIT ─────────────────────────────────────────────────────────────────

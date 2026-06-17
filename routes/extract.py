@@ -2,6 +2,7 @@ import re
 from datetime import datetime
 from flask import Blueprint, jsonify, request, session
 from auth import is_logged_in
+from ai import find_known_translation
 from sheets import (
     get_terms_sheet,
     get_extraction_documents_sheet,
@@ -49,6 +50,23 @@ def api_extract_known_terms():
                 "trans3":      r.get("Translation3",     ""),
             })
         return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@extract_bp.route("/api/extract/lookup", methods=["POST"])
+def api_extract_lookup():
+    if not is_logged_in():
+        return jsonify({"error": "Unauthorized"}), 401
+    data              = request.get_json(silent=True) or {}
+    chinese_term      = (data.get("chinese_term")      or "").strip()
+    chinese_paragraph = (data.get("chinese_paragraph") or "").strip()
+    english_paragraph = (data.get("english_paragraph") or "").strip()
+    if not chinese_term or not english_paragraph:
+        return jsonify({"error": "chinese_term and english_paragraph are required"}), 400
+    try:
+        result = find_known_translation(chinese_term, chinese_paragraph, english_paragraph)
+        return jsonify({"suggested_translation": result})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
