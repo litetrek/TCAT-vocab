@@ -286,7 +286,7 @@ See `.env.example` for the full list with placeholder values.
   - On success: shows result message, then after 900 ms hides modal, re-fetches known terms, re-renders paragraph (new term immediately appears highlighted)
   - Error displayed inline in modal (never alerts)
 
-### Extraction Bugfix — Document List Empty on Initial Load (2026-06-16)
+### Extraction Bugfix — Document List Empty on Initial Load (2026-06-17)
 - **Root cause**: `extLoadDocumentList()` was only called from `switchTopTab('extraction')` (tab-click handler) and `extSwitchDocument()`. Since Extraction is the default active tab, the click handler never fires on first page load.
 - **Fix**: Added `extLoadDocumentList()` to the page init block (alongside `loadTerms()`).
 - No other startup gap found: `extPopulateSources()` is already called by `loadTerms()` internally; `extFetchKnownTerms()` is correctly triggered only when a document is opened.
