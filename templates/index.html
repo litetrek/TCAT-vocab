@@ -2229,6 +2229,7 @@
   });
 
   loadTerms();
+  extLoadDocumentList();
   document.getElementById('ext-text-zh').addEventListener('mouseup', extHandleSelection);
   document.addEventListener('mouseup', extHandleModalEnglishSelection);
   document.addEventListener('keydown', e => { if (e.key === 'Escape') extClearSelection(); });

@@ -45,7 +45,7 @@ buddhist-vocab/
 │   ├── terms.py                # /api/terms/* endpoints
 │   ├── members.py              # /api/members/* endpoints
 │   ├── sources.py              # /api/sources + /api/init endpoints
-│   └── extract.py              # /api/extract/documents — upload + persistence for Extraction tab
+│   └── extract.py              # /api/extract/* endpoints — Extraction module
 ├── index.cgi                   # CGI entry point (shebang: venv310/bin/python3.10)
 ├── templates/
 │   ├── index.html              # Main app UI — two top-level tabs: Extraction and Vocabulary
@@ -211,32 +211,6 @@ See `.env.example` for the full list with placeholder values.
   - Requires login; no role restriction beyond that
 - New Extraction tab UI: source/book selector, file inputs, two side-by-side read-only panels, top+bottom navigator bars with Prev/Next/jump
 
-### Extraction Stage 3 — Term Highlighting + Selection Candidate Panel (2026-06-16)
-- **New endpoint** `GET /api/extract/known-terms` in `routes/extract.py`:
-  - Reuses `get_terms_sheet()` from `sheets.py` (same function as the Vocabulary tab's `GET /api/terms`)
-  - Returns a lightweight array: ID, Chinese, Pinyin, Pali, Sanskrit, TranslationKnown, Translation1–3
-  - Requires login; no additional role restriction; no writes
-- **Picker/Working split** committed previously (see git log) — moved upload form into Picker view, paragraph navigator into Working view; toggle between them via `extShowWorking` / `extSwitchDocument`
-- **Frontend — known-terms cache**:
-  - Added `extKnownTerms` state variable
-  - `extShowWorking()` now calls `extFetchKnownTerms()` each time the Working view is entered (after Upload or Resume); known terms are re-fetched per document entry, never per paragraph
-  - After fetch completes, re-renders the current paragraph so highlights appear even if fetch was slow
-- **Frontend — paragraph highlighting**:
-  - `extRenderParagraph()` now uses `innerHTML` + `extHighlightKnownTerms()` for the Chinese panel (English panel still uses `textContent`)
-  - `extHighlightKnownTerms()`: greedy longest-match-first, left-to-right scan; sorts candidate terms by `Chinese` length descending, marks claimed character positions in a `Uint8Array` to prevent overlapping spans, wraps each match in `<span class="term-known" data-term-id="…" title="…">` with a hover tooltip (TranslationKnown, falling back to Translation1)
-  - `.term-known` styled with a soft gold background tint + gold underline, slightly stronger on hover
-- **Frontend — selection candidate panel**:
-  - `mouseup` listener on `#ext-text-zh` calls `extHandleSelection()`:
-    - Reads `window.getSelection()`, confirms selection is within the Chinese container (ignores clicks on the English panel or elsewhere)
-    - Empty/collapsed selection hides the panel
-  - `extShowCandidatePanel()` renders a card below the paragraph viewer:
-    - Always shows the selected Chinese text prominently
-    - Exact match (`selectedText === term.Chinese`): shows "Already in database" badge + read-only field grid (Known Translation, Translation 1–3, Pinyin, Pali, Sanskrit — only non-empty fields shown)
-    - No exact match: shows "New term — not yet in database" badge
-    - Selecting new text while panel is open updates the panel in-place
-  - "✕ Clear" button calls `extClearSelection()` — removes browser selection and hides the panel
-  - Navigating to a new paragraph auto-hides the candidate panel
-
 ### Extraction Stage 2 — Google Sheets Persistence + Resume (2026-06-16)
 - **Replaced** `POST /api/extract/upload` with `POST /api/extract/documents`:
   - Accepts `title` (chapter/part label), `source_name` (book title), plus the two text files
@@ -259,6 +233,64 @@ See `.env.example` for the full list with placeholder values.
   - Every navigation event (Prev/Next/jump-to, both nav bars) fires a fire-and-forget PATCH to save progress
   - Document list auto-refreshes after upload or resume
 
+### Extraction Stage 2b — Picker / Working Split (2026-06-16)
+- Extraction tab restructured into two sub-views: **Picker** (upload + document list) and **Working** (paragraph navigator)
+- Picker view shown on tab load; Working view shown after Upload or Resume
+- `extShowWorking(sourceName, title)` transitions to Working view and fetches known terms
+- `extShowPicker()` / `extSwitchDocument()` allow returning to the list or switching documents
+
+### Extraction Stage 3 — Term Highlighting + Selection Candidate Modal (2026-06-16)
+- **New endpoint** `GET /api/extract/known-terms`:
+  - Reuses `get_terms_sheet()`; returns lightweight array: ID, Chinese, Pinyin, Pali, Sanskrit, TranslationKnown, Translation1–3
+- **Frontend — paragraph highlighting**:
+  - `extHighlightKnownTerms()`: greedy longest-match-first, `Uint8Array` claimed-character tracking, wraps matches in `<span class="term-known">` with hover tooltip
+  - `.term-known` styled gold background tint + underline
+- **Frontend — candidate modal** (`#ext-candidate-panel`):
+  - `position: fixed` overlay anchored to `<body>` (direct child, not nested in `#ext-working`)
+  - CSS selector is `#ext-candidate-panel` (ID, not class — class selector was a prior bug that broke fixed positioning)
+  - `mouseup` on `#ext-text-zh` → `extHandleSelection()` → `extShowCandidatePanel()`
+  - Exact match branch: "Already in database" badge + read-only field grid
+  - New term branch: "New term — not yet in database" badge
+  - Both branches include in-modal English passage block + editable Known Translation textarea
+  - Text selected inside the modal English passage auto-fills the Known Translation input (selection always wins — no "only once" guard)
+  - `extEnPassageHtml()` shared helper renders English passage + textarea + Find button for both branches
+  - Escape key or ✕ button hides modal and clears browser selection
+
+### Extraction Stage 4 — AI Find Translation (2026-06-16)
+- **New `ai.py` function** `find_known_translation(chinese_term, chinese_paragraph, english_paragraph)`:
+  - Prompts Claude to find a **verbatim substring** of the English paragraph that translates the Chinese term
+  - Validates: result must be non-empty, not `NOT_FOUND`, and actually present in `english_paragraph` — returns `""` otherwise
+  - Model: `claude-haiku-4-5-20251001`, `max_tokens=200`
+- **New endpoint** `POST /api/extract/lookup`:
+  - Accepts `chinese_term`, `chinese_paragraph`, `english_paragraph`
+  - Returns `{ "suggested_translation": "..." }` (empty string if not found)
+- **Frontend "Find Translation" button** (`extFindTranslation()`):
+  - POSTs to `/api/extract/lookup` with current paragraph text
+  - On match: fills Known Translation textarea; on no match: shows inline "No clear match" message
+  - Button shown in both "new term" and "already in database" modal branches
+
+### Extraction Stage 5 — Generate Translations + Save (2026-06-16)
+- **New endpoint** `POST /api/extract/generate`:
+  - Reuses existing `generate_term_data()` from `ai.py`
+  - Returns `{ pinyin, pali, sanskrit, trans1, trans2, trans3 }`
+- **New endpoint** `POST /api/extract/save`:
+  - Server-side existence check (scans Terms sheet fresh each call — not trusting client state)
+  - **Insert path** (term not in sheet): requires `can_create_term()` (depositor+); appends full 26-column row matching `api_add_term` in `terms.py` exactly; `Status="pending"`, `Final=""`
+  - **Update path** (term exists): requires `can_edit_existing()` (member+); updates only `TranslationKnown`, `LastModifiedBy`, `LastModifiedTime`
+  - Both paths write to Audit_Log via `write_audit()`
+- **Frontend "Generate 3 AI Translations"** (`extGenerateTranslations()`):
+  - POSTs to `/api/extract/generate`; populates `extGeneratedFields` state
+  - Renders read-only Pinyin, Pali, Sanskrit, Translation 1–3 fields in `#ext-gen-fields`
+- **Frontend "Save" button** (`extSaveTerm()`):
+  - Requires generated fields to be present before enabling save
+  - On success: shows result message, then after 900 ms hides modal, re-fetches known terms, re-renders paragraph (new term immediately appears highlighted)
+  - Error displayed inline in modal (never alerts)
+
+### Extraction Bugfix — Document List Empty on Initial Load (2026-06-16)
+- **Root cause**: `extLoadDocumentList()` was only called from `switchTopTab('extraction')` (tab-click handler) and `extSwitchDocument()`. Since Extraction is the default active tab, the click handler never fires on first page load.
+- **Fix**: Added `extLoadDocumentList()` to the page init block (alongside `loadTerms()`).
+- No other startup gap found: `extPopulateSources()` is already called by `loadTerms()` internally; `extFetchKnownTerms()` is correctly triggered only when a document is opened.
+
 ---
 
 ## Known Issues / Notes
@@ -276,5 +308,3 @@ See `.env.example` for the full list with placeholder values.
 - Update actions to Node.js 24 before Sep 2026 deprecation deadline
 - Confirm whether `venv/` on server can be removed (old virtual environment)
 - Consider adding SSH access to GreenGeeks for future pipeline improvements
-- **Extraction Stage 4**: AI-assisted translation suggestions for selected/new terms
-- **Extraction Stage 5**: Save extracted terms to the Terms sheet from the Working view
