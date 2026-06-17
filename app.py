@@ -9,6 +9,7 @@ from auth import is_logged_in, is_admin
 from routes.terms   import terms_bp
 from routes.members import members_bp
 from routes.sources import sources_bp
+from routes.extract import extract_bp
 
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, 'templates'))
 CORS(app)
@@ -31,6 +32,7 @@ google = oauth.register(
 app.register_blueprint(terms_bp)
 app.register_blueprint(members_bp)
 app.register_blueprint(sources_bp)
+app.register_blueprint(extract_bp)
 
 
 # ── Page routes ───────────────────────────────────────────────────────────

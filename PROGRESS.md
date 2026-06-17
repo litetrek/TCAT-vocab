@@ -44,10 +44,11 @@ buddhist-vocab/
 │   ├── __init__.py
 │   ├── terms.py                # /api/terms/* endpoints
 │   ├── members.py              # /api/members/* endpoints
-│   └── sources.py              # /api/sources + /api/init endpoints
+│   ├── sources.py              # /api/sources + /api/init endpoints
+│   └── extract.py              # /api/extract/upload — paragraph upload for Extraction tab
 ├── index.cgi                   # CGI entry point (shebang: venv310/bin/python3.10)
 ├── templates/
-│   ├── index.html              # Main app UI (single-page, vanilla JS)
+│   ├── index.html              # Main app UI — two top-level tabs: Extraction and Vocabulary
 │   ├── login.html              # Google OAuth login page
 │   └── denied.html             # Access denied (user not in Members sheet)
 ├── requirements.txt
@@ -196,6 +197,25 @@ See `.env.example` for the full list with placeholder values.
 - Filter list reduced to: All Terms, Pending, Finalized
 - Audit Log: no new `voted`/`vote_updated` rows written; historical rows remain and still render correctly
 
+### Extraction Stage 1 — Paragraph Viewer (2026-06-16)
+- Added a top-level two-tab bar: **Extraction** (default/active) and **Vocabulary**
+- All existing Vocabulary UI (sidebar, list view, edit view, modals) unchanged — wrapped in `#vocab-view` container that shows when the Vocabulary tab is active
+- New `routes/extract.py` blueprint registered in `app.py`:
+  - `POST /api/extract/upload` — accepts `chinese_file` + `english_file` (.txt only, ≤500 KB each)
+  - Decodes bytes: UTF-8 → GB18030 → Big5; clear JSON error if all fail
+  - Splits text on blank-line boundaries (one or more consecutive blank lines); trims and drops empty blocks
+  - Returns 400 with both paragraph counts if Chinese/English counts don't match
+  - Returns `{ "paragraphs": [{index, chinese, english}, …], "count": N }` on success
+  - Requires login; no role restriction beyond that
+- New Extraction tab UI in `templates/index.html`:
+  - Source/book row: select from existing sources (GET /api/sources) or toggle to a free-text title input (JS state only, not persisted)
+  - Two file inputs (.txt) + "Load Paragraphs" button
+  - On error: themed error banner (red, on-paper, no browser alert)
+  - On success: two side-by-side read-only panels — Chinese (Noto Serif TC) / English (EB Garamond), showing current paragraph
+  - Navigator bar: Prev / "Paragraph N of M" label / Next / numeric jump-to input + Go
+  - Prev disabled on first paragraph, Next disabled on last
+- Matches dark ink/gold/paper visual theme; reuses existing CSS variables, button classes, and font stack
+
 ---
 
 ## Known Issues / Notes
@@ -208,8 +228,9 @@ See `.env.example` for the full list with placeholder values.
 
 ---
 
-## Next Steps (not yet started)
+## Next Steps
 
 - Update actions to Node.js 24 before Sep 2026 deprecation deadline
 - Confirm whether `venv/` on server can be removed (old virtual environment)
 - Consider adding SSH access to GreenGeeks for future pipeline improvements
+- **Extraction Stage 2**: Wire source title into Sources sheet (create or link); enable Chinese text selection for term extraction; pass selected text + paragraph context to AI

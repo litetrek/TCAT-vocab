@@ -38,13 +38,13 @@
     .btn-logout:hover { color: var(--gold); border-color: var(--gold); }
 
     /* ── LAYOUT ─────────────────────────────────────────────────────────── */
-    .app-layout { display: grid; grid-template-columns: 260px 1fr; min-height: calc(100vh - 64px); }
+    .app-layout { display: grid; grid-template-columns: 260px 1fr; min-height: calc(100vh - 108px); }
 
     /* ── SIDEBAR ────────────────────────────────────────────────────────── */
     .sidebar {
       background: var(--paper-dark); border-right: 1px solid rgba(26,18,8,0.12);
       padding: 1.5rem; display: flex; flex-direction: column; gap: 1.5rem;
-      position: sticky; top: 64px; height: calc(100vh - 64px); overflow-y: auto;
+      position: sticky; top: 108px; height: calc(100vh - 108px); overflow-y: auto;
     }
     .sidebar-section-title { font-family: 'Cormorant Garamond', serif; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.15em; color: var(--ink-soft); margin-bottom: 0.75rem; }
     .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
@@ -303,6 +303,44 @@
     .vc-id { font-size: 0.65rem; color: rgba(107,90,58,0.45); }
     .vc-foot-right { display: flex; align-items: center; gap: 0.5rem; }
 
+    /* ── TOP TAB BAR ────────────────────────────────────────────────────── */
+    .top-tab-bar {
+      background: var(--paper-dark); border-bottom: 1px solid rgba(26,18,8,0.12);
+      display: flex; align-items: stretch;
+      position: sticky; top: 64px; z-index: 90; padding: 0 2rem;
+    }
+    .top-tab-btn {
+      font-family: 'Cormorant Garamond', serif; font-size: 1.05rem; letter-spacing: 0.04em;
+      padding: 0.55rem 1.5rem; border: none; background: none; cursor: pointer;
+      color: var(--text-soft); border-bottom: 3px solid transparent;
+      transition: color 0.2s, border-color 0.2s; line-height: 1;
+    }
+    .top-tab-btn:hover { color: var(--ink); }
+    .top-tab-btn.active { color: var(--ink); border-bottom-color: var(--gold); font-weight: 600; }
+
+    /* ── EXTRACTION TAB ─────────────────────────────────────────────────── */
+    #extraction-view { min-height: calc(100vh - 108px); background: var(--paper); }
+    .ext-container { max-width: 1100px; margin: 0 auto; padding: 2rem; }
+    .ext-source-row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+    .ext-select { font-family: 'EB Garamond', serif; font-size: 0.95rem; padding: 0.4rem 0.65rem; border: 1px solid rgba(26,18,8,0.2); border-radius: 3px; background: rgba(255,255,255,0.8); color: var(--text); cursor: pointer; min-width: 200px; }
+    .ext-select:focus { outline: none; border-color: var(--gold); }
+    .ext-title-input { font-family: 'EB Garamond', serif; font-size: 0.95rem; padding: 0.4rem 0.65rem; border: 1px solid rgba(26,18,8,0.2); border-radius: 3px; background: rgba(255,255,255,0.8); color: var(--text); min-width: 280px; }
+    .ext-title-input:focus { outline: none; border-color: var(--gold); }
+    .ext-file-row { display: flex; align-items: flex-end; gap: 1.25rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    .ext-file-field { display: flex; flex-direction: column; gap: 0.35rem; }
+    .ext-error-banner { background: rgba(139,32,32,0.06); border: 1px solid rgba(139,32,32,0.3); border-radius: 3px; padding: 0.65rem 1rem; color: var(--red-soft); font-size: 0.92rem; margin-bottom: 1.25rem; line-height: 1.5; }
+    .ext-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 0; }
+    .ext-panel { background: white; border: 1px solid var(--border); border-radius: 4px; padding: 1.5rem 1.75rem; box-shadow: var(--shadow); min-height: 180px; }
+    .ext-panel-label { font-family: 'Cormorant Garamond', serif; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.15em; color: var(--text-soft); margin-bottom: 0.85rem; border-bottom: 1px solid var(--border); padding-bottom: 0.45rem; }
+    .ext-panel-text { line-height: 1.9; color: var(--ink); white-space: pre-wrap; word-break: break-word; }
+    .ext-panel-text-zh { font-family: 'Noto Serif TC', serif; font-size: 1.15rem; }
+    .ext-panel-text-en { font-family: 'EB Garamond', serif; font-size: 1.2rem; }
+    .ext-nav-bar { display: flex; align-items: center; gap: 0.75rem; padding: 0.85rem 0; flex-wrap: wrap; border-top: 1px solid var(--border); margin-top: 1.25rem; }
+    .ext-nav-label { font-family: 'Cormorant Garamond', serif; font-size: 1rem; font-style: italic; color: var(--text-soft); flex: 1; text-align: center; white-space: nowrap; }
+    .ext-jump-wrap { display: flex; align-items: center; gap: 0.4rem; }
+    .ext-jump-input { font-family: 'EB Garamond', serif; font-size: 0.95rem; padding: 0.28rem 0.5rem; border: 1px solid rgba(26,18,8,0.2); border-radius: 3px; background: rgba(255,255,255,0.8); color: var(--text); width: 70px; text-align: center; }
+    .ext-jump-input:focus { outline: none; border-color: var(--gold); }
+
     /* ── RESPONSIVE @ 768px ─────────────────────────────────────────────── */
     @media (max-width: 768px) {
       /* Header */
@@ -373,6 +411,17 @@
 
       /* Team modal table: controlled horizontal scroll */
       .members-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+      /* Tab bar */
+      .top-tab-bar { top: 52px; padding: 0 1rem; }
+      /* Extraction tab */
+      #extraction-view { min-height: calc(100vh - 96px); }
+      .ext-container { padding: 1rem; }
+      .ext-panels { grid-template-columns: 1fr; }
+      .ext-source-row { flex-direction: column; align-items: stretch; }
+      .ext-select, .ext-title-input { min-width: auto; width: 100%; }
+      .ext-file-row { flex-direction: column; align-items: stretch; }
+      .ext-file-row .btn { width: 100%; }
     }
   </style>
 </head>
@@ -401,8 +450,14 @@
 <!-- ── MOBILE OVERLAY ─────────────────────────────────────────────────────── -->
 <div class="mobile-overlay" id="mobile-overlay" onclick="closeMobileMenu()"></div>
 
-<!-- ── LAYOUT ─────────────────────────────────────────────────────────────── -->
-<div class="app-layout">
+<!-- ── TOP TAB BAR ────────────────────────────────────────────────────────── -->
+<div class="top-tab-bar" id="top-tab-bar">
+  <button class="top-tab-btn active" data-tab="extraction" onclick="switchTopTab('extraction')">Extraction</button>
+  <button class="top-tab-btn" data-tab="vocabulary" onclick="switchTopTab('vocabulary')">Vocabulary</button>
+</div>
+
+<!-- ── LAYOUT (Vocabulary tab) ──────────────────────────────────────────────── -->
+<div class="app-layout" id="vocab-view" style="display:none;">
 
   <!-- SIDEBAR -->
   <aside class="sidebar" id="sidebar">
@@ -457,6 +512,60 @@
   <div class="main edit-view" id="edit-view"></div>
 
 </div><!-- app-layout -->
+
+<!-- ── EXTRACTION VIEW ────────────────────────────────────────────────────── -->
+<div id="extraction-view">
+  <div class="ext-container">
+    <div class="main-toolbar" style="margin-bottom:1.5rem;">
+      <h1 class="main-title">Text <span>Extraction</span></h1>
+    </div>
+
+    <div class="ext-source-row">
+      <label for="ext-source-select">Source / Book</label>
+      <select class="ext-select" id="ext-source-select" onchange="extOnSourceChange()">
+        <option value="">— Select source —</option>
+      </select>
+      <button class="btn btn-secondary btn-sm" id="ext-title-toggle" data-mode="select" onclick="extToggleTitle()">Or type a title</button>
+      <input class="ext-title-input" id="ext-title-input" type="text" placeholder="Type a book or section title…" style="display:none;" oninput="extSourceTitle=this.value.trim()">
+    </div>
+
+    <div class="ext-file-row">
+      <div class="ext-file-field">
+        <label for="ext-file-zh">Chinese text file</label>
+        <input type="file" id="ext-file-zh" accept=".txt">
+      </div>
+      <div class="ext-file-field">
+        <label for="ext-file-en">English text file</label>
+        <input type="file" id="ext-file-en" accept=".txt">
+      </div>
+      <button class="btn btn-primary" id="ext-load-btn" onclick="extLoadParagraphs()">Load Paragraphs</button>
+    </div>
+
+    <div id="ext-error" class="ext-error-banner" style="display:none;"></div>
+
+    <div id="ext-viewer" style="display:none;">
+      <div class="ext-panels">
+        <div class="ext-panel">
+          <div class="ext-panel-label">Chinese</div>
+          <div class="ext-panel-text ext-panel-text-zh" id="ext-text-zh"></div>
+        </div>
+        <div class="ext-panel">
+          <div class="ext-panel-label">English</div>
+          <div class="ext-panel-text ext-panel-text-en" id="ext-text-en"></div>
+        </div>
+      </div>
+      <div class="ext-nav-bar">
+        <button class="btn btn-secondary btn-sm" id="ext-prev" onclick="extNavigate(-1)">‹ Prev</button>
+        <span class="ext-nav-label" id="ext-nav-label">Paragraph 1 of 1</span>
+        <button class="btn btn-secondary btn-sm" id="ext-next" onclick="extNavigate(1)">Next ›</button>
+        <div class="ext-jump-wrap">
+          <input class="ext-jump-input" type="number" id="ext-jump-input" min="1" placeholder="§" title="Jump to paragraph">
+          <button class="btn btn-secondary btn-sm" onclick="extJump()">Go</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ── ADD TERM MODAL ─────────────────────────────────────────────────────── -->
 <div class="modal-overlay" id="modal" onclick="closeModalOutside(event)">
@@ -600,6 +709,11 @@
   let sortDir     = 'desc';
   let editingTermId = null;
 
+  // ── EXTRACTION STATE ─────────────────────────────────────────────────────
+  let extParagraphs    = [];
+  let extCurrentIndex  = 0;
+  let extSourceTitle   = '';
+
   const PICK_LABELS ={ Translation1:'AI Translate 1', Translation2:'AI Translate 2', Translation3:'AI Translate 3', TranslationKnown:'Known', TranslationOther1:'Suggested 1', TranslationOther2:'Suggested 2' };
   const FIELD_TO_TERM_KEY = { trans1:'Translation1', trans2:'Translation2', trans3:'Translation3', trans_known:'TranslationKnown', trans_other1:'TranslationOther1', trans_other2:'TranslationOther2' };
 
@@ -612,6 +726,7 @@
       allSources   = sr.ok ? await sr.json() : [];
       allDirectory = dr.ok ? await dr.json() : [];
       populateSidebarSource();
+      extPopulateSources();
       updateStats();
       applyView();
     } catch(e) {
@@ -1469,6 +1584,131 @@
     const t = document.getElementById('toast');
     t.textContent = msg; t.classList.add('show');
     setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  // ── TOP TAB SWITCHING ────────────────────────────────────────────────────
+  function switchTopTab(name) {
+    document.querySelectorAll('.top-tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector(`.top-tab-btn[data-tab="${name}"]`).classList.add('active');
+    const vocab      = document.getElementById('vocab-view');
+    const extraction = document.getElementById('extraction-view');
+    if (name === 'vocabulary') {
+      vocab.style.display      = '';
+      extraction.style.display = 'none';
+    } else {
+      vocab.style.display      = 'none';
+      extraction.style.display = '';
+      if (!allSources.length) {
+        fetch('/api/sources').then(r => r.ok ? r.json() : []).then(data => {
+          allSources = data;
+          extPopulateSources();
+        }).catch(() => {});
+      } else {
+        extPopulateSources();
+      }
+    }
+  }
+
+  // ── EXTRACTION FUNCTIONS ─────────────────────────────────────────────────
+  function extPopulateSources() {
+    const sel = document.getElementById('ext-source-select');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— Select source —</option>' +
+      allSources.map(s => `<option value="${s.SourceID}">${s.SourceName}</option>`).join('');
+  }
+
+  function extOnSourceChange() {
+    const sel = document.getElementById('ext-source-select');
+    if (!sel) return;
+    const opt = sel.options[sel.selectedIndex];
+    extSourceTitle = opt && opt.value ? opt.text : '';
+  }
+
+  function extToggleTitle() {
+    const input     = document.getElementById('ext-title-input');
+    const toggleBtn = document.getElementById('ext-title-toggle');
+    const sel       = document.getElementById('ext-source-select');
+    if (toggleBtn.dataset.mode === 'custom') {
+      toggleBtn.dataset.mode  = 'select';
+      toggleBtn.textContent   = 'Or type a title';
+      input.style.display     = 'none';
+      sel.style.display       = '';
+      extSourceTitle = '';
+    } else {
+      toggleBtn.dataset.mode  = 'custom';
+      toggleBtn.textContent   = 'Use existing source';
+      input.style.display     = '';
+      sel.style.display       = 'none';
+      extSourceTitle = input.value.trim();
+      input.focus();
+    }
+  }
+
+  async function extLoadParagraphs() {
+    const zhFile    = document.getElementById('ext-file-zh').files[0];
+    const enFile    = document.getElementById('ext-file-en').files[0];
+    const errBanner = document.getElementById('ext-error');
+    errBanner.style.display = 'none';
+    if (!zhFile || !enFile) {
+      extShowError('Please select both a Chinese and an English text file.');
+      return;
+    }
+    const btn = document.getElementById('ext-load-btn');
+    btn.disabled = true; btn.textContent = '⏳ Loading…';
+    try {
+      const fd = new FormData();
+      fd.append('chinese_file', zhFile);
+      fd.append('english_file', enFile);
+      const res  = await fetch('/api/extract/upload', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (data.error) { extShowError(data.error); return; }
+      extParagraphs   = data.paragraphs;
+      extCurrentIndex = 0;
+      document.getElementById('ext-viewer').style.display = '';
+      extRenderParagraph();
+    } catch(e) {
+      extShowError('Failed to upload files. Please try again.');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Load Paragraphs';
+    }
+  }
+
+  function extShowError(msg) {
+    const el = document.getElementById('ext-error');
+    el.textContent      = msg;
+    el.style.display    = '';
+  }
+
+  function extRenderParagraph() {
+    if (!extParagraphs.length) return;
+    const para  = extParagraphs[extCurrentIndex];
+    const total = extParagraphs.length;
+    document.getElementById('ext-text-zh').textContent  = para.chinese;
+    document.getElementById('ext-text-en').textContent  = para.english;
+    document.getElementById('ext-nav-label').textContent = `Paragraph ${extCurrentIndex + 1} of ${total}`;
+    document.getElementById('ext-prev').disabled = extCurrentIndex === 0;
+    document.getElementById('ext-next').disabled = extCurrentIndex === total - 1;
+    const jump = document.getElementById('ext-jump-input');
+    jump.max   = total;
+    jump.value = '';
+  }
+
+  function extNavigate(delta) {
+    const newIndex = extCurrentIndex + delta;
+    if (newIndex < 0 || newIndex >= extParagraphs.length) return;
+    extCurrentIndex = newIndex;
+    extRenderParagraph();
+  }
+
+  function extJump() {
+    const input = document.getElementById('ext-jump-input');
+    const n     = parseInt(input.value, 10);
+    if (isNaN(n) || n < 1 || n > extParagraphs.length) {
+      showToast('⚠ Invalid paragraph number');
+      return;
+    }
+    extCurrentIndex = n - 1;
+    extRenderParagraph();
   }
 
   // ── INIT ─────────────────────────────────────────────────────────────────
