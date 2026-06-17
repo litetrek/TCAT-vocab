@@ -370,6 +370,9 @@
     .ext-candidate-fields { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 1.1rem; align-items: baseline; }
     .ext-cfield-label { font-family: 'Cormorant Garamond', serif; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-soft); white-space: nowrap; padding: 0.1rem 0; }
     .ext-cfield-value { font-family: 'EB Garamond', serif; font-size: 1rem; color: var(--ink); }
+    .ext-candidate-en-block { font-family: 'EB Garamond', serif; font-size: 1rem; line-height: 1.7; color: var(--text); background: rgba(245,240,232,0.7); border: 1px solid var(--border); border-radius: 3px; padding: 0.75rem 1rem; margin-bottom: 1rem; max-height: 130px; overflow-y: auto; user-select: text; cursor: text; white-space: pre-wrap; word-break: break-word; }
+    .ext-known-input { font-family: 'EB Garamond', serif; font-size: 1rem; width: 100%; color: var(--text); background: white; border: 1px solid rgba(26,18,8,0.2); border-radius: 3px; padding: 0.5rem 0.75rem; resize: vertical; min-height: 2.4rem; display: block; margin-top: 0.3rem; transition: border-color 0.2s; }
+    .ext-known-input:focus { outline: none; border-color: var(--gold); }
 
     /* ── RESPONSIVE @ 768px ─────────────────────────────────────────────── */
     @media (max-width: 768px) {
@@ -627,8 +630,6 @@
         </div>
       </div>
 
-      <div id="ext-candidate-panel" style="display:none;" onclick="extClearSelection()"></div>
-
     </div><!-- #ext-working -->
   </div>
 </div>
@@ -716,6 +717,9 @@
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
+
+<!-- ── TERM CANDIDATE MODAL (direct body child so position:fixed is viewport-relative) -->
+<div id="ext-candidate-panel" style="display:none;" onclick="extClearSelection()"></div>
 
 <script>
   // ── STATE ────────────────────────────────────────────────────────────────
@@ -1999,9 +2003,12 @@
         inner += `</div>`;
       }
     } else {
+      const enText = extParagraphs.length ? extParagraphs[extCurrentIndex].english : '';
       inner += `<div class="ext-candidate-badge ext-candidate-new">New term — not yet in database</div>`;
-      inner += `<p class="ext-candidate-hint">Select the matching English text in the paragraph to capture it as the Known Translation.</p>`;
-      inner += `<div id="ext-captured-en-area"></div>`;
+      inner += `<p class="ext-candidate-hint">Select text in the English passage below to capture it as the Known Translation.</p>`;
+      inner += `<div class="ext-candidate-en-block" id="ext-modal-en-text">${escHtml(enText)}</div>`;
+      inner += `<label class="ext-cfield-label" for="ext-known-input" style="display:block;margin-bottom:0.3rem;">Known Translation</label>`;
+      inner += `<textarea class="ext-known-input" id="ext-known-input" rows="2" placeholder="Select text above, or type here…" oninput="extCapturedEnglish=this.value"></textarea>`;
     }
 
     inner += `</div>`;
@@ -2022,24 +2029,20 @@
     extHideCandidatePanel();
   }
 
-  function extHandleEnglishSelection() {
+  function extHandleModalEnglishSelection() {
     if (!extCurrentCandidateIsNew) return;
+    const enBlock = document.getElementById('ext-modal-en-text');
+    if (!enBlock) return;
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed) return;
     const text = sel.toString().trim();
     if (!text) return;
-    const enContainer = document.getElementById('ext-text-en');
-    if (!enContainer) return;
     const range = sel.getRangeAt(0);
-    if (!enContainer.contains(range.commonAncestorContainer)) return;
+    if (!enBlock.contains(range.commonAncestorContainer)) return;
+    const input = document.getElementById('ext-known-input');
+    if (!input || input.value) return; // preserve any value the user already typed
+    input.value = text;
     extCapturedEnglish = text;
-    const area = document.getElementById('ext-captured-en-area');
-    if (!area) return;
-    area.innerHTML =
-      `<div class="ext-candidate-fields">` +
-      `<span class="ext-cfield-label">Known Translation (selected)</span>` +
-      `<span class="ext-cfield-value" style="font-family:'EB Garamond',serif;">${escHtml(text)}</span>` +
-      `</div>`;
   }
 
   // ── INIT ─────────────────────────────────────────────────────────────────
@@ -2051,7 +2054,7 @@
 
   loadTerms();
   document.getElementById('ext-text-zh').addEventListener('mouseup', extHandleSelection);
-  document.getElementById('ext-text-en').addEventListener('mouseup', extHandleEnglishSelection);
+  document.addEventListener('mouseup', extHandleModalEnglishSelection);
   document.addEventListener('keydown', e => { if (e.key === 'Escape') extClearSelection(); });
 </script>
 </body>
