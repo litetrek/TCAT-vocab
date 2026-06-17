@@ -1797,8 +1797,9 @@
     const label = `Paragraph ${extCurrentIndex + 1} of ${total}`;
     const atFirst = extCurrentIndex === 0;
     const atLast  = extCurrentIndex === total - 1;
-    document.getElementById('ext-text-zh').innerHTML           = extHighlightKnownTerms(para.chinese);
-    document.getElementById('ext-text-en').textContent         = para.english;
+    const { html: zhHtml, segs: zhSegs } = extHighlightKnownTerms(para.chinese);
+    document.getElementById('ext-text-zh').innerHTML = zhHtml;
+    document.getElementById('ext-text-en').innerHTML = extHighlightEnglishTerms(para.english, zhSegs);
     extHideCandidatePanel();
     document.getElementById('ext-nav-label').textContent       = label;
     document.getElementById('ext-nav-label-top').textContent   = label;
@@ -1922,14 +1923,15 @@
   }
 
   function extHighlightKnownTerms(text) {
-    if (!extKnownTerms.length || !text) return escHtml(text);
+    const empty = { html: escHtml(text), segs: [] };
+    if (!extKnownTerms.length || !text) return empty;
 
     // Longest match first to prevent overlapping highlights
     const candidates = extKnownTerms
       .filter(t => t.chinese && text.includes(t.chinese))
       .sort((a, b) => b.chinese.length - a.chinese.length);
 
-    if (!candidates.length) return escHtml(text);
+    if (!candidates.length) return empty;
 
     const len     = text.length;
     const claimed = new Uint8Array(len);
@@ -1954,13 +1956,58 @@
       }
     }
 
-    if (!segs.length) return escHtml(text);
+    if (!segs.length) return empty;
     segs.sort((a, b) => a.start - b.start);
 
     let html = '', cursor = 0;
     for (const s of segs) {
       if (cursor < s.start) html += escHtml(text.slice(cursor, s.start));
       html += `<span class="term-known${s.hasKnown ? ' term-has-known' : ''}" data-term-id="${escHtml(s.termId)}" title="${escHtml(s.tip)}">${escHtml(s.ch)}</span>`;
+      cursor = s.end;
+    }
+    if (cursor < len) html += escHtml(text.slice(cursor));
+    return { html, segs };
+  }
+
+  function extHighlightEnglishTerms(text, segs) {
+    if (!segs.length || !text) return escHtml(text);
+
+    // Only segs that have a translation phrase to search for
+    const candidates = segs
+      .filter(s => s.tip)
+      .sort((a, b) => b.tip.length - a.tip.length); // longest first
+
+    if (!candidates.length) return escHtml(text);
+
+    const len     = text.length;
+    const claimed = new Uint8Array(len);
+    const enSegs  = [];
+
+    for (const s of candidates) {
+      const phrase = s.tip;
+      let pos = 0;
+      while (pos < len) {
+        const idx = text.indexOf(phrase, pos);
+        if (idx === -1) break;
+        let overlap = false;
+        for (let i = idx; i < idx + phrase.length; i++) {
+          if (claimed[i]) { overlap = true; break; }
+        }
+        if (!overlap) {
+          enSegs.push({ start: idx, end: idx + phrase.length, phrase, hasKnown: s.hasKnown });
+          for (let i = idx; i < idx + phrase.length; i++) claimed[i] = 1;
+        }
+        pos = idx + 1;
+      }
+    }
+
+    if (!enSegs.length) return escHtml(text);
+    enSegs.sort((a, b) => a.start - b.start);
+
+    let html = '', cursor = 0;
+    for (const s of enSegs) {
+      if (cursor < s.start) html += escHtml(text.slice(cursor, s.start));
+      html += `<span class="term-known${s.hasKnown ? ' term-has-known' : ''}">${escHtml(s.phrase)}</span>`;
       cursor = s.end;
     }
     if (cursor < len) html += escHtml(text.slice(cursor));
