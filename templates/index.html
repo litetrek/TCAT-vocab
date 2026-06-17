@@ -1973,10 +1973,19 @@
     extShowCandidatePanel(text);
   }
 
+  function extEnPassageHtml(instruction, prefill) {
+    const enText = extParagraphs.length ? extParagraphs[extCurrentIndex].english : '';
+    let html = `<p class="ext-candidate-hint">${escHtml(instruction)}</p>`;
+    html += `<div class="ext-candidate-en-block" id="ext-modal-en-text">${escHtml(enText)}</div>`;
+    html += `<label class="ext-cfield-label" for="ext-known-input" style="display:block;margin-bottom:0.3rem;">Known Translation</label>`;
+    html += `<textarea class="ext-known-input" id="ext-known-input" rows="2" placeholder="Select text above, or type here…" oninput="extCapturedEnglish=this.value">${escHtml(prefill)}</textarea>`;
+    return html;
+  }
+
   function extShowCandidatePanel(selectedText) {
-    extCapturedEnglish = '';
     const match = extKnownTerms.find(t => t.chinese === selectedText);
     extCurrentCandidateIsNew = !match;
+    extCapturedEnglish = match ? (match.trans_known || '') : '';
 
     let inner = `<div class="ext-term-modal" onclick="event.stopPropagation()">`;
     inner += `<div class="ext-candidate-header">`;
@@ -1986,29 +1995,25 @@
 
     if (match) {
       inner += `<div class="ext-candidate-badge ext-candidate-known">Already in database</div>`;
-      const fields = [
-        ['Known Translation', match.trans_known],
-        ['Translation 1',     match.trans1],
-        ['Translation 2',     match.trans2],
-        ['Translation 3',     match.trans3],
-        ['Pinyin',            match.pinyin],
-        ['Pali',              match.pali],
-        ['Sanskrit',          match.sanskrit],
+      inner += extEnPassageHtml('Select text in the English passage below to update the Known Translation.', match.trans_known || '');
+      const refFields = [
+        ['Translation 1', match.trans1],
+        ['Translation 2', match.trans2],
+        ['Translation 3', match.trans3],
+        ['Pinyin',        match.pinyin],
+        ['Pali',          match.pali],
+        ['Sanskrit',      match.sanskrit],
       ].filter(([, v]) => v);
-      if (fields.length) {
-        inner += `<div class="ext-candidate-fields">`;
-        for (const [label, value] of fields) {
+      if (refFields.length) {
+        inner += `<div class="ext-candidate-fields" style="margin-top:0.9rem;">`;
+        for (const [label, value] of refFields) {
           inner += `<span class="ext-cfield-label">${escHtml(label)}</span><span class="ext-cfield-value">${escHtml(value)}</span>`;
         }
         inner += `</div>`;
       }
     } else {
-      const enText = extParagraphs.length ? extParagraphs[extCurrentIndex].english : '';
       inner += `<div class="ext-candidate-badge ext-candidate-new">New term — not yet in database</div>`;
-      inner += `<p class="ext-candidate-hint">Select text in the English passage below to capture it as the Known Translation.</p>`;
-      inner += `<div class="ext-candidate-en-block" id="ext-modal-en-text">${escHtml(enText)}</div>`;
-      inner += `<label class="ext-cfield-label" for="ext-known-input" style="display:block;margin-bottom:0.3rem;">Known Translation</label>`;
-      inner += `<textarea class="ext-known-input" id="ext-known-input" rows="2" placeholder="Select text above, or type here…" oninput="extCapturedEnglish=this.value"></textarea>`;
+      inner += extEnPassageHtml('Select text in the English passage below to capture it as the Known Translation.', '');
     }
 
     inner += `</div>`;
@@ -2030,7 +2035,6 @@
   }
 
   function extHandleModalEnglishSelection() {
-    if (!extCurrentCandidateIsNew) return;
     const enBlock = document.getElementById('ext-modal-en-text');
     if (!enBlock) return;
     const sel = window.getSelection();
@@ -2040,7 +2044,7 @@
     const range = sel.getRangeAt(0);
     if (!enBlock.contains(range.commonAncestorContainer)) return;
     const input = document.getElementById('ext-known-input');
-    if (!input || input.value) return; // preserve any value the user already typed
+    if (!input) return;
     input.value = text;
     extCapturedEnglish = text;
   }
