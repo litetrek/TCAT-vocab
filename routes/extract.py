@@ -76,21 +76,27 @@ def api_extract_documents_post():
     uploaded_by = session.get("user_email", "")
     uploaded_at = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    doc_sheet  = get_extraction_documents_sheet()
-    para_sheet = get_extraction_paragraphs_sheet()
+    try:
+        doc_sheet  = get_extraction_documents_sheet()
+        para_sheet = get_extraction_paragraphs_sheet()
+    except Exception:
+        return jsonify({"error": "Extraction worksheets not found. An admin must click ⚙ Init Sheets to create them."}), 500
 
-    doc_id = next_doc_id(doc_sheet)
+    try:
+        doc_id = next_doc_id(doc_sheet)
 
-    doc_sheet.append_row([
-        doc_id, title, source_name, len(zh_paras),
-        uploaded_by, uploaded_at, 0, "active",
-    ])
+        doc_sheet.append_row([
+            doc_id, title, source_name, len(zh_paras),
+            uploaded_by, uploaded_at, 0, "active",
+        ])
 
-    para_rows = [
-        [doc_id, i, zh_paras[i], en_paras[i]]
-        for i in range(len(zh_paras))
-    ]
-    para_sheet.append_rows(para_rows, value_input_option="RAW")
+        para_rows = [
+            [doc_id, i, zh_paras[i], en_paras[i]]
+            for i in range(len(zh_paras))
+        ]
+        para_sheet.append_rows(para_rows, value_input_option="RAW")
+    except Exception as e:
+        return jsonify({"error": f"Failed to save to Google Sheets: {e}"}), 500
 
     paragraphs = [
         {"index": i, "chinese": zh_paras[i], "english": en_paras[i]}
