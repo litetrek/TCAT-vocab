@@ -7,6 +7,7 @@ from config import (
     BASE_DIR, SHEET_ID, SUPER_ADMIN_EMAIL,
     COL, TERMS_HEADER, SOURCE_HEADER,
     AUDIT_LOG_HEADER, MEMBERS_HEADER,
+    EXTRACTION_DOCUMENTS_HEADER, EXTRACTION_PARAGRAPHS_HEADER,
     strip_tone_marks,
 )
 
@@ -30,6 +31,12 @@ def get_source_sheet():
 
 def get_audit_sheet():
     return gs_client.open_by_key(SHEET_ID).worksheet("Audit_Log")
+
+def get_extraction_documents_sheet():
+    return gs_client.open_by_key(SHEET_ID).worksheet("ExtractionDocuments")
+
+def get_extraction_paragraphs_sheet():
+    return gs_client.open_by_key(SHEET_ID).worksheet("ExtractionParagraphs")
 
 
 # ── Audit ─────────────────────────────────────────────────────────────────
@@ -60,6 +67,17 @@ def next_term_id(sheet):
         return "T000001"
     nums = [int(i[1:]) for i in ids if i[1:].isdigit()]
     return f"T{(max(nums)+1):06d}" if nums else "T000001"
+
+
+def next_doc_id(sheet):
+    rows = sheet.get_all_values()
+    if len(rows) <= 1:
+        return "D000001"
+    ids  = [r[0] for r in rows[1:] if r[0].startswith("D")]
+    if not ids:
+        return "D000001"
+    nums = [int(i[1:]) for i in ids if i[1:].isdigit()]
+    return f"D{(max(nums)+1):06d}" if nums else "D000001"
 
 
 # ── Member helpers ────────────────────────────────────────────────────────
@@ -127,3 +145,11 @@ def ensure_headers():
     if "Audit_Log" not in sheet_names:
         al = wb.add_worksheet(title="Audit_Log", rows=5000, cols=11)
         al.append_row(AUDIT_LOG_HEADER)
+
+    if "ExtractionDocuments" not in sheet_names:
+        ed = wb.add_worksheet(title="ExtractionDocuments", rows=1000, cols=8)
+        ed.append_row(EXTRACTION_DOCUMENTS_HEADER)
+
+    if "ExtractionParagraphs" not in sheet_names:
+        ep = wb.add_worksheet(title="ExtractionParagraphs", rows=50000, cols=4)
+        ep.append_row(EXTRACTION_PARAGRAPHS_HEADER)

@@ -1,6 +1,12 @@
 import re
-from flask import Blueprint, jsonify, request
+from datetime import datetime
+from flask import Blueprint, jsonify, request, session
 from auth import is_logged_in
+from sheets import (
+    get_extraction_documents_sheet,
+    get_extraction_paragraphs_sheet,
+    next_doc_id,
+)
 
 extract_bp = Blueprint('extract', __name__)
 
@@ -22,8 +28,8 @@ def _split_paragraphs(text):
     return [b.strip() for b in blocks if b.strip()]
 
 
-@extract_bp.route("/api/extract/upload", methods=["POST"])
-def api_extract_upload():
+@extract_bp.route("/api/extract/documents", methods=["POST"])
+def api_extract_documents_post():
     if not is_logged_in():
         return jsonify({"error": "Unauthorized"}), 401
 
@@ -65,9 +71,103 @@ def api_extract_upload():
             )
         }), 400
 
+    title       = (request.form.get("title") or "").strip()
+    source_name = (request.form.get("source_name") or "").strip()
+    uploaded_by = session.get("user_email", "")
+    uploaded_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    doc_sheet  = get_extraction_documents_sheet()
+    para_sheet = get_extraction_paragraphs_sheet()
+
+    doc_id = next_doc_id(doc_sheet)
+
+    doc_sheet.append_row([
+        doc_id, title, source_name, len(zh_paras),
+        uploaded_by, uploaded_at, 0, "active",
+    ])
+
+    para_rows = [
+        [doc_id, i, zh_paras[i], en_paras[i]]
+        for i in range(len(zh_paras))
+    ]
+    para_sheet.append_rows(para_rows, value_input_option="RAW")
+
     paragraphs = [
         {"index": i, "chinese": zh_paras[i], "english": en_paras[i]}
         for i in range(len(zh_paras))
     ]
+    return jsonify({"document_id": doc_id, "paragraphs": paragraphs, "count": len(paragraphs)})
 
-    return jsonify({"paragraphs": paragraphs, "count": len(paragraphs)})
+
+@extract_bp.route("/api/extract/documents", methods=["GET"])
+def api_extract_documents_get():
+    if not is_logged_in():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    try:
+        rows = get_extraction_documents_sheet().get_all_records()
+        rows.sort(key=lambda r: (r.get("SourceName", ""), r.get("Title", "")))
+        return jsonify(rows)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@extract_bp.route("/api/extract/documents/<document_id>/paragraphs", methods=["GET"])
+def api_extract_paragraphs_get(document_id):
+    if not is_logged_in():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    try:
+        doc_sheet  = get_extraction_documents_sheet()
+        para_sheet = get_extraction_paragraphs_sheet()
+
+        doc_rows = doc_sheet.get_all_records()
+        doc = next((r for r in doc_rows if r.get("DocumentID") == document_id), None)
+        if doc is None:
+            return jsonify({"error": "Document not found"}), 404
+
+        last_viewed_index = int(doc.get("LastViewedIndex", 0) or 0)
+
+        all_paras = para_sheet.get_all_records()
+        paras = [r for r in all_paras if r.get("DocumentID") == document_id]
+        paras.sort(key=lambda r: int(r.get("ParagraphIndex", 0)))
+
+        paragraphs = [
+            {
+                "index": int(p["ParagraphIndex"]),
+                "chinese": p.get("ChineseText", ""),
+                "english": p.get("EnglishText", ""),
+            }
+            for p in paras
+        ]
+        return jsonify({"paragraphs": paragraphs, "last_viewed_index": last_viewed_index})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@extract_bp.route("/api/extract/documents/<document_id>", methods=["PATCH"])
+def api_extract_document_patch(document_id):
+    if not is_logged_in():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json(silent=True)
+    if not data or "last_viewed_index" not in data:
+        return jsonify({"error": "last_viewed_index is required"}), 400
+
+    try:
+        sheet     = get_extraction_documents_sheet()
+        all_rows  = sheet.get_all_values()
+        if len(all_rows) <= 1:
+            return jsonify({"error": "Document not found"}), 404
+
+        header  = all_rows[0]
+        lvi_col = header.index("LastViewedIndex") + 1  # 1-based for gspread
+
+        for row_num, row in enumerate(all_rows[1:], start=2):
+            if row[0] == document_id:
+                sheet.update_cell(row_num, lvi_col, data["last_viewed_index"])
+                return jsonify({"ok": True})
+
+        return jsonify({"error": "Document not found"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

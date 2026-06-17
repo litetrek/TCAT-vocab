@@ -45,7 +45,7 @@ buddhist-vocab/
 │   ├── terms.py                # /api/terms/* endpoints
 │   ├── members.py              # /api/members/* endpoints
 │   ├── sources.py              # /api/sources + /api/init endpoints
-│   └── extract.py              # /api/extract/upload — paragraph upload for Extraction tab
+│   └── extract.py              # /api/extract/documents — upload + persistence for Extraction tab
 ├── index.cgi                   # CGI entry point (shebang: venv310/bin/python3.10)
 ├── templates/
 │   ├── index.html              # Main app UI — two top-level tabs: Extraction and Vocabulary
@@ -77,7 +77,7 @@ buddhist-vocab/
 
 ## Google Sheets Structure
 
-One Google Sheet with five worksheets:
+One Google Sheet with seven worksheets:
 
 | Sheet | Key Columns |
 |-------|------------|
@@ -86,6 +86,8 @@ One Google Sheet with five worksheets:
 | **Members** | Email, Role, AddedBy, AddedAt, Name, ShortName |
 | **Sources** | SourceID, SourceName, SourceType, Notes |
 | **Audit_Log** | AuditID, Timestamp, TermID, TermChinese, UserEmail, UserName, ActionType, FieldChanged, OldValue, NewValue, Details |
+| **ExtractionDocuments** | DocumentID, Title, SourceName, ParagraphCount, UploadedBy, UploadedAt, LastViewedIndex, Status |
+| **ExtractionParagraphs** | DocumentID, ParagraphIndex, ChineseText, EnglishText |
 
 **Service account:** `sheets-editor@warm-composite-494900-b0.iam.gserviceaccount.com`
 (must have Editor access on the Google Sheet)
@@ -203,18 +205,33 @@ See `.env.example` for the full list with placeholder values.
 - New `routes/extract.py` blueprint registered in `app.py`:
   - `POST /api/extract/upload` — accepts `chinese_file` + `english_file` (.txt only, ≤500 KB each)
   - Decodes bytes: UTF-8 → GB18030 → Big5; clear JSON error if all fail
-  - Splits text on blank-line boundaries (one or more consecutive blank lines); trims and drops empty blocks
+  - Splits text on blank-line boundaries; trims and drops empty blocks
   - Returns 400 with both paragraph counts if Chinese/English counts don't match
   - Returns `{ "paragraphs": [{index, chinese, english}, …], "count": N }` on success
   - Requires login; no role restriction beyond that
-- New Extraction tab UI in `templates/index.html`:
-  - Source/book row: select from existing sources (GET /api/sources) or toggle to a free-text title input (JS state only, not persisted)
-  - Two file inputs (.txt) + "Load Paragraphs" button
-  - On error: themed error banner (red, on-paper, no browser alert)
-  - On success: two side-by-side read-only panels — Chinese (Noto Serif TC) / English (EB Garamond), showing current paragraph
-  - Navigator bar: Prev / "Paragraph N of M" label / Next / numeric jump-to input + Go
-  - Prev disabled on first paragraph, Next disabled on last
-- Matches dark ink/gold/paper visual theme; reuses existing CSS variables, button classes, and font stack
+- New Extraction tab UI: source/book selector, file inputs, two side-by-side read-only panels, top+bottom navigator bars with Prev/Next/jump
+
+### Extraction Stage 2 — Google Sheets Persistence + Resume (2026-06-16)
+- **Replaced** `POST /api/extract/upload` with `POST /api/extract/documents`:
+  - Accepts `title` (chapter/part label), `source_name` (book title), plus the two text files
+  - Same validation as before; writes nothing to Sheets if validation fails
+  - On success: generates DocumentID (`D000001` pattern, same as Terms `T000001`), appends one row to ExtractionDocuments, batch-appends all paragraphs to ExtractionParagraphs in a single API call (`append_rows`)
+  - Returns `{ "document_id": ..., "paragraphs": [...], "count": N }`
+- **Added** `GET /api/extract/documents` — returns all ExtractionDocuments rows sorted by SourceName then Title
+- **Added** `GET /api/extract/documents/<id>/paragraphs` — returns paragraphs in index order plus LastViewedIndex
+- **Added** `PATCH /api/extract/documents/<id>` — updates LastViewedIndex only
+- All four endpoints require login; no additional role restriction
+- **New Google Sheets worksheets** created by `ensure_headers()` (same init pattern as existing sheets):
+  - **ExtractionDocuments**: DocumentID, Title, SourceName, ParagraphCount, UploadedBy, UploadedAt, LastViewedIndex, Status
+  - **ExtractionParagraphs**: DocumentID, ParagraphIndex, ChineseText, EnglishText
+- **Frontend changes** to Extraction tab:
+  - "Source / Book" dropdown renamed to "Book / Source title" — same dropdown + free-text toggle as before
+  - New "Chapter / part label" text input (`#ext-chapter-input`) added below source row
+  - Document list section ("Previously Uploaded") appears above upload form on tab load, grouped by book title, each chapter showing title, paragraph count, last-viewed position, uploader, upload date, and a "Resume" button
+  - Upload now POSTs to `/api/extract/documents`; stores returned `document_id` in JS state
+  - "Resume" calls GET paragraphs endpoint and renders starting at LastViewedIndex
+  - Every navigation event (Prev/Next/jump-to, both nav bars) fires a fire-and-forget PATCH to save progress
+  - Document list auto-refreshes after upload or resume
 
 ---
 
@@ -233,4 +250,4 @@ See `.env.example` for the full list with placeholder values.
 - Update actions to Node.js 24 before Sep 2026 deprecation deadline
 - Confirm whether `venv/` on server can be removed (old virtual environment)
 - Consider adding SSH access to GreenGeeks for future pipeline improvements
-- **Extraction Stage 2**: Wire source title into Sources sheet (create or link); enable Chinese text selection for term extraction; pass selected text + paragraph context to AI
+- **Extraction Stage 3**: Chinese text selection → AI extraction of Buddhist terms → save to Terms sheet

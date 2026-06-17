@@ -341,6 +341,16 @@
     .ext-jump-wrap { display: flex; align-items: center; gap: 0.4rem; }
     .ext-jump-input { font-family: 'EB Garamond', serif; font-size: 0.95rem; padding: 0.28rem 0.5rem; border: 1px solid rgba(26,18,8,0.2); border-radius: 3px; background: rgba(255,255,255,0.8); color: var(--text); width: 70px; text-align: center; }
     .ext-jump-input:focus { outline: none; border-color: var(--gold); }
+    .ext-chapter-input { font-family: 'EB Garamond', serif; font-size: 0.95rem; padding: 0.4rem 0.65rem; border: 1px solid rgba(26,18,8,0.2); border-radius: 3px; background: rgba(255,255,255,0.8); color: var(--text); min-width: 220px; }
+    .ext-chapter-input:focus { outline: none; border-color: var(--gold); }
+    .ext-doc-list-section { margin-bottom: 2rem; }
+    .ext-doc-list-title { font-family: 'Cormorant Garamond', serif; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.15em; color: var(--text-soft); margin-bottom: 0.85rem; padding-bottom: 0.45rem; border-bottom: 1px solid var(--border); }
+    .ext-book-group { margin-bottom: 1.25rem; }
+    .ext-book-header { font-family: 'Cormorant Garamond', serif; font-size: 1.02rem; font-weight: 700; color: var(--ink); margin-bottom: 0.5rem; }
+    .ext-doc-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0.85rem; background: rgba(255,255,255,0.7); border: 1px solid var(--border); border-radius: 3px; margin-bottom: 0.4rem; flex-wrap: wrap; }
+    .ext-doc-info { flex: 1; min-width: 0; }
+    .ext-doc-title { font-family: 'EB Garamond', serif; font-size: 1rem; color: var(--ink); }
+    .ext-doc-meta { font-size: 0.82rem; color: var(--text-soft); margin-top: 0.15rem; }
 
     /* ── RESPONSIVE @ 768px ─────────────────────────────────────────────── */
     @media (max-width: 768px) {
@@ -521,13 +531,23 @@
       <h1 class="main-title">Text <span>Extraction</span></h1>
     </div>
 
+    <div id="ext-doc-list" class="ext-doc-list-section" style="display:none;">
+      <div class="ext-doc-list-title">Previously Uploaded</div>
+      <div id="ext-doc-list-inner"></div>
+    </div>
+
     <div class="ext-source-row">
-      <label for="ext-source-select">Source / Book</label>
+      <label for="ext-source-select">Book / Source title</label>
       <select class="ext-select" id="ext-source-select" onchange="extOnSourceChange()">
         <option value="">— Select source —</option>
       </select>
       <button class="btn btn-secondary btn-sm" id="ext-title-toggle" data-mode="select" onclick="extToggleTitle()">Or type a title</button>
-      <input class="ext-title-input" id="ext-title-input" type="text" placeholder="Type a book or section title…" style="display:none;" oninput="extSourceTitle=this.value.trim()">
+      <input class="ext-title-input" id="ext-title-input" type="text" placeholder="Type a book or source title…" style="display:none;" oninput="extSourceTitle=this.value.trim()">
+    </div>
+
+    <div class="ext-source-row" style="margin-bottom:1.25rem;">
+      <label for="ext-chapter-input">Chapter / part label</label>
+      <input class="ext-chapter-input" id="ext-chapter-input" type="text" placeholder="e.g. Chapter 3 (optional)">
     </div>
 
     <div class="ext-file-row">
@@ -723,6 +743,7 @@
   let extParagraphs    = [];
   let extCurrentIndex  = 0;
   let extSourceTitle   = '';
+  let extDocumentId    = null;
 
   const PICK_LABELS ={ Translation1:'AI Translate 1', Translation2:'AI Translate 2', Translation3:'AI Translate 3', TranslationKnown:'Known', TranslationOther1:'Suggested 1', TranslationOther2:'Suggested 2' };
   const FIELD_TO_TERM_KEY = { trans1:'Translation1', trans2:'Translation2', trans3:'Translation3', trans_known:'TranslationKnown', trans_other1:'TranslationOther1', trans_other2:'TranslationOther2' };
@@ -1616,6 +1637,7 @@
       } else {
         extPopulateSources();
       }
+      extLoadDocumentList();
     }
   }
 
@@ -1669,13 +1691,17 @@
       const fd = new FormData();
       fd.append('chinese_file', zhFile);
       fd.append('english_file', enFile);
-      const res  = await fetch('/api/extract/upload', { method: 'POST', body: fd });
+      fd.append('title',       (document.getElementById('ext-chapter-input').value || '').trim());
+      fd.append('source_name', extSourceTitle);
+      const res  = await fetch('/api/extract/documents', { method: 'POST', body: fd });
       const data = await res.json();
       if (data.error) { extShowError(data.error); return; }
+      extDocumentId   = data.document_id;
       extParagraphs   = data.paragraphs;
       extCurrentIndex = 0;
       document.getElementById('ext-viewer').style.display = '';
       extRenderParagraph();
+      extLoadDocumentList();
     } catch(e) {
       extShowError('Failed to upload files. Please try again.');
     } finally {
@@ -1710,11 +1736,21 @@
     });
   }
 
+  function extSaveProgress(index) {
+    if (!extDocumentId) return;
+    fetch(`/api/extract/documents/${extDocumentId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ last_viewed_index: index }),
+    }).catch(() => {});
+  }
+
   function extNavigate(delta) {
     const newIndex = extCurrentIndex + delta;
     if (newIndex < 0 || newIndex >= extParagraphs.length) return;
     extCurrentIndex = newIndex;
     extRenderParagraph();
+    extSaveProgress(extCurrentIndex);
   }
 
   function extJumpFrom(inputId) {
@@ -1726,6 +1762,72 @@
     }
     extCurrentIndex = n - 1;
     extRenderParagraph();
+    extSaveProgress(extCurrentIndex);
+  }
+
+  async function extLoadDocumentList() {
+    try {
+      const res  = await fetch('/api/extract/documents');
+      if (!res.ok) return;
+      const docs = await res.json();
+      extRenderDocumentList(docs);
+    } catch(e) {}
+  }
+
+  function extRenderDocumentList(docs) {
+    const section = document.getElementById('ext-doc-list');
+    const inner   = document.getElementById('ext-doc-list-inner');
+    if (!docs || !docs.length) { section.style.display = 'none'; return; }
+
+    const groups = {};
+    for (const doc of docs) {
+      const key = doc.SourceName || '(No book title)';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(doc);
+    }
+
+    let html = '';
+    for (const [bookTitle, chapters] of Object.entries(groups)) {
+      html += `<div class="ext-book-group">`;
+      html += `<div class="ext-book-header">${escHtml(bookTitle)}</div>`;
+      for (const doc of chapters) {
+        const count    = parseInt(doc.ParagraphCount || 0);
+        const lvi      = parseInt(doc.LastViewedIndex || 0);
+        const pos      = count > 0 ? `paragraph ${lvi + 1} of ${count}` : 'no paragraphs';
+        const who      = doc.UploadedBy ? ` · by ${escHtml(displayName(doc.UploadedBy))}` : '';
+        const when     = doc.UploadedAt ? ` · ${escHtml(doc.UploadedAt)}` : '';
+        const chTitle  = doc.Title || '';
+        const titleHtml = chTitle
+          ? escHtml(chTitle)
+          : `<span style="color:var(--text-soft);font-style:italic;">untitled</span>`;
+        html += `<div class="ext-doc-item">`;
+        html += `<div class="ext-doc-info">`;
+        html += `<div class="ext-doc-title">${titleHtml}</div>`;
+        html += `<div class="ext-doc-meta">${count} paragraphs · last at ${pos}${who}${when}</div>`;
+        html += `</div>`;
+        html += `<button class="btn btn-secondary btn-sm" onclick="extResume('${escHtml(doc.DocumentID)}')">Resume</button>`;
+        html += `</div>`;
+      }
+      html += `</div>`;
+    }
+    inner.innerHTML = html;
+    section.style.display = '';
+  }
+
+  async function extResume(documentId) {
+    try {
+      const res  = await fetch(`/api/extract/documents/${documentId}/paragraphs`);
+      const data = await res.json();
+      if (data.error) { showToast('⚠ Could not load document'); return; }
+      extDocumentId   = documentId;
+      extParagraphs   = data.paragraphs;
+      extCurrentIndex = Math.max(0, Math.min(data.last_viewed_index, data.paragraphs.length - 1));
+      document.getElementById('ext-viewer').style.display = '';
+      extRenderParagraph();
+      document.getElementById('ext-viewer').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch(e) {
+      showToast('⚠ Failed to resume document');
+    }
   }
 
   // ── INIT ─────────────────────────────────────────────────────────────────

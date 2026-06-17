@@ -42,6 +42,15 @@ AUDIT_LOG_HEADER = [
     "FieldChanged", "OldValue", "NewValue", "Details",
 ]
 
+EXTRACTION_DOCUMENTS_HEADER = [
+    "DocumentID", "Title", "SourceName", "ParagraphCount",
+    "UploadedBy", "UploadedAt", "LastViewedIndex", "Status",
+]
+
+EXTRACTION_PARAGRAPHS_HEADER = [
+    "DocumentID", "ParagraphIndex", "ChineseText", "EnglishText",
+]
+
 SOURCE_TYPES = ["Scripture", "Commentary", "Dictionary", "Encyclopedia", "Other"]
 VALID_ROLES  = ("viewer", "depositor", "member", "leader", "admin")
 
