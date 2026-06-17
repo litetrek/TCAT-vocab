@@ -211,6 +211,32 @@ See `.env.example` for the full list with placeholder values.
   - Requires login; no role restriction beyond that
 - New Extraction tab UI: source/book selector, file inputs, two side-by-side read-only panels, top+bottom navigator bars with Prev/Next/jump
 
+### Extraction Stage 3 — Term Highlighting + Selection Candidate Panel (2026-06-16)
+- **New endpoint** `GET /api/extract/known-terms` in `routes/extract.py`:
+  - Reuses `get_terms_sheet()` from `sheets.py` (same function as the Vocabulary tab's `GET /api/terms`)
+  - Returns a lightweight array: ID, Chinese, Pinyin, Pali, Sanskrit, TranslationKnown, Translation1–3
+  - Requires login; no additional role restriction; no writes
+- **Picker/Working split** committed previously (see git log) — moved upload form into Picker view, paragraph navigator into Working view; toggle between them via `extShowWorking` / `extSwitchDocument`
+- **Frontend — known-terms cache**:
+  - Added `extKnownTerms` state variable
+  - `extShowWorking()` now calls `extFetchKnownTerms()` each time the Working view is entered (after Upload or Resume); known terms are re-fetched per document entry, never per paragraph
+  - After fetch completes, re-renders the current paragraph so highlights appear even if fetch was slow
+- **Frontend — paragraph highlighting**:
+  - `extRenderParagraph()` now uses `innerHTML` + `extHighlightKnownTerms()` for the Chinese panel (English panel still uses `textContent`)
+  - `extHighlightKnownTerms()`: greedy longest-match-first, left-to-right scan; sorts candidate terms by `Chinese` length descending, marks claimed character positions in a `Uint8Array` to prevent overlapping spans, wraps each match in `<span class="term-known" data-term-id="…" title="…">` with a hover tooltip (TranslationKnown, falling back to Translation1)
+  - `.term-known` styled with a soft gold background tint + gold underline, slightly stronger on hover
+- **Frontend — selection candidate panel**:
+  - `mouseup` listener on `#ext-text-zh` calls `extHandleSelection()`:
+    - Reads `window.getSelection()`, confirms selection is within the Chinese container (ignores clicks on the English panel or elsewhere)
+    - Empty/collapsed selection hides the panel
+  - `extShowCandidatePanel()` renders a card below the paragraph viewer:
+    - Always shows the selected Chinese text prominently
+    - Exact match (`selectedText === term.Chinese`): shows "Already in database" badge + read-only field grid (Known Translation, Translation 1–3, Pinyin, Pali, Sanskrit — only non-empty fields shown)
+    - No exact match: shows "New term — not yet in database" badge
+    - Selecting new text while panel is open updates the panel in-place
+  - "✕ Clear" button calls `extClearSelection()` — removes browser selection and hides the panel
+  - Navigating to a new paragraph auto-hides the candidate panel
+
 ### Extraction Stage 2 — Google Sheets Persistence + Resume (2026-06-16)
 - **Replaced** `POST /api/extract/upload` with `POST /api/extract/documents`:
   - Accepts `title` (chapter/part label), `source_name` (book title), plus the two text files
@@ -250,4 +276,5 @@ See `.env.example` for the full list with placeholder values.
 - Update actions to Node.js 24 before Sep 2026 deprecation deadline
 - Confirm whether `venv/` on server can be removed (old virtual environment)
 - Consider adding SSH access to GreenGeeks for future pipeline improvements
-- **Extraction Stage 3**: Chinese text selection → AI extraction of Buddhist terms → save to Terms sheet
+- **Extraction Stage 4**: AI-assisted translation suggestions for selected/new terms
+- **Extraction Stage 5**: Save extracted terms to the Terms sheet from the Working view

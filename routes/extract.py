@@ -3,6 +3,7 @@ from datetime import datetime
 from flask import Blueprint, jsonify, request, session
 from auth import is_logged_in
 from sheets import (
+    get_terms_sheet,
     get_extraction_documents_sheet,
     get_extraction_paragraphs_sheet,
     next_doc_id,
@@ -26,6 +27,30 @@ def _split_paragraphs(text):
     text = text.replace('\r\n', '\n').replace('\r', '\n')
     blocks = re.split(r'\n{2,}', text)
     return [b.strip() for b in blocks if b.strip()]
+
+
+@extract_bp.route("/api/extract/known-terms", methods=["GET"])
+def api_extract_known_terms():
+    if not is_logged_in():
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        rows = get_terms_sheet().get_all_records()
+        result = []
+        for r in rows:
+            result.append({
+                "id":          r.get("ID",               ""),
+                "chinese":     r.get("Chinese",          ""),
+                "pinyin":      r.get("Pinyin",           ""),
+                "pali":        r.get("Pali",             ""),
+                "sanskrit":    r.get("Sanskrit",         ""),
+                "trans_known": r.get("TranslationKnown", ""),
+                "trans1":      r.get("Translation1",     ""),
+                "trans2":      r.get("Translation2",     ""),
+                "trans3":      r.get("Translation3",     ""),
+            })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @extract_bp.route("/api/extract/documents", methods=["POST"])

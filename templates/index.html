@@ -355,6 +355,19 @@
     .ext-working-label { font-family: 'Cormorant Garamond', serif; font-size: 1rem; font-style: italic; color: var(--text-soft); flex: 1; }
     .btn-ext-switch { background: none; border: none; cursor: pointer; font-family: 'EB Garamond', serif; font-size: 0.88rem; color: var(--text-soft); padding: 0; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
     .btn-ext-switch:hover { color: var(--ink); }
+    .term-known { background: rgba(201,168,76,0.18); border-bottom: 1.5px solid rgba(201,168,76,0.65); border-radius: 1px; cursor: default; }
+    .term-known:hover { background: rgba(201,168,76,0.32); }
+    .ext-candidate-panel { background: white; border: 1px solid var(--border); border-radius: 4px; padding: 1.25rem 1.5rem; box-shadow: var(--shadow); margin-top: 1.5rem; }
+    .ext-candidate-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.9rem; }
+    .ext-candidate-zh { font-family: 'Noto Serif TC', serif; font-size: 1.5rem; font-weight: 600; color: var(--ink); line-height: 1.2; }
+    .ext-candidate-clear { font-family: 'EB Garamond', serif; font-size: 0.82rem; background: transparent; border: 1px solid rgba(26,18,8,0.2); border-radius: 3px; color: var(--text-soft); padding: 0.2rem 0.65rem; cursor: pointer; transition: all 0.15s; }
+    .ext-candidate-clear:hover { border-color: rgba(26,18,8,0.5); color: var(--ink); }
+    .ext-candidate-badge { font-family: 'Cormorant Garamond', serif; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; padding: 0.22rem 0.6rem; border-radius: 2px; display: inline-block; margin-bottom: 0.9rem; }
+    .ext-candidate-known { background: rgba(201,168,76,0.15); color: var(--ink-soft); border: 1px solid rgba(201,168,76,0.45); }
+    .ext-candidate-new { background: rgba(26,18,8,0.05); color: var(--text-soft); border: 1px solid rgba(26,18,8,0.18); }
+    .ext-candidate-fields { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 1.1rem; align-items: baseline; }
+    .ext-cfield-label { font-family: 'Cormorant Garamond', serif; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-soft); white-space: nowrap; padding: 0.1rem 0; }
+    .ext-cfield-value { font-family: 'EB Garamond', serif; font-size: 1rem; color: var(--ink); }
 
     /* ── RESPONSIVE @ 768px ─────────────────────────────────────────────── */
     @media (max-width: 768px) {
@@ -612,6 +625,8 @@
         </div>
       </div>
 
+      <div id="ext-candidate-panel" style="display:none;"></div>
+
     </div><!-- #ext-working -->
   </div>
 </div>
@@ -764,6 +779,7 @@
   let extSourceTitle   = '';
   let extDocumentId    = null;
   let extDocumentsCache = {};
+  let extKnownTerms    = [];
 
   const PICK_LABELS ={ Translation1:'AI Translate 1', Translation2:'AI Translate 2', Translation3:'AI Translate 3', TranslationKnown:'Known', TranslationOther1:'Suggested 1', TranslationOther2:'Suggested 2' };
   const FIELD_TO_TERM_KEY = { trans1:'Translation1', trans2:'Translation2', trans3:'Translation3', trans_known:'TranslationKnown', trans_other1:'TranslationOther1', trans_other2:'TranslationOther2' };
@@ -1673,6 +1689,7 @@
     document.getElementById('ext-working-label').textContent = label;
     document.getElementById('ext-picker').style.display  = 'none';
     document.getElementById('ext-working').style.display = '';
+    extFetchKnownTerms();
   }
 
   function extSwitchDocument() {
@@ -1761,8 +1778,9 @@
     const label = `Paragraph ${extCurrentIndex + 1} of ${total}`;
     const atFirst = extCurrentIndex === 0;
     const atLast  = extCurrentIndex === total - 1;
-    document.getElementById('ext-text-zh').textContent         = para.chinese;
+    document.getElementById('ext-text-zh').innerHTML           = extHighlightKnownTerms(para.chinese);
     document.getElementById('ext-text-en').textContent         = para.english;
+    extHideCandidatePanel();
     document.getElementById('ext-nav-label').textContent       = label;
     document.getElementById('ext-nav-label-top').textContent   = label;
     document.getElementById('ext-prev').disabled               = atFirst;
@@ -1872,6 +1890,124 @@
     }
   }
 
+  // ── EXTRACTION: KNOWN TERMS ─────────────────────────────────────────────
+
+  async function extFetchKnownTerms() {
+    try {
+      const res = await fetch('/api/extract/known-terms');
+      if (!res.ok) return;
+      extKnownTerms = await res.json();
+      // Re-render the current paragraph now that terms are loaded
+      if (extParagraphs.length) extRenderParagraph();
+    } catch(e) {}
+  }
+
+  function extHighlightKnownTerms(text) {
+    if (!extKnownTerms.length || !text) return escHtml(text);
+
+    // Longest match first to prevent overlapping highlights
+    const candidates = extKnownTerms
+      .filter(t => t.chinese && text.includes(t.chinese))
+      .sort((a, b) => b.chinese.length - a.chinese.length);
+
+    if (!candidates.length) return escHtml(text);
+
+    const len     = text.length;
+    const claimed = new Uint8Array(len);
+    const segs    = [];
+
+    for (const term of candidates) {
+      const ch = term.chinese;
+      let pos  = 0;
+      while (pos < len) {
+        const idx = text.indexOf(ch, pos);
+        if (idx === -1) break;
+        let overlap = false;
+        for (let i = idx; i < idx + ch.length; i++) {
+          if (claimed[i]) { overlap = true; break; }
+        }
+        if (!overlap) {
+          const tip = term.trans_known || term.trans1 || '';
+          segs.push({ start: idx, end: idx + ch.length, termId: term.id, ch, tip });
+          for (let i = idx; i < idx + ch.length; i++) claimed[i] = 1;
+        }
+        pos = idx + 1;
+      }
+    }
+
+    if (!segs.length) return escHtml(text);
+    segs.sort((a, b) => a.start - b.start);
+
+    let html = '', cursor = 0;
+    for (const s of segs) {
+      if (cursor < s.start) html += escHtml(text.slice(cursor, s.start));
+      html += `<span class="term-known" data-term-id="${escHtml(s.termId)}" title="${escHtml(s.tip)}">${escHtml(s.ch)}</span>`;
+      cursor = s.end;
+    }
+    if (cursor < len) html += escHtml(text.slice(cursor));
+    return html;
+  }
+
+  // ── EXTRACTION: CANDIDATE PANEL ─────────────────────────────────────────
+
+  function extHandleSelection() {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) { extHideCandidatePanel(); return; }
+    const text = sel.toString().trim();
+    if (!text) { extHideCandidatePanel(); return; }
+
+    // Ignore selections outside the Chinese paragraph container
+    const zhContainer = document.getElementById('ext-text-zh');
+    if (!zhContainer) return;
+    const range = sel.getRangeAt(0);
+    if (!zhContainer.contains(range.commonAncestorContainer)) return;
+
+    extShowCandidatePanel(text);
+  }
+
+  function extShowCandidatePanel(selectedText) {
+    const match = extKnownTerms.find(t => t.chinese === selectedText);
+    let html = `<div class="ext-candidate-header">`;
+    html += `<span class="ext-candidate-zh">${escHtml(selectedText)}</span>`;
+    html += `<button class="ext-candidate-clear" onclick="extClearSelection()">✕ Clear</button>`;
+    html += `</div>`;
+
+    if (match) {
+      html += `<div class="ext-candidate-badge ext-candidate-known">Already in database</div>`;
+      const fields = [
+        ['Known Translation', match.trans_known],
+        ['Translation 1',     match.trans1],
+        ['Translation 2',     match.trans2],
+        ['Translation 3',     match.trans3],
+        ['Pinyin',            match.pinyin],
+        ['Pali',              match.pali],
+        ['Sanskrit',          match.sanskrit],
+      ].filter(([, v]) => v);
+      if (fields.length) {
+        html += `<div class="ext-candidate-fields">`;
+        for (const [label, value] of fields) {
+          html += `<span class="ext-cfield-label">${escHtml(label)}</span><span class="ext-cfield-value">${escHtml(value)}</span>`;
+        }
+        html += `</div>`;
+      }
+    } else {
+      html += `<div class="ext-candidate-badge ext-candidate-new">New term — not yet in database</div>`;
+    }
+
+    const panel = document.getElementById('ext-candidate-panel');
+    if (panel) { panel.innerHTML = html; panel.style.display = ''; }
+  }
+
+  function extHideCandidatePanel() {
+    const panel = document.getElementById('ext-candidate-panel');
+    if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
+  }
+
+  function extClearSelection() {
+    if (window.getSelection) window.getSelection().removeAllRanges();
+    extHideCandidatePanel();
+  }
+
   // ── INIT ─────────────────────────────────────────────────────────────────
   let _resizeTimer;
   window.addEventListener('resize', () => {
@@ -1880,6 +2016,7 @@
   });
 
   loadTerms();
+  document.getElementById('ext-text-zh').addEventListener('mouseup', extHandleSelection);
 </script>
 </body>
 </html>
