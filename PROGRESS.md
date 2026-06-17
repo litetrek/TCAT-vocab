@@ -291,6 +291,26 @@ See `.env.example` for the full list with placeholder values.
 - **Fix**: Added `extLoadDocumentList()` to the page init block (alongside `loadTerms()`).
 - No other startup gap found: `extPopulateSources()` is already called by `loadTerms()` internally; `extFetchKnownTerms()` is correctly triggered only when a document is opened.
 
+### Extraction Enhancement — Two-Tone Term Highlighting (2026-06-17)
+- Terms highlighted in the Chinese panel now use two distinct colors:
+  - **Blue** underline + background tint (`.term-known.term-has-known`): term already has a Known Translation recorded
+  - **Gold** underline + background tint (`.term-known`): term is in the database but has no Known Translation yet
+- Implemented by storing `hasKnown: !!term.trans_known` on each segment in `extHighlightKnownTerms()` and applying the extra class conditionally
+
+### Extraction Enhancement — English Panel Highlighting (2026-06-17)
+- Corresponding translation phrases are now highlighted in the English panel to match the Chinese panel
+- `extHighlightKnownTerms()` refactored to return `{ html, segs }` (was plain string); `segs` carries each matched term's best translation phrase (`trans_known` → `trans1` fallback) and `hasKnown` flag
+- New `extHighlightEnglishTerms(text, segs)` function: same greedy longest-match-first algorithm as Chinese; searches for each phrase verbatim in the English text; skips phrases not found (no false highlights)
+- English panel switched from `textContent` to `innerHTML`
+- Same color coding as Chinese: blue for `trans_known` phrases, gold for `trans1` phrases
+
+### Extraction Enhancement — Fixed-Height Scrollable Panels (2026-06-17)
+- Chinese and English panels now have a fixed default height (520px) instead of expanding with content
+- Each panel scrolls vertically within its fixed height (`overflow-y: auto` on `.ext-panel-text`)
+- User can drag the resize handle (bottom-right corner of each panel) to make it taller or shorter (`resize: vertical` on `.ext-panel`)
+- Panel label row stays fixed at top; only the text content scrolls (`display: flex; flex-direction: column` layout)
+- Minimum height 160px prevents panels from being collapsed to nothing
+
 ---
 
 ## Known Issues / Notes
