@@ -351,6 +351,10 @@
     .ext-doc-info { flex: 1; min-width: 0; }
     .ext-doc-title { font-family: 'EB Garamond', serif; font-size: 1rem; color: var(--ink); }
     .ext-doc-meta { font-size: 0.82rem; color: var(--text-soft); margin-top: 0.15rem; }
+    .ext-working-header { display: flex; align-items: baseline; gap: 1rem; margin-bottom: 1.25rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border); }
+    .ext-working-label { font-family: 'Cormorant Garamond', serif; font-size: 1rem; font-style: italic; color: var(--text-soft); flex: 1; }
+    .btn-ext-switch { background: none; border: none; cursor: pointer; font-family: 'EB Garamond', serif; font-size: 0.88rem; color: var(--text-soft); padding: 0; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
+    .btn-ext-switch:hover { color: var(--ink); }
 
     /* ── RESPONSIVE @ 768px ─────────────────────────────────────────────── */
     @media (max-width: 768px) {
@@ -531,69 +535,84 @@
       <h1 class="main-title">Text <span>Extraction</span></h1>
     </div>
 
-    <div id="ext-doc-list" class="ext-doc-list-section" style="display:none;">
-      <div class="ext-doc-list-title">Previously Uploaded</div>
-      <div id="ext-doc-list-inner"></div>
-    </div>
+    <!-- ── PICKER VIEW ────────────────────────────────────────────────────── -->
+    <div id="ext-picker">
 
-    <div class="ext-source-row">
-      <label for="ext-source-select">Book / Source title</label>
-      <select class="ext-select" id="ext-source-select" onchange="extOnSourceChange()">
-        <option value="">— Select source —</option>
-      </select>
-      <button class="btn btn-secondary btn-sm" id="ext-title-toggle" data-mode="select" onclick="extToggleTitle()">Or type a title</button>
-      <input class="ext-title-input" id="ext-title-input" type="text" placeholder="Type a book or source title…" style="display:none;" oninput="extSourceTitle=this.value.trim()">
-    </div>
-
-    <div class="ext-source-row" style="margin-bottom:1.25rem;">
-      <label for="ext-chapter-input">Chapter / part label</label>
-      <input class="ext-chapter-input" id="ext-chapter-input" type="text" placeholder="e.g. Chapter 3 (optional)">
-    </div>
-
-    <div class="ext-file-row">
-      <div class="ext-file-field">
-        <label for="ext-file-zh">Chinese text file</label>
-        <input type="file" id="ext-file-zh" accept=".txt">
+      <div id="ext-doc-list" class="ext-doc-list-section" style="display:none;">
+        <div class="ext-doc-list-title">Previously Uploaded</div>
+        <div id="ext-doc-list-inner"></div>
       </div>
-      <div class="ext-file-field">
-        <label for="ext-file-en">English text file</label>
-        <input type="file" id="ext-file-en" accept=".txt">
+
+      <div class="ext-source-row">
+        <label for="ext-source-select">Book / Source title</label>
+        <select class="ext-select" id="ext-source-select" onchange="extOnSourceChange()">
+          <option value="">— Select source —</option>
+        </select>
+        <button class="btn btn-secondary btn-sm" id="ext-title-toggle" data-mode="select" onclick="extToggleTitle()">Or type a title</button>
+        <input class="ext-title-input" id="ext-title-input" type="text" placeholder="Type a book or source title…" style="display:none;" oninput="extSourceTitle=this.value.trim()">
       </div>
-      <button class="btn btn-primary" id="ext-load-btn" onclick="extLoadParagraphs()">Load Paragraphs</button>
-    </div>
 
-    <div id="ext-error" class="ext-error-banner" style="display:none;"></div>
+      <div class="ext-source-row" style="margin-bottom:1.25rem;">
+        <label for="ext-chapter-input">Chapter / part label</label>
+        <input class="ext-chapter-input" id="ext-chapter-input" type="text" placeholder="e.g. Chapter 3 (optional)">
+      </div>
 
-    <div id="ext-viewer" style="display:none;">
-      <div class="ext-nav-bar ext-nav-bar-top">
-        <button class="btn btn-secondary btn-sm" id="ext-prev-top" onclick="extNavigate(-1)">‹ Prev</button>
-        <span class="ext-nav-label" id="ext-nav-label-top">Paragraph 1 of 1</span>
-        <button class="btn btn-secondary btn-sm" id="ext-next-top" onclick="extNavigate(1)">Next ›</button>
-        <div class="ext-jump-wrap">
-          <input class="ext-jump-input" type="number" id="ext-jump-input-top" min="1" placeholder="§" title="Jump to paragraph">
-          <button class="btn btn-secondary btn-sm" onclick="extJumpFrom('ext-jump-input-top')">Go</button>
+      <div class="ext-file-row">
+        <div class="ext-file-field">
+          <label for="ext-file-zh">Chinese text file</label>
+          <input type="file" id="ext-file-zh" accept=".txt">
+        </div>
+        <div class="ext-file-field">
+          <label for="ext-file-en">English text file</label>
+          <input type="file" id="ext-file-en" accept=".txt">
+        </div>
+        <button class="btn btn-primary" id="ext-load-btn" onclick="extLoadParagraphs()">Load Paragraphs</button>
+      </div>
+
+      <div id="ext-error" class="ext-error-banner" style="display:none;"></div>
+
+    </div><!-- #ext-picker -->
+
+    <!-- ── WORKING VIEW ───────────────────────────────────────────────────── -->
+    <div id="ext-working" style="display:none;">
+
+      <div class="ext-working-header">
+        <span id="ext-working-label" class="ext-working-label"></span>
+        <button class="btn-ext-switch" onclick="extSwitchDocument()">↩ Switch document</button>
+      </div>
+
+      <div id="ext-viewer">
+        <div class="ext-nav-bar ext-nav-bar-top">
+          <button class="btn btn-secondary btn-sm" id="ext-prev-top" onclick="extNavigate(-1)">‹ Prev</button>
+          <span class="ext-nav-label" id="ext-nav-label-top">Paragraph 1 of 1</span>
+          <button class="btn btn-secondary btn-sm" id="ext-next-top" onclick="extNavigate(1)">Next ›</button>
+          <div class="ext-jump-wrap">
+            <input class="ext-jump-input" type="number" id="ext-jump-input-top" min="1" placeholder="§" title="Jump to paragraph">
+            <button class="btn btn-secondary btn-sm" onclick="extJumpFrom('ext-jump-input-top')">Go</button>
+          </div>
+        </div>
+        <div class="ext-panels">
+          <div class="ext-panel">
+            <div class="ext-panel-label">Chinese</div>
+            <div class="ext-panel-text ext-panel-text-zh" id="ext-text-zh"></div>
+          </div>
+          <div class="ext-panel">
+            <div class="ext-panel-label">English</div>
+            <div class="ext-panel-text ext-panel-text-en" id="ext-text-en"></div>
+          </div>
+        </div>
+        <div class="ext-nav-bar">
+          <button class="btn btn-secondary btn-sm" id="ext-prev" onclick="extNavigate(-1)">‹ Prev</button>
+          <span class="ext-nav-label" id="ext-nav-label">Paragraph 1 of 1</span>
+          <button class="btn btn-secondary btn-sm" id="ext-next" onclick="extNavigate(1)">Next ›</button>
+          <div class="ext-jump-wrap">
+            <input class="ext-jump-input" type="number" id="ext-jump-input" min="1" placeholder="§" title="Jump to paragraph">
+            <button class="btn btn-secondary btn-sm" onclick="extJumpFrom('ext-jump-input')">Go</button>
+          </div>
         </div>
       </div>
-      <div class="ext-panels">
-        <div class="ext-panel">
-          <div class="ext-panel-label">Chinese</div>
-          <div class="ext-panel-text ext-panel-text-zh" id="ext-text-zh"></div>
-        </div>
-        <div class="ext-panel">
-          <div class="ext-panel-label">English</div>
-          <div class="ext-panel-text ext-panel-text-en" id="ext-text-en"></div>
-        </div>
-      </div>
-      <div class="ext-nav-bar">
-        <button class="btn btn-secondary btn-sm" id="ext-prev" onclick="extNavigate(-1)">‹ Prev</button>
-        <span class="ext-nav-label" id="ext-nav-label">Paragraph 1 of 1</span>
-        <button class="btn btn-secondary btn-sm" id="ext-next" onclick="extNavigate(1)">Next ›</button>
-        <div class="ext-jump-wrap">
-          <input class="ext-jump-input" type="number" id="ext-jump-input" min="1" placeholder="§" title="Jump to paragraph">
-          <button class="btn btn-secondary btn-sm" onclick="extJumpFrom('ext-jump-input')">Go</button>
-        </div>
-      </div>
-    </div>
+
+    </div><!-- #ext-working -->
   </div>
 </div>
 
@@ -744,6 +763,7 @@
   let extCurrentIndex  = 0;
   let extSourceTitle   = '';
   let extDocumentId    = null;
+  let extDocumentsCache = {};
 
   const PICK_LABELS ={ Translation1:'AI Translate 1', Translation2:'AI Translate 2', Translation3:'AI Translate 3', TranslationKnown:'Known', TranslationOther1:'Suggested 1', TranslationOther2:'Suggested 2' };
   const FIELD_TO_TERM_KEY = { trans1:'Translation1', trans2:'Translation2', trans3:'Translation3', trans_known:'TranslationKnown', trans_other1:'TranslationOther1', trans_other2:'TranslationOther2' };
@@ -1641,6 +1661,25 @@
     }
   }
 
+  // ── EXTRACTION VIEW TOGGLES ──────────────────────────────────────────────
+  function extShowPicker() {
+    document.getElementById('ext-picker').style.display  = '';
+    document.getElementById('ext-working').style.display = 'none';
+  }
+
+  function extShowWorking(sourceName, title) {
+    const parts = [sourceName, title].filter(Boolean);
+    const label = parts.length ? `Working on: ${parts.join(' — ')}` : 'Working on: untitled document';
+    document.getElementById('ext-working-label').textContent = label;
+    document.getElementById('ext-picker').style.display  = 'none';
+    document.getElementById('ext-working').style.display = '';
+  }
+
+  function extSwitchDocument() {
+    extShowPicker();
+    extLoadDocumentList();
+  }
+
   // ── EXTRACTION FUNCTIONS ─────────────────────────────────────────────────
   function extPopulateSources() {
     const sel = document.getElementById('ext-source-select');
@@ -1699,9 +1738,9 @@
       extDocumentId   = data.document_id;
       extParagraphs   = data.paragraphs;
       extCurrentIndex = 0;
-      document.getElementById('ext-viewer').style.display = '';
       extRenderParagraph();
       extLoadDocumentList();
+      extShowWorking(extSourceTitle, (document.getElementById('ext-chapter-input').value || '').trim());
     } catch(e) {
       extShowError('Failed to upload files. Please try again.');
     } finally {
@@ -1779,6 +1818,9 @@
     const inner   = document.getElementById('ext-doc-list-inner');
     if (!docs || !docs.length) { section.style.display = 'none'; return; }
 
+    extDocumentsCache = {};
+    for (const doc of docs) { extDocumentsCache[doc.DocumentID] = doc; }
+
     const groups = {};
     for (const doc of docs) {
       const key = doc.SourceName || '(No book title)';
@@ -1822,9 +1864,9 @@
       extDocumentId   = documentId;
       extParagraphs   = data.paragraphs;
       extCurrentIndex = Math.max(0, Math.min(data.last_viewed_index, data.paragraphs.length - 1));
-      document.getElementById('ext-viewer').style.display = '';
       extRenderParagraph();
-      document.getElementById('ext-viewer').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const doc = extDocumentsCache[documentId] || {};
+      extShowWorking(doc.SourceName || '', doc.Title || '');
     } catch(e) {
       showToast('⚠ Failed to resume document');
     }
