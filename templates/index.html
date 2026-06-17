@@ -336,6 +336,7 @@
     .ext-panel-text-zh { font-family: 'Noto Serif TC', serif; font-size: 1.15rem; }
     .ext-panel-text-en { font-family: 'EB Garamond', serif; font-size: 1.2rem; }
     .ext-nav-bar { display: flex; align-items: center; gap: 0.75rem; padding: 0.85rem 0; flex-wrap: wrap; border-top: 1px solid var(--border); margin-top: 1.25rem; }
+    .ext-nav-bar-top { border-top: none; border-bottom: 1px solid var(--border); margin-top: 0; margin-bottom: 1.25rem; }
     .ext-nav-label { font-family: 'Cormorant Garamond', serif; font-size: 1rem; font-style: italic; color: var(--text-soft); flex: 1; text-align: center; white-space: nowrap; }
     .ext-jump-wrap { display: flex; align-items: center; gap: 0.4rem; }
     .ext-jump-input { font-family: 'EB Garamond', serif; font-size: 0.95rem; padding: 0.28rem 0.5rem; border: 1px solid rgba(26,18,8,0.2); border-radius: 3px; background: rgba(255,255,255,0.8); color: var(--text); width: 70px; text-align: center; }
@@ -544,6 +545,15 @@
     <div id="ext-error" class="ext-error-banner" style="display:none;"></div>
 
     <div id="ext-viewer" style="display:none;">
+      <div class="ext-nav-bar ext-nav-bar-top">
+        <button class="btn btn-secondary btn-sm" id="ext-prev-top" onclick="extNavigate(-1)">‹ Prev</button>
+        <span class="ext-nav-label" id="ext-nav-label-top">Paragraph 1 of 1</span>
+        <button class="btn btn-secondary btn-sm" id="ext-next-top" onclick="extNavigate(1)">Next ›</button>
+        <div class="ext-jump-wrap">
+          <input class="ext-jump-input" type="number" id="ext-jump-input-top" min="1" placeholder="§" title="Jump to paragraph">
+          <button class="btn btn-secondary btn-sm" onclick="extJumpFrom('ext-jump-input-top')">Go</button>
+        </div>
+      </div>
       <div class="ext-panels">
         <div class="ext-panel">
           <div class="ext-panel-label">Chinese</div>
@@ -560,7 +570,7 @@
         <button class="btn btn-secondary btn-sm" id="ext-next" onclick="extNavigate(1)">Next ›</button>
         <div class="ext-jump-wrap">
           <input class="ext-jump-input" type="number" id="ext-jump-input" min="1" placeholder="§" title="Jump to paragraph">
-          <button class="btn btn-secondary btn-sm" onclick="extJump()">Go</button>
+          <button class="btn btn-secondary btn-sm" onclick="extJumpFrom('ext-jump-input')">Go</button>
         </div>
       </div>
     </div>
@@ -1683,14 +1693,21 @@
     if (!extParagraphs.length) return;
     const para  = extParagraphs[extCurrentIndex];
     const total = extParagraphs.length;
-    document.getElementById('ext-text-zh').textContent  = para.chinese;
-    document.getElementById('ext-text-en').textContent  = para.english;
-    document.getElementById('ext-nav-label').textContent = `Paragraph ${extCurrentIndex + 1} of ${total}`;
-    document.getElementById('ext-prev').disabled = extCurrentIndex === 0;
-    document.getElementById('ext-next').disabled = extCurrentIndex === total - 1;
-    const jump = document.getElementById('ext-jump-input');
-    jump.max   = total;
-    jump.value = '';
+    const label = `Paragraph ${extCurrentIndex + 1} of ${total}`;
+    const atFirst = extCurrentIndex === 0;
+    const atLast  = extCurrentIndex === total - 1;
+    document.getElementById('ext-text-zh').textContent         = para.chinese;
+    document.getElementById('ext-text-en').textContent         = para.english;
+    document.getElementById('ext-nav-label').textContent       = label;
+    document.getElementById('ext-nav-label-top').textContent   = label;
+    document.getElementById('ext-prev').disabled               = atFirst;
+    document.getElementById('ext-next').disabled               = atLast;
+    document.getElementById('ext-prev-top').disabled           = atFirst;
+    document.getElementById('ext-next-top').disabled           = atLast;
+    ['ext-jump-input', 'ext-jump-input-top'].forEach(id => {
+      const el = document.getElementById(id);
+      el.max = total; el.value = '';
+    });
   }
 
   function extNavigate(delta) {
@@ -1700,8 +1717,8 @@
     extRenderParagraph();
   }
 
-  function extJump() {
-    const input = document.getElementById('ext-jump-input');
+  function extJumpFrom(inputId) {
+    const input = document.getElementById(inputId);
     const n     = parseInt(input.value, 10);
     if (isNaN(n) || n < 1 || n > extParagraphs.length) {
       showToast('⚠ Invalid paragraph number');
