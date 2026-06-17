@@ -357,6 +357,8 @@
     .btn-ext-switch:hover { color: var(--ink); }
     .term-known { background: rgba(201,168,76,0.18); border-bottom: 1.5px solid rgba(201,168,76,0.65); border-radius: 1px; cursor: default; }
     .term-known:hover { background: rgba(201,168,76,0.32); }
+    .term-known.term-has-known { background: rgba(70,130,180,0.12); border-bottom: 1.5px solid rgba(70,130,180,0.7); }
+    .term-known.term-has-known:hover { background: rgba(70,130,180,0.22); }
     #ext-candidate-panel { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(26,18,8,0.45); z-index: 500; display: flex; align-items: center; justify-content: center; }
     .ext-term-modal { background: white; border: 1px solid var(--border); border-radius: 4px; padding: 1.5rem 1.75rem; box-shadow: 0 8px 32px rgba(26,18,8,0.22); min-width: 300px; max-width: 520px; width: 90vw; max-height: 80vh; overflow-y: auto; }
     .ext-candidate-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.9rem; gap: 1rem; }
@@ -1945,7 +1947,7 @@
         }
         if (!overlap) {
           const tip = term.trans_known || term.trans1 || '';
-          segs.push({ start: idx, end: idx + ch.length, termId: term.id, ch, tip });
+          segs.push({ start: idx, end: idx + ch.length, termId: term.id, ch, tip, hasKnown: !!term.trans_known });
           for (let i = idx; i < idx + ch.length; i++) claimed[i] = 1;
         }
         pos = idx + 1;
@@ -1958,7 +1960,7 @@
     let html = '', cursor = 0;
     for (const s of segs) {
       if (cursor < s.start) html += escHtml(text.slice(cursor, s.start));
-      html += `<span class="term-known" data-term-id="${escHtml(s.termId)}" title="${escHtml(s.tip)}">${escHtml(s.ch)}</span>`;
+      html += `<span class="term-known${s.hasKnown ? ' term-has-known' : ''}" data-term-id="${escHtml(s.termId)}" title="${escHtml(s.tip)}">${escHtml(s.ch)}</span>`;
       cursor = s.end;
     }
     if (cursor < len) html += escHtml(text.slice(cursor));
