@@ -7,6 +7,50 @@ import sheets
 logger = logging.getLogger(__name__)
 
 
+def _v(row, key):
+    val = row.get(key)
+    return val if val is not None else ""
+
+
+def _fmt_ts(val):
+    if not val:
+        return ""
+    s = str(val).replace("T", " ")
+    if "+" in s:
+        s = s[:s.index("+")]
+    if "." in s:
+        s = s[:s.index(".")]
+    return s[:16]
+
+
+def get_term_audit(term_id):
+    """Return audit entries for a term in the existing frontend CamelCase shape."""
+    result = (
+        supabase.table("audit_log")
+        .select("*")
+        .eq("term_id", term_id)
+        .order("timestamp", desc=True)
+        .execute()
+    )
+    entries = []
+    for r in result.data:
+        audit_id = _v(r, "legacy_audit_id") or f"A{r.get('id', '')}"
+        entries.append({
+            "AuditID":     audit_id,
+            "Timestamp":   _fmt_ts(_v(r, "timestamp")),
+            "TermID":      _v(r, "term_id"),
+            "TermChinese": _v(r, "term_chinese"),
+            "UserEmail":   _v(r, "user_email"),
+            "UserName":    _v(r, "user_name"),
+            "ActionType":  _v(r, "action_type"),
+            "FieldChanged": _v(r, "field_changed"),
+            "OldValue":    _v(r, "old_value"),
+            "NewValue":    _v(r, "new_value"),
+            "Details":     _v(r, "details"),
+        })
+    return entries
+
+
 def write_audit(term_id, term_chinese, user_email, user_name, action_type,
                 field_changed="", old_value="", new_value="", details=""):
     """

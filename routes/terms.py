@@ -6,8 +6,7 @@ from config import (
     FIELD_LABELS, VOTE_LABELS, VOTE_KEY_TO_COL_KEY,
     normalize_translation, strip_tone_marks,
 )
-from sheets import get_audit_sheet
-from repositories.audit_repo import write_audit
+from repositories.audit_repo import write_audit, get_term_audit
 from repositories import terms_repo
 from ai import generate_term_data, generate_missing_translations
 from auth import is_logged_in, is_leader, can_create_term, can_edit_existing
@@ -341,9 +340,6 @@ def api_get_audit(term_id):
     if not is_logged_in():
         return jsonify({"error": "Unauthorized"}), 401
     try:
-        rows    = get_audit_sheet().get_all_records()
-        entries = [r for r in rows if r.get("TermID") == term_id]
-        entries.sort(key=lambda x: x.get("Timestamp", ""), reverse=True)
-        return jsonify(entries)
+        return jsonify(get_term_audit(term_id))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
