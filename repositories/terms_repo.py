@@ -149,6 +149,14 @@ def _next_id():
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+def find_by_chinese(chinese_text):
+    """Return term in Sheets CamelCase format matching the Chinese text, or None."""
+    result = supabase.table("terms").select("*").eq("chinese", chinese_text).limit(1).execute()
+    if not result.data:
+        return None
+    return _row_to_sheets_fmt(result.data[0])
+
+
 def list_terms():
     # Supabase paginates at 1000 rows by default; fetch all pages.
     all_rows = []

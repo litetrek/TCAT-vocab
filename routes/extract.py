@@ -3,13 +3,8 @@ from datetime import datetime
 from flask import Blueprint, jsonify, request, session
 from auth import is_logged_in, can_create_term, can_edit_existing
 from ai import find_known_translation, generate_term_data
-from config import COL, FIELD_LABELS, strip_tone_marks
-from sheets import (
-    get_terms_sheet,
-    get_extraction_documents_sheet,
-    get_extraction_paragraphs_sheet,
-    next_doc_id, next_term_id,
-)
+from config import FIELD_LABELS, strip_tone_marks
+from repositories import terms_repo, extraction_repo
 from repositories.audit_repo import write_audit
 
 extract_bp = Blueprint('extract', __name__)
@@ -37,20 +32,21 @@ def api_extract_known_terms():
     if not is_logged_in():
         return jsonify({"error": "Unauthorized"}), 401
     try:
-        rows = get_terms_sheet().get_all_records()
-        result = []
-        for r in rows:
-            result.append({
-                "id":          r.get("ID",               ""),
-                "chinese":     r.get("Chinese",          ""),
-                "pinyin":      r.get("Pinyin",           ""),
-                "pali":        r.get("Pali",             ""),
-                "sanskrit":    r.get("Sanskrit",         ""),
-                "trans_known": r.get("TranslationKnown", ""),
-                "trans1":      r.get("Translation1",     ""),
-                "trans2":      r.get("Translation2",     ""),
-                "trans3":      r.get("Translation3",     ""),
-            })
+        all_terms = terms_repo.list_terms()
+        result = [
+            {
+                "id":          t.get("id",          ""),
+                "chinese":     t.get("chinese",     ""),
+                "pinyin":      t.get("pinyin",      ""),
+                "pali":        t.get("pali",        ""),
+                "sanskrit":    t.get("sanskrit",    ""),
+                "trans_known": t.get("trans_known", ""),
+                "trans1":      t.get("trans1",      ""),
+                "trans2":      t.get("trans2",      ""),
+                "trans3":      t.get("trans3",      ""),
+            }
+            for t in all_terms
+        ]
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -113,48 +109,42 @@ def api_extract_save():
     if not chinese_term:
         return jsonify({"error": "chinese_term is required"}), 400
     try:
-        ts       = get_terms_sheet()
-        all_rows = ts.get_all_values()
-        # Server-side existence check — find by Chinese column (col 2, index 1)
-        existing_row_num     = None
-        existing_term_id     = ""
-        existing_trans_known = ""
-        existing_chinese     = ""
-        for i, row in enumerate(all_rows):
-            if i == 0:
-                continue
-            if len(row) >= 2 and row[1].strip() == chinese_term:
-                existing_row_num     = i + 1   # 1-based for gspread
-                existing_term_id     = row[0]
-                existing_chinese     = row[COL["chinese"] - 1]
-                existing_trans_known = row[COL["trans_known"] - 1] if len(row) >= COL["trans_known"] else ""
-                break
-
+        existing = terms_repo.find_by_chinese(chinese_term)
         now_str    = datetime.now().strftime("%Y-%m-%d %H:%M")
         user_email = session["user_email"]
         user_name  = session.get("user_name", "")
 
-        if existing_row_num is None:
+        if existing is None:
             # ── INSERT path ──
             if not can_create_term():
                 return jsonify({"error": "You need Depositor access or higher to add new terms"}), 403
-            term_id = next_term_id(ts)
-            ts.append_row([
-                term_id, chinese_term,
-                pinyin, pali, sanskrit,
-                "", "",                  # Context, Category
-                "",                      # Notes
-                translation1, translation2, translation3,
-                "", "pending",           # Final, Status
-                user_email, now_str,     # AddedBy, Timestamp
-                known_translation,       # TranslationKnown
-                source_name,             # Source
-                "", "", "", "",          # TranslationFirst/Second, Other1/2
-                user_email, now_str,     # LastModifiedBy, LastModifiedTime
-                strip_tone_marks(pinyin),
-                src_zh,
-                src_en,
-            ])
+            term_id = terms_repo.create_term({
+                "chinese":      chinese_term,
+                "pinyin":       pinyin,
+                "pali":         pali,
+                "sanskrit":     sanskrit,
+                "context":      "",
+                "category":     "",
+                "notes":        "",
+                "translation_1": translation1,
+                "translation_2": translation2,
+                "translation_3": translation3,
+                "final":        "",
+                "status":       "pending",
+                "added_by":     user_email,
+                "created_at":   now_str,
+                "translation_known":   known_translation,
+                "source":              source_name,
+                "translation_first":   "",
+                "translation_second":  "",
+                "translation_other_1": "",
+                "translation_other_2": "",
+                "last_modified_by":    user_email,
+                "last_modified_at":    now_str,
+                "romanization_plain":  strip_tone_marks(pinyin),
+                "source_content_chinese": src_zh,
+                "source_content_english": src_en,
+            })
             write_audit(term_id, chinese_term, user_email, user_name,
                         "created", details=f"Term created via Extraction (Pinyin={pinyin})")
             return jsonify({"path": "insert", "id": term_id})
@@ -162,9 +152,11 @@ def api_extract_save():
             # ── UPDATE path — only TranslationKnown + LastModified ──
             if not can_edit_existing():
                 return jsonify({"error": "You need Member access or higher to update an existing term"}), 403
-            ts.update_cell(existing_row_num, COL["trans_known"],        known_translation)
-            ts.update_cell(existing_row_num, COL["last_modified_by"],   user_email)
-            ts.update_cell(existing_row_num, COL["last_modified_time"], now_str)
+            existing_term_id     = existing.get("ID", "")
+            existing_chinese     = existing.get("Chinese", "")
+            existing_trans_known = existing.get("TranslationKnown", "")
+            terms_repo.update_term_field(existing_term_id, "trans_known",
+                                         known_translation, user_email, now_str)
             write_audit(existing_term_id, existing_chinese, user_email, user_name,
                         "updated",
                         field_changed=FIELD_LABELS.get("trans_known", "trans_known"),
@@ -217,32 +209,17 @@ def api_extract_documents_post():
             )
         }), 400
 
-    title       = (request.form.get("title") or "").strip()
+    title       = (request.form.get("title")       or "").strip()
     source_name = (request.form.get("source_name") or "").strip()
     uploaded_by = session.get("user_email", "")
     uploaded_at = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     try:
-        doc_sheet  = get_extraction_documents_sheet()
-        para_sheet = get_extraction_paragraphs_sheet()
-    except Exception:
-        return jsonify({"error": "Extraction worksheets not found. An admin must click ⚙ Init Sheets to create them."}), 500
-
-    try:
-        doc_id = next_doc_id(doc_sheet)
-
-        doc_sheet.append_row([
-            doc_id, title, source_name, len(zh_paras),
-            uploaded_by, uploaded_at, 0, "active",
-        ])
-
-        para_rows = [
-            [doc_id, i, zh_paras[i], en_paras[i]]
-            for i in range(len(zh_paras))
-        ]
-        para_sheet.append_rows(para_rows, value_input_option="RAW")
+        doc_id = extraction_repo.create_document(
+            title, source_name, zh_paras, en_paras, uploaded_by, uploaded_at
+        )
     except Exception as e:
-        return jsonify({"error": f"Failed to save to Google Sheets: {e}"}), 500
+        return jsonify({"error": f"Failed to save document: {e}"}), 500
 
     paragraphs = [
         {"index": i, "chinese": zh_paras[i], "english": en_paras[i]}
@@ -255,11 +232,8 @@ def api_extract_documents_post():
 def api_extract_documents_get():
     if not is_logged_in():
         return jsonify({"error": "Unauthorized"}), 401
-
     try:
-        rows = get_extraction_documents_sheet().get_all_records()
-        rows.sort(key=lambda r: (r.get("SourceName", ""), r.get("Title", "")))
-        return jsonify(rows)
+        return jsonify(extraction_repo.list_documents())
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -268,31 +242,11 @@ def api_extract_documents_get():
 def api_extract_paragraphs_get(document_id):
     if not is_logged_in():
         return jsonify({"error": "Unauthorized"}), 401
-
     try:
-        doc_sheet  = get_extraction_documents_sheet()
-        para_sheet = get_extraction_paragraphs_sheet()
-
-        doc_rows = doc_sheet.get_all_records()
-        doc = next((r for r in doc_rows if r.get("DocumentID") == document_id), None)
-        if doc is None:
+        result = extraction_repo.get_paragraphs(document_id)
+        if result is None:
             return jsonify({"error": "Document not found"}), 404
-
-        last_viewed_index = int(doc.get("LastViewedIndex", 0) or 0)
-
-        all_paras = para_sheet.get_all_records()
-        paras = [r for r in all_paras if r.get("DocumentID") == document_id]
-        paras.sort(key=lambda r: int(r.get("ParagraphIndex", 0)))
-
-        paragraphs = [
-            {
-                "index": int(p["ParagraphIndex"]),
-                "chinese": p.get("ChineseText", ""),
-                "english": p.get("EnglishText", ""),
-            }
-            for p in paras
-        ]
-        return jsonify({"paragraphs": paragraphs, "last_viewed_index": last_viewed_index})
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -307,19 +261,8 @@ def api_extract_document_patch(document_id):
         return jsonify({"error": "last_viewed_index is required"}), 400
 
     try:
-        sheet     = get_extraction_documents_sheet()
-        all_rows  = sheet.get_all_values()
-        if len(all_rows) <= 1:
+        if not extraction_repo.update_last_viewed_index(document_id, data["last_viewed_index"]):
             return jsonify({"error": "Document not found"}), 404
-
-        header  = all_rows[0]
-        lvi_col = header.index("LastViewedIndex") + 1  # 1-based for gspread
-
-        for row_num, row in enumerate(all_rows[1:], start=2):
-            if row[0] == document_id:
-                sheet.update_cell(row_num, lvi_col, data["last_viewed_index"])
-                return jsonify({"ok": True})
-
-        return jsonify({"error": "Document not found"}), 404
+        return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
