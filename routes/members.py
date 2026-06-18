@@ -1,8 +1,8 @@
 from flask import Blueprint, jsonify, request, session
 from datetime import datetime
 
-from config import VALID_ROLES, MCOL, SUPER_ADMIN_EMAIL
-from sheets import get_members_sheet
+from config import VALID_ROLES, SUPER_ADMIN_EMAIL
+from repositories import members_repo
 from auth import is_logged_in, is_admin
 
 members_bp = Blueprint('members', __name__)
@@ -13,7 +13,7 @@ def api_get_members():
     if not is_logged_in() or not is_admin():
         return jsonify({"error": "Admin only"}), 403
     try:
-        return jsonify(get_members_sheet().get_all_records())
+        return jsonify(members_repo.list_members())
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -24,7 +24,7 @@ def api_members_directory():
     if not is_logged_in():
         return jsonify({"error": "Unauthorized"}), 401
     try:
-        rows   = get_members_sheet().get_all_records()
+        rows   = members_repo.list_members()
         result = [{"email": r.get("Email",""), "name": r.get("Name",""), "short_name": r.get("ShortName","")} for r in rows]
         return jsonify(result)
     except Exception as e:
@@ -45,11 +45,10 @@ def api_add_member():
     if role not in VALID_ROLES:
         return jsonify({"error": "Invalid role"}), 400
     try:
-        ms = get_members_sheet()
-        if any(r.get("Email", "").lower() == email for r in ms.get_all_records()):
+        if members_repo.member_exists(email):
             return jsonify({"error": "Email already exists"}), 409
-        ms.append_row([email, role, session["user_email"],
-                       datetime.now().strftime("%Y-%m-%d %H:%M"), name, short_name])
+        members_repo.add_member(email, role, session["user_email"],
+                                datetime.now().strftime("%Y-%m-%d %H:%M"), name, short_name)
         return jsonify({"status": "added"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -65,15 +64,9 @@ def api_remove_member():
     if email == SUPER_ADMIN_EMAIL.lower():
         return jsonify({"error": "Cannot remove super admin"}), 403
     try:
-        ms   = get_members_sheet()
-        rows = ms.get_all_values()
-        for i, row in enumerate(rows):
-            if i == 0:
-                continue
-            if row[0].lower() == email:
-                ms.delete_rows(i + 1)
-                return jsonify({"status": "removed"})
-        return jsonify({"error": "Member not found"}), 404
+        if not members_repo.remove_member(email):
+            return jsonify({"error": "Member not found"}), 404
+        return jsonify({"status": "removed"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -96,16 +89,8 @@ def api_update_member():
     if role is None and name is None and short_name is None:
         return jsonify({"error": "Nothing to update"}), 400
     try:
-        ms   = get_members_sheet()
-        rows = ms.get_all_values()
-        for i, row in enumerate(rows):
-            if i == 0:
-                continue
-            if row[0].lower() == email:
-                if role       is not None: ms.update_cell(i + 1, MCOL["role"],       role)
-                if name       is not None: ms.update_cell(i + 1, MCOL["name"],       name)
-                if short_name is not None: ms.update_cell(i + 1, MCOL["short_name"], short_name)
-                return jsonify({"status": "updated"})
-        return jsonify({"error": "Member not found"}), 404
+        if not members_repo.update_member(email, role=role, name=name, short_name=short_name):
+            return jsonify({"error": "Member not found"}), 404
+        return jsonify({"status": "updated"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

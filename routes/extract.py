@@ -8,8 +8,9 @@ from sheets import (
     get_terms_sheet,
     get_extraction_documents_sheet,
     get_extraction_paragraphs_sheet,
-    next_doc_id, next_term_id, write_audit,
+    next_doc_id, next_term_id,
 )
+from repositories.audit_repo import write_audit
 
 extract_bp = Blueprint('extract', __name__)
 

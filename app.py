@@ -4,7 +4,7 @@ from authlib.integrations.flask_client import OAuth
 import os
 
 from config import BASE_DIR, SUPER_ADMIN_EMAIL
-from sheets import lookup_member
+from repositories.members_repo import lookup_member
 from auth import is_logged_in, is_admin
 from routes.terms   import terms_bp
 from routes.members import members_bp
