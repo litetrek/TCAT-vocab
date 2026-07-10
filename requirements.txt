@@ -7,5 +7,4 @@ google-auth
 google-auth-oauthlib
 anthropic
 python-dotenv
-psycopg2-binary
 supabase

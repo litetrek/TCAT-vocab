@@ -90,7 +90,7 @@ buddhist-vocab/
 ## Supabase Database Schema (T0 target — 11 tables)
 
 **Project:** `TCAT-vocab` (id: `yvkadctkigkjtjmmxrqc`, region: us-west-1)
-**Connection:** pgBouncer pooled, port 6543, `DATABASE_URL` env var
+**Connection:** supabase-py HTTPS REST (port 443), `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` env vars
 
 All tables use `id bigint generated always as identity` as internal PK and a `display_id`
 text column (T000001 / D000001 / etc.) for human-facing IDs. Sequences are created for
@@ -162,9 +162,9 @@ See `.env.example` for the full list with placeholder values.
 | `GOOGLE_REDIRECT_URI` | OAuth callback URL (differs dev vs prod) |
 | `FLASK_ENV` | `development` or `production` |
 | `PORT` | Local dev port (unused in CGI mode) |
-| `DATABASE_URL` | **New** — pgBouncer pooled connection string, port 6543 (psycopg2 / migration scripts) |
-| `SUPABASE_URL` | Kept in .env (unused by app runtime; may be used by Supabase tooling) |
-| `SUPABASE_SERVICE_ROLE_KEY` | Kept in .env (unused by app runtime; may be used by Supabase tooling) |
+| `SUPABASE_URL` | **Required by Flask app** — supabase-py REST client (HTTPS port 443) |
+| `SUPABASE_SERVICE_ROLE_KEY` | **Required by Flask app** — service_role JWT, bypasses RLS (server-side only) |
+| `DATABASE_URL` | Local scripts only (`scripts/migrate_from_sheets.py`); NOT used by Flask app |
 
 ---
 
@@ -378,15 +378,20 @@ See `.env.example` for the full list with placeholder values.
 - **T0-2 驗收通過 — zero errors, zero skipped rows**
 
 ### T0-3 — Data Layer Rewrite (2026-07-09)
-- Rewrote `db.py`: removed supabase-py client; added `get_conn()` (psycopg2 + RealDictCursor) and `generate_display_id(cur, prefix, sequence_name)` (nextval-based, no race condition)
-- Rewrote all 5 repositories to use psycopg2 + DATABASE_URL; removed all Sheets mirror code
-- Column mapping in `terms_repo.py`: `translation_1/2/3` → `translation1/2/3`, `translation_other_1/2` → `translation_other1/2`, `created_at` → `added_at`, `term_id` → `display_id`; mapped transparently so `routes/` layer sees same key names as before
-- Column mapping in `extraction_repo.py`: table `extraction_documents` → `ext_documents`; `extraction_paragraphs` → `ext_paragraphs`; `document_id` text FK → bigint FK resolved internally via RETURNING id pattern
-- Column mapping in `audit_repo.py`: `timestamp` → `ts`; removed `legacy_audit_id` reference
-- Column mapping in `sources_repo.py`: `source_id` → `display_id`
-- **routes/ layer: zero changes** — all function signatures preserved, all return dict shapes unchanged
-- Local regression testing: all read and write paths verified (create/update/set_final/reset_final/update_translations/write_audit; members CRUD; sources add; extraction create_document + get_paragraphs + update_last_viewed_index)
-- Flask app starts clean, routes registered, OAuth redirect confirmed responding
+- **Connection method switched from psycopg2 TCP to supabase-py HTTPS REST** — GreenGeeks shared hosting blocks port 5432/6543; only HTTPS (443) works
+- Rewrote `db.py`: supabase-py `create_client()` using `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (service_role bypasses RLS; all 11 tables have RLS disabled)
+- Created `migrations/002_rpc_functions.sql`:
+  - `seq_sources_display` sequence (next → S000006)
+  - `NOT VALID` CHECK constraint on `audit_log.action_type` (skips legacy rows with non-standard action types)
+  - `next_display_id(p_prefix, p_seq_name)` — generates T000001 / D000001 / S000001 style IDs atomically
+  - `update_term_field_with_audit`, `set_final_with_audit`, `reset_final_with_audit` — atomic term + audit_log writes in one transaction
+  - `create_document_with_paragraphs` — atomic ext_documents + all ext_paragraphs in one transaction
+- Rewrote all 5 repositories to use supabase-py REST; removed all Sheets mirror code
+- `list_terms()`: paginated loop with `.range()` to bypass PostgREST 1000-row default limit (2844 rows require 3 pages)
+- `create_term()` / `add_source()` / `create_document()`: use `next_display_id` RPC for race-free display ID generation
+- `create_document()`: uses `create_document_with_paragraphs` RPC for atomic insert
+- Column mapping preserved: `routes/` layer zero changes; all function signatures and return dict shapes unchanged
+- RLS status: disabled on all 11 tables — service_role key required and used
 
 ---
 
@@ -408,12 +413,18 @@ See `.env.example` for the full list with placeholder values.
 |---|---|---|
 | **T0-1 Schema** | **Done** | 11 tables built in Supabase per design guide DDL |
 | **T0-2 Migration script** | **Done** | gspread → Postgres; 2844 terms + 5 other tables; Votes → CSV; sequences calibrated |
-| **T0-3 Data layer rewrite** | **Done** | db.py + all repositories rewritten to psycopg2; routes/ untouched |
-| **T0-4 Cutover** | **In Progress** | Clean migration done; pending: server pip install + DATABASE_URL + deploy + verify |
+| **T0-3 Data layer rewrite** | **Done** | db.py + all repositories rewritten to supabase-py HTTPS REST; routes/ untouched; RPC functions for atomicity |
+| **T0-4 Cutover** | **In Progress** | Code ready; pending: clean data migration → server pip install → production env vars → deploy → verify |
 | **T0-5 Cleanup** | Pending | Retire Sheets, weekly pg_dump backup, remove gspread from requirements |
 
 ## Next Steps
 
-- **T0-4**: Server steps remaining: (1) SSH to server → `venv310/bin/pip install psycopg2-binary`; (2) add DATABASE_URL to server `.env`; (3) push this commit to trigger Actions deploy; (4) run online verification checklist
+- **T0-4**: Server steps remaining:
+  1. Step 0 — TRUNCATE all data tables + re-run `scripts/migrate_from_sheets.py --force`; verify row counts match Sheets; confirm no test IDs
+  2. Step 1 — Freeze Sheets writes (coordinate with team)
+  3. Step 2 — SSH to GreenGeeks → `venv310/bin/pip install -r requirements.txt` (installs `supabase`; psycopg2-binary removed from requirements)
+  4. Step 3 — Add `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` to production `.env` (no `DATABASE_URL` needed in production)
+  5. Step 4 — Push to `main` to trigger Actions deploy; record rollback commit hash
+  6. Step 5 — Online verification checklist at https://app.cyber-tech.com
 - Update deploy action to Node.js 24 before Sep 2026 deprecation deadline
 - Confirm whether `venv/` on server can be removed (old virtual environment)
