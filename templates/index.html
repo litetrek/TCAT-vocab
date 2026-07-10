@@ -813,14 +813,15 @@
     function applyCollapsed(collapsed, save) {
       const {layout, sidebar, toggleBtn, showBtn} = els();
       if (collapsed) {
+        layout.style.gridTemplateColumns = '0 1fr';
         sidebar.classList.add('sb-hidden');
-        layout.classList.add('sidebar-hidden');
         if (showBtn)   showBtn.classList.add('visible');
         if (toggleBtn) toggleBtn.textContent = '›';
         if (toggleBtn) toggleBtn.title = 'Show panel';
       } else {
+        const savedW = localStorage.getItem(WKEY) || 210;
+        layout.style.gridTemplateColumns = savedW + 'px 1fr';
         sidebar.classList.remove('sb-hidden');
-        layout.classList.remove('sidebar-hidden');
         if (showBtn)   showBtn.classList.remove('visible');
         if (toggleBtn) toggleBtn.textContent = '‹';
         if (toggleBtn) toggleBtn.title = 'Hide panel';
