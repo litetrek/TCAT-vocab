@@ -532,7 +532,6 @@
       {% if is_admin %}
       <button class="btn btn-secondary" style="width:100%;margin-bottom:0.5rem;" onclick="openTeamModal()">☷ Team</button>
       <button class="btn btn-secondary" style="width:100%;margin-bottom:0.5rem;" onclick="openSourcesModal()">⊕ Sources</button>
-      <button class="btn btn-secondary" style="width:100%;margin-bottom:0.5rem;" onclick="initSheets()">⚙ Init Sheets</button>
       {% endif %}
     </div>
   </aside>
@@ -1655,14 +1654,6 @@
       const d = allDirectory.find(x => x.email.toLowerCase() === email.toLowerCase());
       if (d) d[field] = value;
     } catch(e) { showToast('⚠ Failed'); }
-  }
-
-  // ── INIT SHEETS ──────────────────────────────────────────────────────────
-  async function initSheets() {
-    if (!confirm('Initialize Google Sheets with headers? Only run once.')) return;
-    const res  = await fetch('/api/init', {method:'POST'});
-    const data = await res.json();
-    showToast(data.status || data.error);
   }
 
   // ── TOAST ────────────────────────────────────────────────────────────────

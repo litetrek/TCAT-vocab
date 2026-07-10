@@ -37,8 +37,8 @@ with a single click.
 buddhist-vocab/
 ├── app.py                      # Flask entry point, Google OAuth, route registration
 ├── config.py                   # Constants, sheet column maps, utility functions
-├── sheets.py                   # Google Sheets client (to be retired in T0-5)
-├── db.py                       # psycopg2 connection helpers: get_conn(), generate_display_id()
+├── archive/sheets.py.bak       # Google Sheets client — archived (T0-5); no longer imported by app
+├── db.py                       # supabase-py client: create_client() using SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
 ├── ai.py                       # Anthropic Claude AI generation (Pinyin, Pali, Sanskrit, translations)
 ├── auth.py                     # Session helpers: is_logged_in, is_admin, is_leader
 ├── routes/
@@ -393,6 +393,16 @@ See `.env.example` for the full list with placeholder values.
 - Column mapping preserved: `routes/` layer zero changes; all function signatures and return dict shapes unchanged
 - RLS status: disabled on all 11 tables — service_role key required and used
 
+### T0-5 — Sheets Retirement + Backup Schedule (2026-07-09)
+- Removed `gspread`, `google-auth`, `google-auth-oauthlib` from `requirements.txt` (production no longer needs them)
+- `sheets.py` moved to `archive/sheets.py.bak` — archived for reference, no longer imported
+- `routes/sources.py`: removed `from sheets import ensure_headers`; `/api/init` endpoint now returns retirement message instead of calling Sheets
+- `templates/index.html`: removed "Init Sheets" admin button and `initSheets()` JS function
+- `.env.example`: removed `SHEET_ID` (Sheets retired); `DATABASE_URL` noted as local scripts only
+- Created `.github/workflows/weekly_backup.yml`: `pg_dump` (custom format) every Sunday 00:00 UTC; stored as Actions artifact (90-day retention); `trans_revisions` noted as priority table
+- **Note on DATABASE_URL for backup**: Store in GitHub repo Secrets (not GreenGeeks .env). If pg_dump fails with pgBouncer transaction pooler (port 6543), switch secret to direct connection (port 5432): `postgresql://postgres:PASSWORD@db.yvkadctkigkjtjmmxrqc.supabase.co:5432/postgres`
+- **Pending manual steps**: Sheets CSV export → `backup/sheets_final_export_YYYYMMDD/`; GreenGeeks `.env` remove `SHEET_ID`; delete `credentials.json` from server; add `DATABASE_URL` to GitHub Secrets; trigger backup workflow once to verify
+
 ---
 
 ## Known Issues / Notes
@@ -414,17 +424,17 @@ See `.env.example` for the full list with placeholder values.
 | **T0-1 Schema** | **Done** | 11 tables built in Supabase per design guide DDL |
 | **T0-2 Migration script** | **Done** | gspread → Postgres; 2844 terms + 5 other tables; Votes → CSV; sequences calibrated |
 | **T0-3 Data layer rewrite** | **Done** | db.py + all repositories rewritten to supabase-py HTTPS REST; routes/ untouched; RPC functions for atomicity |
-| **T0-4 Cutover** | **In Progress** | Code ready; pending: clean data migration → server pip install → production env vars → deploy → verify |
-| **T0-5 Cleanup** | Pending | Retire Sheets, weekly pg_dump backup, remove gspread from requirements |
+| **T0-4 Cutover** | **Done** | supabase-py live in production; 2844 terms + all tables verified; extraction data re-migrated |
+| **T0-5 Cleanup** | **In Progress** | Code complete; pending: Sheets CSV export + GreenGeeks .env clean + credentials.json removal + backup workflow trigger |
 
 ## Next Steps
 
-- **T0-4**: Server steps remaining:
-  1. Step 0 — TRUNCATE all data tables + re-run `scripts/migrate_from_sheets.py --force`; verify row counts match Sheets; confirm no test IDs
-  2. Step 1 — Freeze Sheets writes (coordinate with team)
-  3. Step 2 — SSH to GreenGeeks → `venv310/bin/pip install -r requirements.txt` (installs `supabase`; psycopg2-binary removed from requirements)
-  4. Step 3 — Add `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` to production `.env` (no `DATABASE_URL` needed in production)
-  5. Step 4 — Push to `main` to trigger Actions deploy; record rollback commit hash
-  6. Step 5 — Online verification checklist at https://app.cyber-tech.com
+- **T0-5 remaining manual steps** (code already committed):
+  1. Export 7 Sheets worksheets as CSV → `backup/sheets_final_export_YYYYMMDD/` (do locally)
+  2. SSH to GreenGeeks: remove `SHEET_ID` from `.env`; do NOT add `DATABASE_URL`
+  3. SSH to GreenGeeks: delete `credentials.json`
+  4. Add `DATABASE_URL` (pgBouncer port 6543) to **GitHub repo Secrets** (for weekly backup)
+  5. Trigger `weekly_backup.yml` manually via GitHub Actions → verify backup artifact is non-empty
+  6. If pg_dump fails (pgBouncer transaction mode incompatibility), switch `DATABASE_URL` secret to direct connection string (port 5432): `postgresql://postgres:PASSWORD@db.yvkadctkigkjtjmmxrqc.supabase.co:5432/postgres`
+- **T1**: Translation module — `segmenter.py`, repositories for `trans_*` tables, AI translation pipeline (new prompt thread)
 - Update deploy action to Node.js 24 before Sep 2026 deprecation deadline
-- Confirm whether `venv/` on server can be removed (old virtual environment)

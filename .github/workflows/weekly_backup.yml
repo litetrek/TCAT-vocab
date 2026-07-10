@@ -1,0 +1,65 @@
+name: Weekly Database Backup
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'   # Sunday 00:00 UTC
+  workflow_dispatch: {}    # Allow manual trigger
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install PostgreSQL client
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Run pg_dump
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          BACKUP_FILE="tcat_backup_${TIMESTAMP}.dump"
+
+          # pg_dump with custom format (compressed, restorable with pg_restore)
+          # Note: uses DATABASE_URL — if this is the pgBouncer transaction pooler
+          # (port 6543) and pg_dump fails, switch DATABASE_URL to the direct
+          # connection string (port 5432) in GitHub Secrets.
+          pg_dump "$DATABASE_URL" \
+            --format=custom \
+            --no-acl \
+            --no-owner \
+            --file="$BACKUP_FILE"
+
+          SIZE=$(stat -c%s "$BACKUP_FILE")
+          echo "Backup file: $BACKUP_FILE  (${SIZE} bytes)"
+
+          if [ "$SIZE" -lt 10000 ]; then
+            echo "::error::Backup file suspiciously small (${SIZE} bytes) — possible failure"
+            exit 1
+          fi
+
+          echo "BACKUP_FILE=$BACKUP_FILE" >> "$GITHUB_ENV"
+
+      - name: Verify backup contents
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          # List tables in the dump to confirm it's not empty
+          pg_restore --list "$BACKUP_FILE" | grep -E "TABLE DATA" | head -20
+          echo "---"
+          echo "Dump verified: table data sections found above."
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tcat-backup-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.BACKUP_FILE }}
+          retention-days: 90
+
+      - name: Print summary
+        run: |
+          echo "## Backup Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "- File: \`$BACKUP_FILE\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Size: $(stat -c%s $BACKUP_FILE) bytes" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Retention: 90 days" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Priority table: \`trans_revisions\` (future fine-tuning corpus)" >> "$GITHUB_STEP_SUMMARY"

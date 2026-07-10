@@ -1,6 +1,5 @@
 from flask import Blueprint, jsonify, request
 
-from sheets import ensure_headers
 from repositories import sources_repo
 from auth import is_logged_in, is_admin
 
@@ -38,8 +37,4 @@ def api_add_source():
 def api_init():
     if not is_logged_in() or not is_admin():
         return jsonify({"error": "Admin only"}), 403
-    try:
-        ensure_headers()
-        return jsonify({"status": "Sheets initialized"})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return jsonify({"status": "Google Sheets retired — database is Supabase, no init needed"})
