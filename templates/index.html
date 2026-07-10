@@ -46,9 +46,45 @@
     /* ── SIDEBAR ────────────────────────────────────────────────────────── */
     .sidebar {
       background: var(--paper-dark); border-right: 1px solid rgba(26,18,8,0.12);
-      padding: 1.5rem; display: flex; flex-direction: column; gap: 1.5rem;
-      position: sticky; top: 108px; height: calc(100vh - 108px); overflow-y: auto;
+      position: sticky; top: 108px; height: calc(100vh - 108px); overflow: visible;
+      transition: width 0.01s;
     }
+    .sidebar-inner {
+      padding: 1.5rem; display: flex; flex-direction: column; gap: 1.5rem;
+      height: 100%; overflow-y: auto;
+    }
+    /* ── Resize handle ──────────────────────────────────────────────────── */
+    .sidebar-resize-handle {
+      position: absolute; right: -3px; top: 0; bottom: 0; width: 6px;
+      cursor: col-resize; z-index: 15; background: transparent; transition: background 0.15s;
+    }
+    .sidebar-resize-handle:hover,
+    .sidebar-resize-handle.is-dragging { background: rgba(201,168,76,0.45); }
+    /* ── Desktop toggle button (‹ / ›) ─────────────────────────────────── */
+    .sidebar-toggle-btn {
+      position: absolute; right: 6px; top: 0.55rem;
+      background: transparent; border: 1px solid rgba(26,18,8,0.18); border-radius: 3px;
+      color: var(--text-soft); cursor: pointer; width: 20px; height: 20px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.72rem; z-index: 16; line-height: 1; padding: 0;
+      transition: all 0.15s;
+    }
+    .sidebar-toggle-btn:hover { border-color: var(--gold); color: var(--ink); }
+    /* ── Collapsed state ────────────────────────────────────────────────── */
+    .app-layout.sidebar-hidden { grid-template-columns: 0 1fr; }
+    .sidebar.sb-hidden { width: 0 !important; overflow: hidden; border: none; }
+    /* ── Expand pill (fixed, appears when sidebar is hidden) ────────────── */
+    .sidebar-show-btn {
+      position: fixed; left: 0; top: 50%; transform: translateY(-50%);
+      background: var(--paper-dark); border: 1px solid rgba(201,168,76,0.35);
+      border-left: none; border-radius: 0 5px 5px 0;
+      color: var(--text-soft); cursor: pointer; font-size: 0.65rem;
+      padding: 0.55rem 0.2rem; z-index: 200; display: none;
+      writing-mode: vertical-lr; letter-spacing: 0.12em; font-family: 'EB Garamond', serif;
+      transition: all 0.15s;
+    }
+    .sidebar-show-btn:hover { background: var(--paper); color: var(--ink); border-color: var(--gold); }
+    .sidebar-show-btn.visible { display: block; }
     .sidebar-section-title { font-family: 'Cormorant Garamond', serif; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.15em; color: var(--ink-soft); margin-bottom: 0.75rem; }
     .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
     .stat-box { background: rgba(255,255,255,0.5); border: 1px solid rgba(26,18,8,0.1); border-radius: 3px; padding: 0.6rem; text-align: center; }
@@ -400,8 +436,10 @@
       .sidebar {
         position: fixed; left: 0; top: 0; height: 100dvh; width: 280px;
         z-index: 300; transform: translateX(-100%); transition: transform 0.25s ease;
-        padding-top: 0.75rem; box-shadow: 4px 0 24px rgba(0,0,0,0.25);
+        box-shadow: 4px 0 24px rgba(0,0,0,0.25); overflow: hidden;
       }
+      .sidebar-inner { padding-top: 0.75rem; }
+      .sidebar-resize-handle, .sidebar-toggle-btn { display: none; }
       .sidebar.mobile-open { transform: translateX(0); }
       .mobile-overlay { display: block; }
       .btn-sidebar-close { display: flex; align-items: center; gap: 0.3rem; font-family: 'EB Garamond', serif; font-size: 0.9rem; background: none; border: none; color: var(--text-soft); cursor: pointer; padding: 0.3rem 0; margin-bottom: 0.35rem; }
@@ -494,6 +532,7 @@
 
 <!-- ── MOBILE OVERLAY ─────────────────────────────────────────────────────── -->
 <div class="mobile-overlay" id="mobile-overlay" onclick="closeMobileMenu()"></div>
+<button class="sidebar-show-btn" id="sidebar-show-btn" onclick="toggleSidebar()" title="Show panel">PANEL</button>
 
 <!-- ── TOP TAB BAR ────────────────────────────────────────────────────────── -->
 <div class="top-tab-bar" id="top-tab-bar">
@@ -506,6 +545,9 @@
 
   <!-- SIDEBAR -->
   <aside class="sidebar" id="sidebar">
+    <div class="sidebar-resize-handle" id="sidebar-resize-handle"></div>
+    <button class="sidebar-toggle-btn" id="sidebar-toggle-btn" onclick="toggleSidebar()" title="Hide panel">‹</button>
+    <div class="sidebar-inner">
     <button class="btn-sidebar-close" onclick="closeMobileMenu()">✕ Close menu</button>
     <div>
       <div class="sidebar-section-title">Overview</div>
@@ -537,6 +579,7 @@
       <button class="btn btn-secondary" style="width:100%;margin-bottom:0.5rem;" onclick="openSourcesModal()">⊕ Sources</button>
       {% endif %}
     </div>
+    </div><!-- /.sidebar-inner -->
   </aside>
 
   <!-- LIST VIEW -->
@@ -751,6 +794,84 @@
   let pageSize      = 20;
 
   function isMobile() { return window.innerWidth <= 768; }
+
+  // ── Sidebar resize + toggle ──────────────────────────────────────────────
+  (function() {
+    const WKEY = 'tcat_sb_width';
+    const HKEY = 'tcat_sb_hidden';
+
+    function els() {
+      return {
+        layout:    document.getElementById('vocab-view'),
+        sidebar:   document.getElementById('sidebar'),
+        handle:    document.getElementById('sidebar-resize-handle'),
+        toggleBtn: document.getElementById('sidebar-toggle-btn'),
+        showBtn:   document.getElementById('sidebar-show-btn'),
+      };
+    }
+
+    function applyCollapsed(collapsed, save) {
+      const {layout, sidebar, toggleBtn, showBtn} = els();
+      if (collapsed) {
+        sidebar.classList.add('sb-hidden');
+        layout.classList.add('sidebar-hidden');
+        if (showBtn)   showBtn.classList.add('visible');
+        if (toggleBtn) toggleBtn.textContent = '›';
+        if (toggleBtn) toggleBtn.title = 'Show panel';
+      } else {
+        sidebar.classList.remove('sb-hidden');
+        layout.classList.remove('sidebar-hidden');
+        if (showBtn)   showBtn.classList.remove('visible');
+        if (toggleBtn) toggleBtn.textContent = '‹';
+        if (toggleBtn) toggleBtn.title = 'Hide panel';
+      }
+      if (save) localStorage.setItem(HKEY, collapsed ? '1' : '0');
+    }
+
+    window.toggleSidebar = function() {
+      if (isMobile()) return;
+      const hidden = els().sidebar.classList.contains('sb-hidden');
+      applyCollapsed(!hidden, true);
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
+      const {layout, sidebar, handle} = els();
+
+      // restore saved width
+      const savedW = localStorage.getItem(WKEY);
+      if (savedW) layout.style.gridTemplateColumns = savedW + 'px 1fr';
+
+      // restore collapsed state
+      if (localStorage.getItem(HKEY) === '1') applyCollapsed(true, false);
+
+      // drag-to-resize
+      let dragging = false, startX = 0, startW = 0;
+      handle.addEventListener('mousedown', function(e) {
+        if (isMobile() || sidebar.classList.contains('sb-hidden')) return;
+        dragging = true;
+        startX   = e.clientX;
+        startW   = sidebar.offsetWidth;
+        handle.classList.add('is-dragging');
+        document.body.style.userSelect = 'none';
+        document.body.style.cursor = 'col-resize';
+        e.preventDefault();
+      });
+      document.addEventListener('mousemove', function(e) {
+        if (!dragging) return;
+        const w = Math.max(140, Math.min(380, startW + e.clientX - startX));
+        layout.style.gridTemplateColumns = w + 'px 1fr';
+        localStorage.setItem(WKEY, w);
+      });
+      document.addEventListener('mouseup', function() {
+        if (!dragging) return;
+        dragging = false;
+        handle.classList.remove('is-dragging');
+        document.body.style.userSelect = '';
+        document.body.style.cursor = '';
+      });
+    });
+  })();
+  // ────────────────────────────────────────────────────────────────────────
 
   function openMobileMenu() {
     document.getElementById('sidebar').classList.add('mobile-open');
