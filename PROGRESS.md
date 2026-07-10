@@ -409,11 +409,11 @@ See `.env.example` for the full list with placeholder values.
 | **T0-1 Schema** | **Done** | 11 tables built in Supabase per design guide DDL |
 | **T0-2 Migration script** | **Done** | gspread → Postgres; 2844 terms + 5 other tables; Votes → CSV; sequences calibrated |
 | **T0-3 Data layer rewrite** | **Done** | db.py + all repositories rewritten to psycopg2; routes/ untouched |
-| **T0-4 Cutover** | Pending | Freeze Sheets writes, install psycopg2-binary on server, deploy, verify production |
+| **T0-4 Cutover** | **In Progress** | Clean migration done; pending: server pip install + DATABASE_URL + deploy + verify |
 | **T0-5 Cleanup** | Pending | Retire Sheets, weekly pg_dump backup, remove gspread from requirements |
 
 ## Next Steps
 
-- **T0-4**: Production cutover — deploy to GreenGeeks, install psycopg2-binary in venv310, set DATABASE_URL in server .env, run smoke test, freeze Sheets writes
+- **T0-4**: Server steps remaining: (1) SSH to server → `venv310/bin/pip install psycopg2-binary`; (2) add DATABASE_URL to server `.env`; (3) push this commit to trigger Actions deploy; (4) run online verification checklist
 - Update deploy action to Node.js 24 before Sep 2026 deprecation deadline
 - Confirm whether `venv/` on server can be removed (old virtual environment)
