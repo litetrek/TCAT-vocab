@@ -55,7 +55,16 @@ buddhist-vocab/
 │   ├── extraction_repo.py
 │   └── audit_repo.py
 ├── migrations/
-│   └── 001_initial_schema.sql  # Full Postgres DDL — 11 tables per design guide
+│   ├── 001_initial_schema.sql  # Full Postgres DDL — 11 tables per design guide
+│   ├── 002_rpc_functions.sql   # next_display_id RPC + atomic write RPCs
+│   └── 003_romanization_plain.sql  # unaccent extension, trigger, backfill, index for romanization_plain
+├── static/
+│   ├── Tcat-logo.png           # Primary logo (yellow-gold T with sparkle and swoosh)
+│   ├── favicon.ico             # Multi-size ICO (16/32/48px) generated from Tcat-logo.png
+│   ├── favicon.svg             # SVG redraw of logo design (used for modern browser tab icon)
+│   ├── favicon-32x32.png       # 32×32 PNG
+│   ├── favicon-512x512.png     # 512×512 PNG (PWA/Android)
+│   └── apple-touch-icon.png    # 180×180 PNG (iOS home screen)
 ├── scripts/
 │   └── run_migration.py        # Applies 001_initial_schema.sql via DATABASE_URL / psycopg2
 ├── index.cgi                   # CGI entry point (shebang: venv310/bin/python3.10)
@@ -392,6 +401,47 @@ See `.env.example` for the full list with placeholder values.
 - `create_document()`: uses `create_document_with_paragraphs` RPC for atomic insert
 - Column mapping preserved: `routes/` layer zero changes; all function signatures and return dict shapes unchanged
 - RLS status: disabled on all 11 tables — service_role key required and used
+
+### UI Polish — Favicon, Logo, Layout, Sidebar (2026-07-10)
+
+#### Favicon & Logo
+- Added `static/` directory with 5 favicon assets: `favicon.ico` (16/32/48), `favicon.svg`, `favicon-32x32.png`, `apple-touch-icon.png` (180px), `favicon-512x512.png`
+- Added `<link rel="icon">` and `<link rel="apple-touch-icon">` tags to all three templates (`index.html`, `login.html`, `denied.html`)
+- Replaced the `☸` dharma-wheel emoji in the header and login page with `<img class="wheel">` pointing to the favicon SVG
+- Recolored SVG favicon from blue-purple gradient (`#2E3A87 → #5B6EF5`) to warm dark palette matching site header (`#1a1208 → #3d2a14`); icon strokes changed from white to cream `#e8dcc0`; spark changed from `#FFD24C` to site gold `#c9a84c`
+- Replaced all favicon files with `Tcat-logo.png` (yellow-gold T with sparkle + swoosh): used Pillow to generate ICO, 32px, 180px, and 512px sizes; SVG redrawn to match design
+- Added `?v=2` cache-busting to all favicon `<link>` tags to force browser cache invalidation
+- Header logo and login page logo updated to use `Tcat-logo.png` directly
+
+#### Database — Migration 003
+- Created `migrations/003_romanization_plain.sql`:
+  - `CREATE EXTENSION IF NOT EXISTS unaccent`
+  - `set_romanization_plain()` trigger function — fires `BEFORE INSERT OR UPDATE OF pinyin`, sets `romanization_plain = lower(unaccent(pinyin))`
+  - `DROP/CREATE TRIGGER trg_set_romanization_plain ON terms`
+  - Backfill: `UPDATE terms SET romanization_plain = lower(unaccent(pinyin)) WHERE pinyin IS NOT NULL`
+  - `CREATE INDEX idx_terms_romanization_plain ON terms (romanization_plain)`
+- Applied via psycopg2 + `DATABASE_URL`; verified: `甘露 → pinyin=gānlù, romanization_plain=ganlu`
+- No frontend changes needed: `_row_to_response()` already returned `romanization_plain`; frontend search (`getFilteredSorted()`) already included it in the haystack (line 893)
+
+#### Layout Fixes
+- Sidebar width reduced from 260px to 210px (`grid-template-columns: 260px 1fr` → `210px 1fr`)
+- Added `min-width: 0` to `.main` to prevent flex/grid overflow squeezing the right content area
+- Set Final button (`admin-pick-btn`) on mobile: changed `flex: 1 1 30%` → `flex: 0 1 auto; max-width: 140px` to prevent button from stretching full card width
+
+#### Tab Order
+- Vocabulary tab moved to the left of Extraction and set as the default active tab on login
+- `vocab-view` now visible by default; `extraction-view` starts hidden; active class on Vocabulary button
+
+#### Resizable & Collapsible Sidebar
+- Sidebar restructured: outer `<aside class="sidebar">` is the non-scrolling positioning context; inner `<div class="sidebar-inner">` is the scrollable content container
+- Drag handle (`.sidebar-resize-handle`, 6px, `cursor: col-resize`) on the right edge of the sidebar — turns gold on hover/drag
+- Width range: 140px – 380px; persisted in `localStorage` (`tcat_sb_width`)
+- Toggle button (`.sidebar-toggle-btn`, `‹` / `›`) at top-right of sidebar — hides/shows the panel
+- When collapsed: `layout.style.gridTemplateColumns = '0 1fr'` (inline style, wins over CSS class); main content expands to full width
+- Fixed: CSS class approach was overridden by the inline `gridTemplateColumns` saved from resize — changed to always use inline style directly
+- When collapsed: fixed PANEL pill button (`.sidebar-show-btn`, vertical writing-mode) appears on left edge to re-expand
+- Collapsed state persisted in `localStorage` (`tcat_sb_hidden`)
+- Mobile (≤768px): resize handle and toggle button hidden; mobile overlay/hamburger behavior unchanged
 
 ### T0-5 — Sheets Retirement + Backup Schedule (2026-07-09)
 - Removed `gspread`, `google-auth`, `google-auth-oauthlib` from `requirements.txt` (production no longer needs them)
