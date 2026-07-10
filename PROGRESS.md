@@ -41,6 +41,7 @@ buddhist-vocab/
 ├── db.py                       # supabase-py client: create_client() using SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
 ├── ai.py                       # Anthropic Claude AI generation (Pinyin, Pali, Sanskrit, translations)
 ├── auth.py                     # Session helpers: is_logged_in, is_admin, is_leader
+├── segmenter.py                # Chinese sentence segmentation — T1; decode/split_paragraphs/segment_paragraph
 ├── routes/
 │   ├── __init__.py
 │   ├── terms.py                # /api/terms/* endpoints
@@ -57,7 +58,16 @@ buddhist-vocab/
 ├── migrations/
 │   ├── 001_initial_schema.sql  # Full Postgres DDL — 11 tables per design guide
 │   ├── 002_rpc_functions.sql   # next_display_id RPC + atomic write RPCs
-│   └── 003_romanization_plain.sql  # unaccent extension, trigger, backfill, index for romanization_plain
+│   ├── 003_romanization_plain.sql  # unaccent extension, trigger, backfill, index for romanization_plain
+│   ├── 004_entity_subject_classification.sql  # entity_type / subject_field columns on terms
+│   └── 005_t1_translation_module.sql  # T1: five translation-module tables (idempotent IF NOT EXISTS)
+├── scripts/
+│   ├── run_migration.py        # Applies 001_initial_schema.sql via DATABASE_URL / psycopg2
+│   ├── run_migration_005.py    # T1: applies 005 + runs acceptance tests (insert/unique/fractional/cleanup)
+│   ├── migrate_from_sheets.py  # T0-2: one-shot Sheets → Postgres migration
+│   ├── migrate_extraction_only.py  # T0-4: re-migrate extraction data only
+│   └── backfill_classification.py  # Backfill entity_type/subject_field for unclassified terms
+├── test_segmenter.py           # pytest tests for segmenter.py (15 cases, all passing)
 ├── static/
 │   ├── Tcat-logo.png           # Primary logo (yellow-gold T with sparkle and swoosh)
 │   ├── favicon.ico             # Multi-size ICO (16/32/48px) generated from Tcat-logo.png
@@ -65,8 +75,6 @@ buddhist-vocab/
 │   ├── favicon-32x32.png       # 32×32 PNG
 │   ├── favicon-512x512.png     # 512×512 PNG (PWA/Android)
 │   └── apple-touch-icon.png    # 180×180 PNG (iOS home screen)
-├── scripts/
-│   └── run_migration.py        # Applies 001_initial_schema.sql via DATABASE_URL / psycopg2
 ├── index.cgi                   # CGI entry point (shebang: venv310/bin/python3.10)
 ├── templates/
 │   ├── index.html              # Main app UI — two top-level tabs: Extraction and Vocabulary
@@ -96,7 +104,7 @@ buddhist-vocab/
 
 ---
 
-## Supabase Database Schema (T0 target — 11 tables)
+## Supabase Database Schema (11 tables, all live)
 
 **Project:** `TCAT-vocab` (id: `yvkadctkigkjtjmmxrqc`, region: us-west-1)
 **Connection:** supabase-py HTTPS REST (port 443), `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` env vars
@@ -453,31 +461,9 @@ See `.env.example` for the full list with placeholder values.
 - **Note on DATABASE_URL for backup**: Store in GitHub repo Secrets (not GreenGeeks .env). If pg_dump fails with pgBouncer transaction pooler (port 6543), switch secret to direct connection (port 5432): `postgresql://postgres:PASSWORD@db.yvkadctkigkjtjmmxrqc.supabase.co:5432/postgres`
 - Backup workflow verified 2026-07-10: `tcat_backup_20260710_062839.dump`, 493,747 bytes, 90-day artifact retention
 - `upload-artifact@v4` Node.js 20 deprecation warning — upgrade to `v5` before 2025-09-19
-- **Pending manual steps** (no code changes needed): export 7 Sheets worksheets as CSV → `backup/sheets_final_export_20260709/`; SSH GreenGeeks remove `SHEET_ID` from `.env`; SSH delete `credentials.json`
+- **Pending manual steps** (no code changes needed): export 7 Sheets worksheets as CSV → `backup/sheets_final_export_20260709/`; SSH GreenGeeks remove `SHEET_ID` from `.env`; SSH GreenGeeks: `rm ~/public_html/app.cyber-tech.com/credentials.json`
 
 ---
-
-## Known Issues / Notes
-
-- `ftp.cyber-tech.com` does not resolve in DNS — raw IP `108.163.242.106` must be used
-- `.htaccess` is not tracked in git (doesn't exist locally) — managed manually on server
-- `venv/` exists on server alongside `venv310/` — only `venv310` is active; `venv/` may be an old artifact
-- The `SamKirkland/FTP-Deploy-Action@v4.3.5` Node.js 20 deprecation warning is harmless now but will need updating before September 16, 2026 when GitHub removes Node.js 20 from runners
-- `.ftp-deploy-sync-stat.json` on the server is created by the deploy action to track file state — do not delete it
-- Supabase has a few stale sequences (`documents_id_seq`, `sources_id_seq1`, `terms_id_seq1`) left from
-  earlier sessions — harmless, can be cleaned up in T0-5
-
----
-
-## T0 Migration Roadmap
-
-| Sub-stage | Status | Summary |
-|---|---|---|
-| **T0-1 Schema** | **Done** | 11 tables built in Supabase per design guide DDL |
-| **T0-2 Migration script** | **Done** | gspread → Postgres; 2844 terms + 5 other tables; Votes → CSV; sequences calibrated |
-| **T0-3 Data layer rewrite** | **Done** | db.py + all repositories rewritten to supabase-py HTTPS REST; routes/ untouched; RPC functions for atomicity |
-| **T0-4 Cutover** | **Done** | supabase-py live in production; 2844 terms + all tables verified; extraction data re-migrated |
-| **T0-5 Cleanup** | **Done** | Sheets retired; gspread removed; weekly pg_dump backup verified (493 KB artifact, 90-day retention) |
 
 ### Classification Stage 1 — Entity Type / Subject Field (2026-07-10)
 
@@ -512,7 +498,7 @@ Two-axis structured classification added to all vocabulary terms:
 - CSS: `.cls-row`, `.cls-badge.cls-ai`, `.cls-badge.cls-manual`, `.cls-confidence-note`
 - Sidebar: "Entity Type" and "Subject Field" filter dropdowns (including "Unclassified" option for entity type); all options bilingual (e.g. `概念術語 / Doctrinal Term`)
 - Sidebar: "Batch Classify" button for leader+ (drives the batch loop with live progress counter)
-- Edit view: label "Entity Type / Subject Field"; two `<select>` dropdowns with bilingual options; AI badge or manual ✓ badge; "✦ AI Classify" button; confidence note (English) shown inline when AI confidence < 60%; Source Content Chinese/English moved to bottom (below Save to Note)
+- Edit view: label "Entity Type / Subject Field"; two `<select>` dropdowns with bilingual options; AI badge or manual badge; "AI Classify" button; confidence note (English) shown inline when AI confidence < 60%; Source Content Chinese/English moved to bottom (below Save to Note)
 - `ENTITY_TYPES` / `SUBJECT_FIELDS` value arrays; `ENTITY_TYPE_LABELS` / `SUBJECT_FIELD_LABELS` bilingual display maps; `currentEntityType` / `currentSubjectField` filter state
 - `setEntityType()`, `setSubjectField()`, `classifyTerm()`, `autoSaveClassify()`, `startBatchClassify()`
 - `getFilteredSorted()` updated to apply entity_type / subject_field filters
@@ -531,12 +517,75 @@ Two-axis structured classification added to all vocabulary terms:
 
 ---
 
+### T1 — Translation Module Data Layer + Segmenter (2026-07-10)
+
+**Scope**: Pure data layer + algorithm. No UI, no API endpoints.
+
+#### Migration 005
+- Created `migrations/005_t1_translation_module.sql` — idempotent DDL (`IF NOT EXISTS`) for all 5 translation tables and their sequences
+- Created `scripts/run_migration_005.py` — applies migration + runs 8 acceptance tests:
+  1. INSERT one test row per table; verify display_id format (B000001, C000001, U000001, R000001, S000001)
+  2. Unique constraint on `trans_books.display_id` — duplicate rejected (savepoint-safe)
+  3. Fractional `unit_order=1.5` in `trans_units` — confirms numeric type allows decimal values
+  4. Clean-up: all test rows deleted; transaction committed
+- Migration applied to Supabase; all 8 acceptance tests passed; no test data left in tables
+
+#### segmenter.py
+- New module `segmenter.py` at repo root — pure algorithm, no DB writes (T2 scope)
+- Public API:
+  - `decode(data: bytes)` — UTF-8 → GB18030 → Big5 encoding detection (same as `extract.py._decode`)
+  - `split_paragraphs(text: str)` — blank-line paragraph split (same as `extract.py._split_paragraphs`)
+  - `detect_section_type(paragraph: str)` — prefix matching: 本社按/編者按→editorial, 譯者序→preface, 跋→postscript, else body
+  - `segment_paragraph(text: str) -> list[dict]` — returns `[{"text": str, "is_long_sentence": bool}, ...]`
+- Segmentation algorithm:
+  - Hard boundaries: `。！？……` (full-width) fire only at quote depth == 0
+  - Quote protection: `「」『』""` — depth counter; terminators at depth > 0 are absorbed without split
+  - Close-quote handler: adjusts depth, appends to buffer, **never flushes** (key fix: only depth-0 terminators split)
+  - Close-quote suffix rule (收尾規則): when a depth-0 terminator fires, trailing close-quotes are consumed into that sentence before flush
+  - Ellipsis (`……`): absorbs consecutive `…` chars; at depth=0 consumes trailing close-quotes then flushes
+  - Long-sentence flag: internal punctuation (，、；) count > 3 **or** char count > 45
+  - Remainder: text after last terminator returned as final unit (no trailing terminator required)
+
+#### test_segmenter.py
+- 15 pytest test cases, all passing (`pytest test_segmenter.py` → 15 passed, 0 failed)
+- TC-1 (design doc): quote-protected `。` inside `「」` does not split; entire passage = 1 unit
+- TC-2 (design doc): 5-comma parallel sentence flagged `is_long_sentence=True`
+- Boundary cases: plain short sentence, 3-sentence no-quote, `！`/`？` boundaries, quote speech continues after close-quote, close-suffix rule at depth-0, nested `「『』」` no inner split, ellipsis boundary, no-terminator remainder, long-by-char-count
+- Section-type detection: editorial / preface / postscript / body defaults
+
+---
+
+## Known Issues / Notes
+
+- `ftp.cyber-tech.com` does not resolve in DNS — raw IP `108.163.242.106` must be used
+- `.htaccess` is not tracked in git (doesn't exist locally) — managed manually on server
+- `venv/` exists on server alongside `venv310/` — only `venv310` is active; `venv/` may be an old artifact
+- The `SamKirkland/FTP-Deploy-Action@v4.3.5` Node.js 20 deprecation warning is harmless now but will need updating before September 16, 2026 when GitHub removes Node.js 20 from runners
+- `.ftp-deploy-sync-stat.json` on the server is created by the deploy action to track file state — do not delete it
+- Supabase has a few stale sequences (`documents_id_seq`, `sources_id_seq1`, `terms_id_seq1`) left from
+  earlier sessions — harmless, can be cleaned up later
+
+---
+
+## T-CAT Translation Module Roadmap
+
+| Stage | Status | Summary |
+|---|---|---|
+| **T0** | **Done** | Schema, data migration, data layer rewrite, Sheets retirement |
+| **T1** | **Done** | 5 translation tables verified + sequences; `segmenter.py` + 15 pytest cases passing |
+| **T2** | Planned | Import pipeline: upload .txt → segmenter → write trans_units to DB |
+| **T3** | Planned | AI translation: draft English for each unit via Claude; write english_draft |
+| **T4** | Planned | Translation UI: per-unit review, approve, revise workflow |
+| **T5** | Planned | Style guide integration: RAG lookup on trans_revisions.embedding |
+
+---
+
 ## Next Steps
 
-- **Run backfill**: `python scripts/backfill_classification.py --dry-run --limit 20` (spot-check first), then without flags for full 2844-term run
+- **T2**: Build import pipeline — `routes/trans.py`, endpoint accepts .txt, calls `segmenter.segment_paragraph()`, writes rows to `trans_books` / `trans_chapters` / `trans_units`
+- **Run backfill**: `python scripts/backfill_classification.py --dry-run --limit 20` (spot-check), then full run
 - **T0 manual cleanup** (no code changes needed):
   - Export 7 Sheets worksheets as CSV → `backup/sheets_final_export_20260709/` (local only, do not commit)
   - SSH GreenGeeks: remove `SHEET_ID` from `.env`
   - SSH GreenGeeks: `rm ~/public_html/app.cyber-tech.com/credentials.json`
 - **Maintenance**: upgrade `upload-artifact@v4` → `v5` before 2025-09-19; upgrade deploy action to Node.js 24 before Sep 2026
-- **T1**: Translation module — `segmenter.py`, repositories for `trans_*` tables, AI translation pipeline (new prompt thread)
