@@ -497,12 +497,12 @@
 
 <!-- ── TOP TAB BAR ────────────────────────────────────────────────────────── -->
 <div class="top-tab-bar" id="top-tab-bar">
-  <button class="top-tab-btn active" data-tab="extraction" onclick="switchTopTab('extraction')">Extraction</button>
-  <button class="top-tab-btn" data-tab="vocabulary" onclick="switchTopTab('vocabulary')">Vocabulary</button>
+  <button class="top-tab-btn active" data-tab="vocabulary" onclick="switchTopTab('vocabulary')">Vocabulary</button>
+  <button class="top-tab-btn" data-tab="extraction" onclick="switchTopTab('extraction')">Extraction</button>
 </div>
 
 <!-- ── LAYOUT (Vocabulary tab) ──────────────────────────────────────────────── -->
-<div class="app-layout" id="vocab-view" style="display:none;">
+<div class="app-layout" id="vocab-view">
 
   <!-- SIDEBAR -->
   <aside class="sidebar" id="sidebar">
@@ -558,7 +558,7 @@
 </div><!-- app-layout -->
 
 <!-- ── EXTRACTION VIEW ────────────────────────────────────────────────────── -->
-<div id="extraction-view">
+<div id="extraction-view" style="display:none;">
   <div class="ext-container">
     <div class="main-toolbar" style="margin-bottom:1.5rem;">
       <h1 class="main-title">Text <span>Extraction</span></h1>
