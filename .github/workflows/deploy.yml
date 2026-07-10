@@ -39,7 +39,10 @@ jobs:
 
       - name: Verify site is live
         run: |
-          STATUS=$(curl -s -L -o /dev/null -w "%{http_code}" "${{ secrets.SITE_URL }}")
+          STATUS=$(curl -s -L -o /dev/null -w "%{http_code}" \
+            -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
+            -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+            "${{ secrets.SITE_URL }}")
           echo "Site responded with HTTP $STATUS"
           if [ "$STATUS" != "200" ]; then
             echo "::error::Site check failed — expected HTTP 200, got $STATUS"
