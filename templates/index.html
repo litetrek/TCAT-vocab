@@ -41,7 +41,7 @@
     .btn-logout:hover { color: var(--gold); border-color: var(--gold); }
 
     /* ── LAYOUT ─────────────────────────────────────────────────────────── */
-    .app-layout { display: grid; grid-template-columns: 260px 1fr; min-height: calc(100vh - 108px); }
+    .app-layout { display: grid; grid-template-columns: 210px 1fr; min-height: calc(100vh - 108px); }
 
     /* ── SIDEBAR ────────────────────────────────────────────────────────── */
     .sidebar {
@@ -62,7 +62,7 @@
     .sidebar-source-sel:focus { outline: none; border-color: var(--gold); }
 
     /* ── SHARED PANEL STYLES ────────────────────────────────────────────── */
-    .main { padding: 2rem; overflow-y: auto; }
+    .main { padding: 2rem; overflow-y: auto; min-width: 0; }
     .main-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem; }
     .main-title { font-family: 'Cormorant Garamond', serif; font-size: 1.6rem; font-style: italic; color: var(--ink); }
     .main-title span { color: var(--red); }
@@ -430,7 +430,7 @@
       .edit-meta-section { grid-template-columns: 1fr; }
       .meta-field.full { grid-column: auto; }
       .admin-row { flex-wrap: wrap; }
-      .admin-pick-btn { flex: 1 1 30%; min-height: 40px; text-align: center; }
+      .admin-pick-btn { flex: 0 1 auto; min-height: 40px; max-width: 140px; text-align: center; }
 
       /* Modals */
       .modal, .modal-wide, .modal-xwide { width: 95vw; max-width: 95vw; padding: 1.25rem 1rem; }
