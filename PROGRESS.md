@@ -401,7 +401,9 @@ See `.env.example` for the full list with placeholder values.
 - `.env.example`: removed `SHEET_ID` (Sheets retired); `DATABASE_URL` noted as local scripts only
 - Created `.github/workflows/weekly_backup.yml`: `pg_dump` (custom format) every Sunday 00:00 UTC; stored as Actions artifact (90-day retention); `trans_revisions` noted as priority table
 - **Note on DATABASE_URL for backup**: Store in GitHub repo Secrets (not GreenGeeks .env). If pg_dump fails with pgBouncer transaction pooler (port 6543), switch secret to direct connection (port 5432): `postgresql://postgres:PASSWORD@db.yvkadctkigkjtjmmxrqc.supabase.co:5432/postgres`
-- **Pending manual steps**: Sheets CSV export → `backup/sheets_final_export_YYYYMMDD/`; GreenGeeks `.env` remove `SHEET_ID`; delete `credentials.json` from server; add `DATABASE_URL` to GitHub Secrets; trigger backup workflow once to verify
+- Backup workflow verified 2026-07-10: `tcat_backup_20260710_062839.dump`, 493,747 bytes, 90-day artifact retention
+- `upload-artifact@v4` Node.js 20 deprecation warning — upgrade to `v5` before 2025-09-19
+- **Pending manual steps** (no code changes needed): export 7 Sheets worksheets as CSV → `backup/sheets_final_export_20260709/`; SSH GreenGeeks remove `SHEET_ID` from `.env`; SSH delete `credentials.json`
 
 ---
 
@@ -425,16 +427,13 @@ See `.env.example` for the full list with placeholder values.
 | **T0-2 Migration script** | **Done** | gspread → Postgres; 2844 terms + 5 other tables; Votes → CSV; sequences calibrated |
 | **T0-3 Data layer rewrite** | **Done** | db.py + all repositories rewritten to supabase-py HTTPS REST; routes/ untouched; RPC functions for atomicity |
 | **T0-4 Cutover** | **Done** | supabase-py live in production; 2844 terms + all tables verified; extraction data re-migrated |
-| **T0-5 Cleanup** | **In Progress** | Code complete; pending: Sheets CSV export + GreenGeeks .env clean + credentials.json removal + backup workflow trigger |
+| **T0-5 Cleanup** | **Done** | Sheets retired; gspread removed; weekly pg_dump backup verified (493 KB artifact, 90-day retention) |
 
 ## Next Steps
 
-- **T0-5 remaining manual steps** (code already committed):
-  1. Export 7 Sheets worksheets as CSV → `backup/sheets_final_export_YYYYMMDD/` (do locally)
-  2. SSH to GreenGeeks: remove `SHEET_ID` from `.env`; do NOT add `DATABASE_URL`
-  3. SSH to GreenGeeks: delete `credentials.json`
-  4. Add `DATABASE_URL` (pgBouncer port 6543) to **GitHub repo Secrets** (for weekly backup)
-  5. Trigger `weekly_backup.yml` manually via GitHub Actions → verify backup artifact is non-empty
-  6. If pg_dump fails (pgBouncer transaction mode incompatibility), switch `DATABASE_URL` secret to direct connection string (port 5432): `postgresql://postgres:PASSWORD@db.yvkadctkigkjtjmmxrqc.supabase.co:5432/postgres`
+- **T0 manual cleanup** (no code changes needed):
+  - Export 7 Sheets worksheets as CSV → `backup/sheets_final_export_20260709/` (local only, do not commit)
+  - SSH GreenGeeks: remove `SHEET_ID` from `.env`
+  - SSH GreenGeeks: `rm ~/public_html/app.cyber-tech.com/credentials.json`
+- **Maintenance**: upgrade `upload-artifact@v4` → `v5` before 2025-09-19; upgrade deploy action to Node.js 24 before Sep 2026
 - **T1**: Translation module — `segmenter.py`, repositories for `trans_*` tables, AI translation pipeline (new prompt thread)
-- Update deploy action to Node.js 24 before Sep 2026 deprecation deadline
