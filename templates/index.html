@@ -583,15 +583,15 @@
       <div class="sidebar-section-title">Entity Type</div>
       <select class="sidebar-source-sel" id="sidebar-entity-type" onchange="setEntityType(this.value)">
         <option value="">All Types</option>
-        <option value="概念術語">概念術語</option>
-        <option value="人名">人名</option>
-        <option value="地名">地名</option>
-        <option value="寺院">寺院</option>
-        <option value="宗派">宗派</option>
-        <option value="書名典籍">書名典籍</option>
-        <option value="佛菩薩尊號">佛菩薩尊號</option>
-        <option value="其他">其他</option>
-        <option value="_unclassified">（未分類）</option>
+        <option value="概念術語">概念術語 / Doctrinal Term</option>
+        <option value="人名">人名 / People's Name</option>
+        <option value="地名">地名 / Place Name</option>
+        <option value="寺院">寺院 / Temple &amp; Monastery</option>
+        <option value="宗派">宗派 / School &amp; Sect</option>
+        <option value="書名典籍">書名典籍 / Scripture &amp; Text</option>
+        <option value="佛菩薩尊號">佛菩薩尊號 / Buddha &amp; Bodhisattva</option>
+        <option value="其他">其他 / Other</option>
+        <option value="_unclassified">（Unclassified）</option>
       </select>
     </div>
 
@@ -599,15 +599,15 @@
       <div class="sidebar-section-title">Subject Field</div>
       <select class="sidebar-source-sel" id="sidebar-subject-field" onchange="setSubjectField(this.value)">
         <option value="">All Fields</option>
-        <option value="教義">教義</option>
-        <option value="戒律">戒律</option>
-        <option value="禪修">禪修</option>
-        <option value="因明">因明</option>
-        <option value="儀軌法物">儀軌法物</option>
-        <option value="稱謂教職">稱謂教職</option>
-        <option value="歷史事項">歷史事項</option>
-        <option value="文學藝術">文學藝術</option>
-        <option value="其他">其他</option>
+        <option value="教義">教義 / Doctrine</option>
+        <option value="戒律">戒律 / Vinaya &amp; Precepts</option>
+        <option value="禪修">禪修 / Meditation</option>
+        <option value="因明">因明 / Buddhist Logic</option>
+        <option value="儀軌法物">儀軌法物 / Ritual &amp; Liturgy</option>
+        <option value="稱謂教職">稱謂教職 / Titles &amp; Roles</option>
+        <option value="歷史事項">歷史事項 / Historical</option>
+        <option value="文學藝術">文學藝術 / Literature &amp; Arts</option>
+        <option value="其他">其他 / Other</option>
       </select>
     </div>
 
@@ -829,6 +829,19 @@
   const canCreate         = ['depositor','member','leader','admin'].includes(userRole);
   const ENTITY_TYPES   = ['人名','地名','寺院','宗派','書名典籍','佛菩薩尊號','概念術語','其他'];
   const SUBJECT_FIELDS = ['教義','戒律','禪修','因明','儀軌法物','稱謂教職','歷史事項','文學藝術','其他'];
+  const ENTITY_TYPE_LABELS = {
+    '人名':'人名 / People\'s Name', '地名':'地名 / Place Name',
+    '寺院':'寺院 / Temple & Monastery', '宗派':'宗派 / School & Sect',
+    '書名典籍':'書名典籍 / Scripture & Text', '佛菩薩尊號':'佛菩薩尊號 / Buddha & Bodhisattva',
+    '概念術語':'概念術語 / Doctrinal Term', '其他':'其他 / Other',
+  };
+  const SUBJECT_FIELD_LABELS = {
+    '教義':'教義 / Doctrine', '戒律':'戒律 / Vinaya & Precepts',
+    '禪修':'禪修 / Meditation', '因明':'因明 / Buddhist Logic',
+    '儀軌法物':'儀軌法物 / Ritual & Liturgy', '稱謂教職':'稱謂教職 / Titles & Roles',
+    '歷史事項':'歷史事項 / Historical', '文學藝術':'文學藝術 / Literature & Arts',
+    '其他':'其他 / Other',
+  };
   let allTerms          = [];
   let allSources        = [];
   let allDirectory      = [];
@@ -1441,36 +1454,28 @@
       </div>
       <div class="edit-below-box">
         <div class="edit-meta-section">
-          <div class="meta-field">
-            <label>Source Content Chinese</label>
-            <textarea class="meta-textarea" data-term-id="${t.id}" data-field="source_content_chinese" onblur="autoSaveMeta(this)" oninput="autoResizeTextarea(this)" placeholder="Original Chinese passage containing this term…" ${canEdit ? '' : 'readonly'}>${t.source_content_chinese||''}</textarea>
-          </div>
-          <div class="meta-field">
-            <label>Source Content English</label>
-            <textarea class="meta-textarea" data-term-id="${t.id}" data-field="source_content_english" onblur="autoSaveMeta(this)" oninput="autoResizeTextarea(this)" placeholder="English translation of the passage…" ${canEdit ? '' : 'readonly'}>${t.source_content_english||''}</textarea>
-          </div>
           ${(function(){
             const clsSrcBadge = t.classification_source === 'ai'
-              ? '<span class="cls-badge cls-ai" title="AI 自動分類">AI</span>'
+              ? '<span class="cls-badge cls-ai" title="AI classified">AI</span>'
               : t.classification_source === 'manual'
-                ? '<span class="cls-badge cls-manual" title="人工確認">✓</span>'
+                ? '<span class="cls-badge cls-manual" title="Manually confirmed">✓</span>'
                 : '';
             const aiClassifyBtn = canEdit
-              ? `<button class="btn btn-secondary btn-sm" id="cls-btn-${t.id}" onclick="classifyTerm('${t.id}')">✦ AI 分類</button>`
+              ? `<button class="btn btn-secondary btn-sm" id="cls-btn-${t.id}" onclick="classifyTerm('${t.id}')">✦ AI Classify</button>`
               : '';
             const entityTypeOpts = ENTITY_TYPES
-              .map(v => `<option value="${v}"${(t.entity_type||'')===v?' selected':''}>${v}</option>`).join('');
+              .map(v => `<option value="${v}"${(t.entity_type||'')===v?' selected':''}>${ENTITY_TYPE_LABELS[v]||v}</option>`).join('');
             const subjectFieldOpts = SUBJECT_FIELDS
-              .map(v => `<option value="${v}"${(t.subject_field||'')===v?' selected':''}>${v}</option>`).join('');
+              .map(v => `<option value="${v}"${(t.subject_field||'')===v?' selected':''}>${SUBJECT_FIELD_LABELS[v]||v}</option>`).join('');
             return `
           <div class="meta-field full">
-            <label>詞條類型 / 主題領域</label>
+            <label>Entity Type / Subject Field</label>
             <div class="cls-row">
               <select class="meta-select" data-term-id="${t.id}" data-field="entity_type" onchange="autoSaveClassify(this)" ${canEdit ? '' : 'disabled'}>
-                <option value="">— 詞條類型 —</option>${entityTypeOpts}
+                <option value="">— Entity Type —</option>${entityTypeOpts}
               </select>
               <select class="meta-select" data-term-id="${t.id}" data-field="subject_field" onchange="autoSaveClassify(this)" ${canEdit ? '' : 'disabled'}>
-                <option value="">— 主題領域 —</option>${subjectFieldOpts}
+                <option value="">— Subject Field —</option>${subjectFieldOpts}
               </select>
               ${clsSrcBadge}${aiClassifyBtn}
             </div>
@@ -1489,6 +1494,14 @@
               <span class="attach-note-msg" id="attach-note-msg-${t.id}"></span>
             </div>
           </div>` : ''}
+          <div class="meta-field">
+            <label>Source Content Chinese</label>
+            <textarea class="meta-textarea" data-term-id="${t.id}" data-field="source_content_chinese" onblur="autoSaveMeta(this)" oninput="autoResizeTextarea(this)" placeholder="Original Chinese passage containing this term…" ${canEdit ? '' : 'readonly'}>${t.source_content_chinese||''}</textarea>
+          </div>
+          <div class="meta-field">
+            <label>Source Content English</label>
+            <textarea class="meta-textarea" data-term-id="${t.id}" data-field="source_content_english" onblur="autoSaveMeta(this)" oninput="autoResizeTextarea(this)" placeholder="English translation of the passage…" ${canEdit ? '' : 'readonly'}>${t.source_content_english||''}</textarea>
+          </div>
         </div>
       </div>
       ${adminFinalSecond}${adminReset}
@@ -1622,7 +1635,7 @@
     try {
       const res  = await fetch(`/api/terms/${termId}/classify`, { method: 'POST', headers: {'Content-Type':'application/json'} });
       const data = await res.json();
-      if (data.error) { showToast('⚠ ' + data.error); if (btn) { btn.disabled = false; btn.textContent = '✦ AI 分類'; } return; }
+      if (data.error) { showToast('⚠ ' + data.error); if (btn) { btn.disabled = false; btn.textContent = '✦ AI Classify'; } return; }
       const term = allTerms.find(t => t.id === termId);
       if (term) {
         term.entity_type           = data.entity_type;
@@ -1630,7 +1643,7 @@
         term.classification_source = 'ai';
       }
       const lowConf = data.confidence < 0.6;
-      const confMsg = lowConf ? `AI 把握度較低（${Math.round(data.confidence*100)}%）：${data.reasoning}，請確認。` : '';
+      const confMsg = lowConf ? `AI confidence low (${Math.round(data.confidence*100)}%): ${data.reasoning} — please verify.` : '';
       if (editingTermId === termId) {
         refreshEditView();
         if (lowConf) {
@@ -1638,8 +1651,8 @@
           if (confEl) { confEl.textContent = confMsg; confEl.style.display = ''; }
         }
       }
-      showToast('✓ AI 分類完成');
-    } catch(e) { showToast('⚠ 分類失敗'); if (btn) { btn.disabled = false; btn.textContent = '✦ AI 分類'; } }
+      showToast('✓ AI classification done');
+    } catch(e) { showToast('⚠ Classification failed'); if (btn) { btn.disabled = false; btn.textContent = '✦ AI Classify'; } }
   }
 
   async function autoSaveClassify(el) {
@@ -1659,19 +1672,19 @@
         if (data.last_modified_by) { term.last_modified_by = data.last_modified_by; term.last_modified_time = data.last_modified_time; updateModifiedDisplay(termId); }
       }
       if (editingTermId === termId) refreshEditView();
-      showToast('✓ 已儲存');
-    } catch(e) { showToast('⚠ 儲存失敗'); el.value = orig; }
+      showToast('✓ Saved');
+    } catch(e) { showToast('⚠ Save failed'); el.value = orig; }
   }
 
   async function startBatchClassify() {
     const unclassified = allTerms.filter(t => !t.entity_type);
-    if (!unclassified.length) { showToast('所有詞彙已完成分類'); return; }
+    if (!unclassified.length) { showToast('All terms are already classified'); return; }
     const total = unclassified.length;
     const progressEl = document.getElementById('batch-classify-progress');
     if (progressEl) progressEl.style.display = '';
     let done = 0, errors = 0;
     for (const term of unclassified) {
-      if (progressEl) progressEl.textContent = `處理中… ${done + errors} / ${total}`;
+      if (progressEl) progressEl.textContent = `Processing… ${done + errors} / ${total}`;
       try {
         const res  = await fetch(`/api/terms/classify_batch`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({id: term.id}) });
         const data = await res.json();
@@ -1687,7 +1700,7 @@
         }
       } catch(e) { errors++; }
     }
-    if (progressEl) progressEl.textContent = `完成：${done} 筆已分類，${errors} 筆失敗`;
+    if (progressEl) progressEl.textContent = `Done: ${done} classified, ${errors} failed`;
     applyView();
   }
 
