@@ -1,7 +1,6 @@
 import logging
 
-from db import supabase
-import sheets
+from db import get_conn
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +12,7 @@ def _v(row, key):
 
 def _row_to_sheets_fmt(row):
     return {
-        "SourceID":   _v(row, "source_id"),
+        "SourceID":   _v(row, "display_id"),
         "SourceName": _v(row, "source_name"),
         "SourceType": _v(row, "source_type"),
         "Notes":      _v(row, "notes"),
@@ -21,39 +20,49 @@ def _row_to_sheets_fmt(row):
 
 
 def _next_source_id():
-    result = (
-        supabase.table("sources")
-        .select("source_id")
-        .order("source_id", desc=True)
-        .limit(1)
-        .execute()
-    )
-    if result.data:
-        sid = result.data[0].get("source_id", "")
-        if sid.startswith("S") and sid[1:].isdigit():
-            width = len(sid) - 1          # preserve existing zero-padding width
-            return f"S{int(sid[1:]) + 1:0{width}d}"
-    return "S001"
+    """Scan existing display_ids and return the next S-prefixed ID."""
+    conn = get_conn()
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT display_id FROM sources "
+                    "WHERE display_id ~ '^S[0-9]+$' "
+                    "ORDER BY length(display_id) DESC, display_id DESC LIMIT 1"
+                )
+                row = cur.fetchone()
+    finally:
+        conn.close()
+    if row:
+        sid   = row["display_id"]
+        width = len(sid) - 1
+        return f"S{int(sid[1:]) + 1:0{width}d}"
+    return "S000001"
 
 
 def list_sources():
-    result = supabase.table("sources").select("*").execute()
-    return [_row_to_sheets_fmt(r) for r in result.data]
+    conn = get_conn()
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT * FROM sources ORDER BY display_id")
+                rows = cur.fetchall()
+    finally:
+        conn.close()
+    return [_row_to_sheets_fmt(r) for r in rows]
 
 
 def add_source(name, source_type, notes):
     sid = _next_source_id()
-    sb_row = {
-        "source_id":   sid,
-        "source_name": name,
-        "source_type": source_type or None,
-        "notes":       notes or None,
-    }
-    supabase.table("sources").insert(sb_row).execute()
-
+    conn = get_conn()
     try:
-        sheets.get_source_sheet().append_row([sid, name, source_type, notes])
-    except Exception as exc:
-        logger.warning("Sources Sheet mirror append failed for %s: %s", sid, exc)
-
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO sources (display_id, source_name, source_type, notes) "
+                    "VALUES (%s, %s, %s, %s)",
+                    (sid, name, source_type or None, notes or None)
+                )
+    finally:
+        conn.close()
     return sid

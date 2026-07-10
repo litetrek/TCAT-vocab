@@ -23,7 +23,7 @@ with a single click.
 |----------|-----------|
 | Backend  | Python 3.10 / Flask |
 | Auth     | Google OAuth 2.0 (Authlib) |
-| Database | Google Sheets via gspread + service account |
+| Database | **Supabase Postgres** (migrating from Google Sheets — T0 in progress) |
 | AI       | Anthropic Claude (`claude-haiku-4-5-20251001`) |
 | Frontend | Vanilla JS + HTML/CSS (single-page, no framework) |
 | Hosting  | GreenGeeks shared hosting, Apache, CGI via `index.cgi` |
@@ -37,7 +37,8 @@ with a single click.
 buddhist-vocab/
 ├── app.py                      # Flask entry point, Google OAuth, route registration
 ├── config.py                   # Constants, sheet column maps, utility functions
-├── sheets.py                   # Google Sheets client, all read/write helpers
+├── sheets.py                   # Google Sheets client (to be retired in T0-5)
+├── db.py                       # psycopg2 connection helpers: get_conn(), generate_display_id()
 ├── ai.py                       # Anthropic Claude AI generation (Pinyin, Pali, Sanskrit, translations)
 ├── auth.py                     # Session helpers: is_logged_in, is_admin, is_leader
 ├── routes/
@@ -46,6 +47,17 @@ buddhist-vocab/
 │   ├── members.py              # /api/members/* endpoints
 │   ├── sources.py              # /api/sources + /api/init endpoints
 │   └── extract.py              # /api/extract/* endpoints — Extraction module
+├── repositories/               # psycopg2 data-access layer — pure Postgres, no Sheets mirror
+│   ├── __init__.py
+│   ├── members_repo.py
+│   ├── sources_repo.py
+│   ├── terms_repo.py
+│   ├── extraction_repo.py
+│   └── audit_repo.py
+├── migrations/
+│   └── 001_initial_schema.sql  # Full Postgres DDL — 11 tables per design guide
+├── scripts/
+│   └── run_migration.py        # Applies 001_initial_schema.sql via DATABASE_URL / psycopg2
 ├── index.cgi                   # CGI entry point (shebang: venv310/bin/python3.10)
 ├── templates/
 │   ├── index.html              # Main app UI — two top-level tabs: Extraction and Vocabulary
@@ -68,14 +80,41 @@ buddhist-vocab/
 
 **Never committed to git (server/local only):**
 - `credentials.json` — Google service account private key
-- `.env` — dev environment secrets
+- `.env` — dev environment secrets (contains DATABASE_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 - `.env.production` — production environment secrets (upload as `.env` on server)
 - `.htaccess` — Apache rewrite rules (exists on server, managed manually)
 - `venv/`, `venv310/` — Python virtual environments
 
 ---
 
-## Google Sheets Structure
+## Supabase Database Schema (T0 target — 11 tables)
+
+**Project:** `TCAT-vocab` (id: `yvkadctkigkjtjmmxrqc`, region: us-west-1)
+**Connection:** pgBouncer pooled, port 6543, `DATABASE_URL` env var
+
+All tables use `id bigint generated always as identity` as internal PK and a `display_id`
+text column (T000001 / D000001 / etc.) for human-facing IDs. Sequences are created for
+each display_id to eliminate the race condition from the old Sheets "scan for max ID" pattern.
+
+| Table | display_id prefix | Notes |
+|---|---|---|
+| `members` | — | email UNIQUE, role check constraint |
+| `sources` | S000001 | |
+| `terms` | T000001 | status check: pending/finalized; idx on chinese, status |
+| `audit_log` | — | ts timestamptz; term_id is text (no FK — historical rows may ref deleted terms) |
+| `ext_documents` | D000001 | |
+| `ext_paragraphs` | — | FK → ext_documents(id); UNIQUE (document_id, paragraph_index) |
+| `trans_books` | B000001 | FK → sources(id); status: active/archived |
+| `trans_chapters` | C000001 | FK → trans_books(id); section_type + status check constraints |
+| `trans_units` | U000001 | unit_order numeric (fractional indexing); split_map jsonb; embedding-ready |
+| `trans_revisions` | R000001 | embedding vector(1536) for pgvector RAG |
+| `style_guide` | S000001 | active boolean; source_revision_ids bigint[] |
+
+pgvector extension enabled for `trans_revisions.embedding`.
+
+---
+
+## Google Sheets Structure (source of truth until T0-4 cutover)
 
 One Google Sheet with seven worksheets:
 
@@ -90,7 +129,6 @@ One Google Sheet with seven worksheets:
 | **ExtractionParagraphs** | DocumentID, ParagraphIndex, ChineseText, EnglishText |
 
 **Service account:** `sheets-editor@warm-composite-494900-b0.iam.gserviceaccount.com`
-(must have Editor access on the Google Sheet)
 
 ---
 
@@ -119,11 +157,14 @@ See `.env.example` for the full list with placeholder values.
 | `GOOGLE_CLIENT_SECRET` | OAuth 2.0 client secret |
 | `SECRET_KEY` | Flask session signing key |
 | `ANTHROPIC_API_KEY` | Claude AI access |
-| `SHEET_ID` | Google Sheet ID from URL |
+| `SHEET_ID` | Google Sheet ID (kept until T0-5 cutover) |
 | `SUPER_ADMIN_EMAIL` | Always-admin email address |
 | `GOOGLE_REDIRECT_URI` | OAuth callback URL (differs dev vs prod) |
 | `FLASK_ENV` | `development` or `production` |
 | `PORT` | Local dev port (unused in CGI mode) |
+| `DATABASE_URL` | **New** — pgBouncer pooled connection string, port 6543 (psycopg2 / migration scripts) |
+| `SUPABASE_URL` | Kept in .env (unused by app runtime; may be used by Supabase tooling) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Kept in .env (unused by app runtime; may be used by Supabase tooling) |
 
 ---
 
@@ -311,6 +352,42 @@ See `.env.example` for the full list with placeholder values.
 - Panel label row stays fixed at top; only the text content scrolls (`display: flex; flex-direction: column` layout)
 - Minimum height 160px prevents panels from being collapsed to nothing
 
+### T0-1 — Supabase Schema (2026-07-09)
+- Created `migrations/001_initial_schema.sql` — full DDL per `docs/T-CAT翻譯模組設計指南.md` appendix
+- Created `scripts/run_migration.py` — applies the migration via `DATABASE_URL` / psycopg2-binary
+- Applied migration to Supabase project `TCAT-vocab` via MCP; all 11 tables verified
+- Dropped interim tables from earlier exploratory migration sessions (staged 1-6):
+  `extraction_documents`, `extraction_paragraphs`, `votes` — all were empty
+- Rebuilt 6 existing-system tables with correct design-guide schema:
+  - `id bigint generated always as identity` as internal PK (was text display_id as PK)
+  - `display_id text unique` for human-facing IDs
+  - `audit_log.ts` (was `timestamp`); `ext_documents`/`ext_paragraphs` (was `extraction_*`)
+- Created 5 new translation-module tables: `trans_books`, `trans_chapters`, `trans_units`,
+  `trans_revisions`, `style_guide`
+- pgvector extension enabled; display_id sequences created for all relevant tables
+- **Note:** `repositories/` and `db.py` still use old supabase-py client names — rewritten in T0-3
+
+### T0-2 — Data Migration (2026-07-09)
+- Created `scripts/migrate_from_sheets.py` — full one-shot migration: gspread → Postgres
+- Pre-flight: checks env vars, credentials.json, aborts if target tables non-empty (unless `--force`)
+- Migrated 6 tables in FK order: members → sources → terms → audit_log → ext_documents → ext_paragraphs
+- Key transforms: email lowercase, role normalized, `translation_1/2/3` → `translation1/2/3`, FK resolution for ext_paragraphs.document_id (display_id → internal bigint via RETURNING map)
+- Votes (15 rows) exported to `backup/votes_export_20260709.csv` — not migrated (deprecated)
+- Sequences calibrated: `seq_terms_display → 2844`, `seq_ext_documents_display → 2`
+- Verification: row counts all match (2844 terms, 6 members, 5 sources, 49 audit, 2 docs, 36 paragraphs); 20-row spot-check on terms (26 cols) passed; all spot-checks passed
+- **T0-2 驗收通過 — zero errors, zero skipped rows**
+
+### T0-3 — Data Layer Rewrite (2026-07-09)
+- Rewrote `db.py`: removed supabase-py client; added `get_conn()` (psycopg2 + RealDictCursor) and `generate_display_id(cur, prefix, sequence_name)` (nextval-based, no race condition)
+- Rewrote all 5 repositories to use psycopg2 + DATABASE_URL; removed all Sheets mirror code
+- Column mapping in `terms_repo.py`: `translation_1/2/3` → `translation1/2/3`, `translation_other_1/2` → `translation_other1/2`, `created_at` → `added_at`, `term_id` → `display_id`; mapped transparently so `routes/` layer sees same key names as before
+- Column mapping in `extraction_repo.py`: table `extraction_documents` → `ext_documents`; `extraction_paragraphs` → `ext_paragraphs`; `document_id` text FK → bigint FK resolved internally via RETURNING id pattern
+- Column mapping in `audit_repo.py`: `timestamp` → `ts`; removed `legacy_audit_id` reference
+- Column mapping in `sources_repo.py`: `source_id` → `display_id`
+- **routes/ layer: zero changes** — all function signatures preserved, all return dict shapes unchanged
+- Local regression testing: all read and write paths verified (create/update/set_final/reset_final/update_translations/write_audit; members CRUD; sources add; extraction create_document + get_paragraphs + update_last_viewed_index)
+- Flask app starts clean, routes registered, OAuth redirect confirmed responding
+
 ---
 
 ## Known Issues / Notes
@@ -320,11 +397,23 @@ See `.env.example` for the full list with placeholder values.
 - `venv/` exists on server alongside `venv310/` — only `venv310` is active; `venv/` may be an old artifact
 - The `SamKirkland/FTP-Deploy-Action@v4.3.5` Node.js 20 deprecation warning is harmless now but will need updating before September 16, 2026 when GitHub removes Node.js 20 from runners
 - `.ftp-deploy-sync-stat.json` on the server is created by the deploy action to track file state — do not delete it
+- Supabase has a few stale sequences (`documents_id_seq`, `sources_id_seq1`, `terms_id_seq1`) left from
+  earlier sessions — harmless, can be cleaned up in T0-5
 
 ---
 
+## T0 Migration Roadmap
+
+| Sub-stage | Status | Summary |
+|---|---|---|
+| **T0-1 Schema** | **Done** | 11 tables built in Supabase per design guide DDL |
+| **T0-2 Migration script** | **Done** | gspread → Postgres; 2844 terms + 5 other tables; Votes → CSV; sequences calibrated |
+| **T0-3 Data layer rewrite** | **Done** | db.py + all repositories rewritten to psycopg2; routes/ untouched |
+| **T0-4 Cutover** | Pending | Freeze Sheets writes, install psycopg2-binary on server, deploy, verify production |
+| **T0-5 Cleanup** | Pending | Retire Sheets, weekly pg_dump backup, remove gspread from requirements |
+
 ## Next Steps
 
-- Update actions to Node.js 24 before Sep 2026 deprecation deadline
+- **T0-4**: Production cutover — deploy to GreenGeeks, install psycopg2-binary in venv310, set DATABASE_URL in server .env, run smoke test, freeze Sheets writes
+- Update deploy action to Node.js 24 before Sep 2026 deprecation deadline
 - Confirm whether `venv/` on server can be removed (old virtual environment)
-- Consider adding SSH access to GreenGeeks for future pipeline improvements
