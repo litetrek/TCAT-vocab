@@ -479,8 +479,56 @@ See `.env.example` for the full list with placeholder values.
 | **T0-4 Cutover** | **Done** | supabase-py live in production; 2844 terms + all tables verified; extraction data re-migrated |
 | **T0-5 Cleanup** | **Done** | Sheets retired; gspread removed; weekly pg_dump backup verified (493 KB artifact, 90-day retention) |
 
+### Classification Stage 1 — Entity Type / Subject Field (2026-07-10)
+
+Two-axis structured classification added to all vocabulary terms:
+
+- **entity_type**: 人名 / 地名 / 寺院 / 宗派 / 書名典籍 / 佛菩薩尊號 / 概念術語 / 其他
+- **subject_field**: 教義 / 戒律 / 禪修 / 因明 / 儀軌法物 / 稱謂教職 / 歷史事項 / 文學藝術 / 其他
+
+**Migration**: `migrations/004_entity_subject_classification.sql`
+- 5 new columns on `terms`: `entity_type`, `subject_field`, `classification_source` (ai/manual), `classified_by`, `classified_at`
+- 2 indexes: `idx_terms_entity_type`, `idx_terms_subject_field`
+- Old `category` column preserved (not dropped yet)
+- Applied to Supabase project via MCP; all 5 columns verified
+
+**Backend** (`ai.py`):
+- Added `ENTITY_TYPES`, `SUBJECT_FIELDS` module-level constants
+- Added `classify_term(term: dict) -> dict` — calls Claude Haiku, returns validated `{entity_type, subject_field, confidence, reasoning}`; strips markdown fences from response, validates values against allowed lists
+
+**Data layer** (`repositories/terms_repo.py`):
+- `entity_type`, `subject_field` added to `_FIELD_TO_DB` and `_ALLOWED_INSERT_COLS`
+- `_row_to_response()` now returns all 5 classification fields
+- `update_term_field()` accepts optional `extra_updates` dict for co-writing classification metadata
+- Added `update_classification()` — sets all 5 classification columns in one UPDATE
+- Added `get_classification_source()` — returns `classification_source` for a single term
+
+**Routes** (`routes/terms.py`):
+- `PATCH /api/terms/<id>`: `entity_type` and `subject_field` added to `editable`; when either is patched, automatically sets `classification_source='manual'`, `classified_by`, `classified_at`; audit_log entry written
+- `POST /api/terms/<id>/classify`: member+ — calls `classify_term()`, writes AI result to DB, writes audit, returns `{entity_type, subject_field, confidence, reasoning}`
+- `POST /api/terms/classify_batch`: leader+ — same as above for one term at a time, skips `manual` terms; frontend drives the loop
+
+**Frontend** (`templates/index.html`):
+- CSS: `.cls-row`, `.cls-badge.cls-ai`, `.cls-badge.cls-manual`, `.cls-confidence-note`
+- Sidebar: "Entity Type" and "Subject Field" filter dropdowns (including "_unclassified" option for entity type)
+- Sidebar: "Batch Classify" button for leader+ (drives the batch loop with live progress counter)
+- Edit view: combined classification row with two `<select>` dropdowns, AI badge or manual ✓ badge, "✦ AI 分類" button; confidence note shown inline when AI confidence < 60%
+- `ENTITY_TYPES` / `SUBJECT_FIELDS` JS constants; `currentEntityType` / `currentSubjectField` filter state
+- `setEntityType()`, `setSubjectField()`, `classifyTerm()`, `autoSaveClassify()`, `startBatchClassify()`
+- `getFilteredSorted()` updated to apply entity_type / subject_field filters
+
+**Backfill script** (`scripts/backfill_classification.py`):
+- Fetches all terms where `entity_type IS NULL`
+- Calls `classify_term()` for each, writes result to Supabase
+- `--dry-run`: prints suggestions only, no writes
+- `--limit N`: process only N terms
+- Skips already-classified rows; safe to interrupt and resume
+
+---
+
 ## Next Steps
 
+- **Run backfill**: `python scripts/backfill_classification.py --dry-run` (spot-check 20 rows first), then without `--dry-run` for full 2844-term run
 - **T0 manual cleanup** (no code changes needed):
   - Export 7 Sheets worksheets as CSV → `backup/sheets_final_export_20260709/` (local only, do not commit)
   - SSH GreenGeeks: remove `SHEET_ID` from `.env`

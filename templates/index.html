@@ -236,6 +236,12 @@
     .attach-note-msg.success { color: #2d7a4f; }
     .meta-select { width: 100%; font-family: 'EB Garamond', serif; font-size: 0.92rem; color: var(--text); background: rgba(255,255,255,0.7); border: 1px solid rgba(26,18,8,0.15); border-radius: 3px; padding: 0.45rem 0.65rem; cursor: pointer; transition: border-color 0.2s; }
     .meta-select:focus { outline: none; border-color: var(--gold); }
+    .cls-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .cls-row .meta-select { flex: 1 1 140px; }
+    .cls-badge { display: inline-flex; align-items: center; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em; padding: 0.15rem 0.45rem; border-radius: 3px; white-space: nowrap; }
+    .cls-badge.cls-ai     { background: rgba(80,140,200,0.15); color: #3a6fa0; border: 1px solid rgba(80,140,200,0.35); }
+    .cls-badge.cls-manual { background: rgba(45,122,79,0.12); color: #2d7a4f; border: 1px solid rgba(45,122,79,0.3); }
+    .cls-confidence-note  { font-size: 0.75rem; color: #a36a00; margin-top: 0.3rem; display: block; }
 
     /* ── MODAL ──────────────────────────────────────────────────────────── */
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(26,18,8,0.7); z-index: 200; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
@@ -573,7 +579,45 @@
       </div>
     </div>
 
+    <div>
+      <div class="sidebar-section-title">Entity Type</div>
+      <select class="sidebar-source-sel" id="sidebar-entity-type" onchange="setEntityType(this.value)">
+        <option value="">All Types</option>
+        <option value="概念術語">概念術語</option>
+        <option value="人名">人名</option>
+        <option value="地名">地名</option>
+        <option value="寺院">寺院</option>
+        <option value="宗派">宗派</option>
+        <option value="書名典籍">書名典籍</option>
+        <option value="佛菩薩尊號">佛菩薩尊號</option>
+        <option value="其他">其他</option>
+        <option value="_unclassified">（未分類）</option>
+      </select>
+    </div>
+
+    <div>
+      <div class="sidebar-section-title">Subject Field</div>
+      <select class="sidebar-source-sel" id="sidebar-subject-field" onchange="setSubjectField(this.value)">
+        <option value="">All Fields</option>
+        <option value="教義">教義</option>
+        <option value="戒律">戒律</option>
+        <option value="禪修">禪修</option>
+        <option value="因明">因明</option>
+        <option value="儀軌法物">儀軌法物</option>
+        <option value="稱謂教職">稱謂教職</option>
+        <option value="歷史事項">歷史事項</option>
+        <option value="文學藝術">文學藝術</option>
+        <option value="其他">其他</option>
+      </select>
+    </div>
+
     <div style="margin-top:auto;">
+      {% if user_role in ('leader', 'admin') %}
+      <div style="margin-bottom:0.5rem;">
+        <button class="btn btn-secondary" style="width:100%;" onclick="startBatchClassify()">✦ Batch Classify</button>
+        <div id="batch-classify-progress" style="display:none;font-size:0.75rem;color:var(--text-soft);padding:0.3rem 0 0;text-align:center;"></div>
+      </div>
+      {% endif %}
       {% if is_admin %}
       <button class="btn btn-secondary" style="width:100%;margin-bottom:0.5rem;" onclick="openTeamModal()">☷ Team</button>
       <button class="btn btn-secondary" style="width:100%;margin-bottom:0.5rem;" onclick="openSourcesModal()">⊕ Sources</button>
@@ -783,13 +827,17 @@
   const currentUserEmail  = '{{ user }}';
   const canEdit           = ['member','leader','admin'].includes(userRole);
   const canCreate         = ['depositor','member','leader','admin'].includes(userRole);
+  const ENTITY_TYPES   = ['人名','地名','寺院','宗派','書名典籍','佛菩薩尊號','概念術語','其他'];
+  const SUBJECT_FIELDS = ['教義','戒律','禪修','因明','儀軌法物','稱謂教職','歷史事項','文學藝術','其他'];
   let allTerms          = [];
   let allSources        = [];
   let allDirectory      = [];
   let membersData       = [];
   let editingMemberEmail = null;
-  let currentFilter = 'all';
-  let currentSource = '';
+  let currentFilter      = 'all';
+  let currentSource      = '';
+  let currentEntityType  = '';
+  let currentSubjectField = '';
   let currentPage   = 1;
   let pageSize      = 20;
 
@@ -974,6 +1022,20 @@
     applyView();
   }
 
+  function setEntityType(val) {
+    currentEntityType = val;
+    currentPage = 1;
+    if (isMobile()) closeMobileMenu();
+    applyView();
+  }
+
+  function setSubjectField(val) {
+    currentSubjectField = val;
+    currentPage = 1;
+    if (isMobile()) closeMobileMenu();
+    applyView();
+  }
+
   function populateSidebarSource() {
     const sel = document.getElementById('sidebar-source');
     if (!sel) return;
@@ -1004,6 +1066,13 @@
     let terms = allTerms.slice();
 
     if (currentSource) terms = terms.filter(t => t.source === currentSource);
+
+    if (currentEntityType === '_unclassified') {
+      terms = terms.filter(t => !t.entity_type);
+    } else if (currentEntityType) {
+      terms = terms.filter(t => t.entity_type === currentEntityType);
+    }
+    if (currentSubjectField) terms = terms.filter(t => t.subject_field === currentSubjectField);
 
     if (currentFilter === 'pending')   terms = terms.filter(t => t.status !== 'finalized');
     if (currentFilter === 'finalized') terms = terms.filter(t => t.status === 'finalized');
@@ -1380,6 +1449,34 @@
             <label>Source Content English</label>
             <textarea class="meta-textarea" data-term-id="${t.id}" data-field="source_content_english" onblur="autoSaveMeta(this)" oninput="autoResizeTextarea(this)" placeholder="English translation of the passage…" ${canEdit ? '' : 'readonly'}>${t.source_content_english||''}</textarea>
           </div>
+          ${(function(){
+            const clsSrcBadge = t.classification_source === 'ai'
+              ? '<span class="cls-badge cls-ai" title="AI 自動分類">AI</span>'
+              : t.classification_source === 'manual'
+                ? '<span class="cls-badge cls-manual" title="人工確認">✓</span>'
+                : '';
+            const aiClassifyBtn = canEdit
+              ? `<button class="btn btn-secondary btn-sm" id="cls-btn-${t.id}" onclick="classifyTerm('${t.id}')">✦ AI 分類</button>`
+              : '';
+            const entityTypeOpts = ENTITY_TYPES
+              .map(v => `<option value="${v}"${(t.entity_type||'')===v?' selected':''}>${v}</option>`).join('');
+            const subjectFieldOpts = SUBJECT_FIELDS
+              .map(v => `<option value="${v}"${(t.subject_field||'')===v?' selected':''}>${v}</option>`).join('');
+            return `
+          <div class="meta-field full">
+            <label>詞條類型 / 主題領域</label>
+            <div class="cls-row">
+              <select class="meta-select" data-term-id="${t.id}" data-field="entity_type" onchange="autoSaveClassify(this)" ${canEdit ? '' : 'disabled'}>
+                <option value="">— 詞條類型 —</option>${entityTypeOpts}
+              </select>
+              <select class="meta-select" data-term-id="${t.id}" data-field="subject_field" onchange="autoSaveClassify(this)" ${canEdit ? '' : 'disabled'}>
+                <option value="">— 主題領域 —</option>${subjectFieldOpts}
+              </select>
+              ${clsSrcBadge}${aiClassifyBtn}
+            </div>
+            <span id="cls-confidence-${t.id}" class="cls-confidence-note" style="display:none;"></span>
+          </div>`;
+          })()}
           <div class="meta-field full">
             <label>Notes</label>
             <div class="notes-display${t.notes ? '' : ' empty'}" id="notes-display-${t.id}">${escHtml(t.notes) || 'No notes yet.'}</div>
@@ -1516,6 +1613,82 @@
       }
       showToast('✓ Saved');
     } catch(e) { showToast('⚠ Failed to save'); }
+  }
+
+  // ── CLASSIFICATION ───────────────────────────────────────────────────────
+  async function classifyTerm(termId) {
+    const btn = document.getElementById(`cls-btn-${termId}`);
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    try {
+      const res  = await fetch(`/api/terms/${termId}/classify`, { method: 'POST', headers: {'Content-Type':'application/json'} });
+      const data = await res.json();
+      if (data.error) { showToast('⚠ ' + data.error); if (btn) { btn.disabled = false; btn.textContent = '✦ AI 分類'; } return; }
+      const term = allTerms.find(t => t.id === termId);
+      if (term) {
+        term.entity_type           = data.entity_type;
+        term.subject_field         = data.subject_field;
+        term.classification_source = 'ai';
+      }
+      const lowConf = data.confidence < 0.6;
+      const confMsg = lowConf ? `AI 把握度較低（${Math.round(data.confidence*100)}%）：${data.reasoning}，請確認。` : '';
+      if (editingTermId === termId) {
+        refreshEditView();
+        if (lowConf) {
+          const confEl = document.getElementById(`cls-confidence-${termId}`);
+          if (confEl) { confEl.textContent = confMsg; confEl.style.display = ''; }
+        }
+      }
+      showToast('✓ AI 分類完成');
+    } catch(e) { showToast('⚠ 分類失敗'); if (btn) { btn.disabled = false; btn.textContent = '✦ AI 分類'; } }
+  }
+
+  async function autoSaveClassify(el) {
+    const termId = el.dataset.termId;
+    const field  = el.dataset.field;
+    const value  = el.value;
+    const term   = allTerms.find(t => t.id === termId);
+    const orig   = term ? (term[field] || '') : '';
+    if (value === orig) return;
+    try {
+      const res  = await fetch(`/api/terms/${termId}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({field, value}) });
+      const data = await res.json();
+      if (data.error) { showToast('⚠ ' + data.error); el.value = orig; return; }
+      if (term) {
+        term[field]                = value;
+        term.classification_source = 'manual';
+        if (data.last_modified_by) { term.last_modified_by = data.last_modified_by; term.last_modified_time = data.last_modified_time; updateModifiedDisplay(termId); }
+      }
+      if (editingTermId === termId) refreshEditView();
+      showToast('✓ 已儲存');
+    } catch(e) { showToast('⚠ 儲存失敗'); el.value = orig; }
+  }
+
+  async function startBatchClassify() {
+    const unclassified = allTerms.filter(t => !t.entity_type);
+    if (!unclassified.length) { showToast('所有詞彙已完成分類'); return; }
+    const total = unclassified.length;
+    const progressEl = document.getElementById('batch-classify-progress');
+    if (progressEl) progressEl.style.display = '';
+    let done = 0, errors = 0;
+    for (const term of unclassified) {
+      if (progressEl) progressEl.textContent = `處理中… ${done + errors} / ${total}`;
+      try {
+        const res  = await fetch(`/api/terms/classify_batch`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({id: term.id}) });
+        const data = await res.json();
+        if (!data.error && !data.skipped) {
+          term.entity_type           = data.entity_type;
+          term.subject_field         = data.subject_field;
+          term.classification_source = 'ai';
+          done++;
+        } else if (data.skipped) {
+          done++;
+        } else {
+          errors++;
+        }
+      } catch(e) { errors++; }
+    }
+    if (progressEl) progressEl.textContent = `完成：${done} 筆已分類，${errors} 筆失敗`;
+    applyView();
   }
 
   async function attachNote(termId, btn) {

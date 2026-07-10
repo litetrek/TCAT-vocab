@@ -20,6 +20,8 @@ _FIELD_TO_DB = {
     "notes":        "notes",
     "source_content_chinese": "source_content_chinese",
     "source_content_english": "source_content_english",
+    "entity_type":   "entity_type",
+    "subject_field": "subject_field",
 }
 
 # Vote key → Postgres column name
@@ -48,6 +50,7 @@ _ALLOWED_INSERT_COLS = {
     "translation_other1", "translation_other2", "translation_known", "final", "status",
     "source", "romanization_plain", "source_content_chinese", "source_content_english",
     "added_by", "added_at", "last_modified_by", "last_modified_at",
+    "entity_type", "subject_field", "classification_source", "classified_by", "classified_at",
 }
 
 _PAGE = 1000  # PostgREST default max rows per request
@@ -103,6 +106,11 @@ def _row_to_response(row):
         "romanization_plain": _v(row, "romanization_plain"),
         "source_content_chinese": _v(row, "source_content_chinese"),
         "source_content_english": _v(row, "source_content_english"),
+        "entity_type":           _v(row, "entity_type"),
+        "subject_field":         _v(row, "subject_field"),
+        "classification_source": _v(row, "classification_source"),
+        "classified_by":         _v(row, "classified_by"),
+        "classified_at":         _fmt_ts(_v(row, "classified_at")),
     }
 
 
@@ -196,10 +204,11 @@ def create_term(data):
     return display_id
 
 
-def update_term_field(term_id, field, value, modifier, now_str):
+def update_term_field(term_id, field, value, modifier, now_str, extra_updates=None):
     """
     Update one editable field.
     Returns (chinese, old_value), or (None, None) if the term does not exist.
+    extra_updates: optional dict of additional columns to set in the same UPDATE.
     """
     db_col = _FIELD_TO_DB.get(field)
     if not db_col:
@@ -219,6 +228,9 @@ def update_term_field(term_id, field, value, modifier, now_str):
     }
     if field == "pinyin":
         updates["romanization_plain"] = strip_tone_marks(value)
+
+    if extra_updates:
+        updates.update(extra_updates)
 
     supabase.table("terms").update(updates).eq("display_id", term_id).execute()
     return chinese, old_value
@@ -280,6 +292,33 @@ def reset_final(term_id, modifier, now_str):
         "last_modified_at":   _to_pg(now_str),
     }).eq("display_id", term_id).execute()
     return old_first, old_second, chinese
+
+
+def update_classification(term_id, entity_type, subject_field, source, classified_by, now_ts):
+    """Write entity_type / subject_field and classification metadata.
+    Skips terms where classification_source is already 'manual', unless called explicitly.
+    """
+    supabase.table("terms").update({
+        "entity_type":           _to_pg(entity_type),
+        "subject_field":         _to_pg(subject_field),
+        "classification_source": source,
+        "classified_by":         classified_by,
+        "classified_at":         now_ts,
+    }).eq("display_id", term_id).execute()
+
+
+def get_classification_source(term_id):
+    """Return classification_source for a single term, or None if term not found."""
+    result = (
+        supabase.table("terms")
+        .select("classification_source")
+        .eq("display_id", term_id)
+        .limit(1)
+        .execute()
+    )
+    if not result.data:
+        return None
+    return result.data[0].get("classification_source")
 
 
 def update_translations(term_id, translation_updates, modifier, now_str):

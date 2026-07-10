@@ -1,5 +1,10 @@
 import os
+import re
+import json
 import anthropic
+
+ENTITY_TYPES   = ['人名', '地名', '寺院', '宗派', '書名典籍', '佛菩薩尊號', '概念術語', '其他']
+SUBJECT_FIELDS = ['教義', '戒律', '禪修', '因明', '儀軌法物', '稱謂教職', '歷史事項', '文學藝術', '其他']
 
 
 def generate_term_data(chinese_term, context="", notes="",
@@ -132,3 +137,60 @@ TRANSLATION: [verbatim phrase copied from the English paragraph, or NOT_FOUND]""
                 return val
             return ""
     return ""
+
+
+def classify_term(term: dict) -> dict:
+    """Classify a Buddhist term into entity_type and subject_field.
+
+    Returns {"entity_type": str, "subject_field": str,
+             "confidence": float 0-1, "reasoning": str}.
+    Values are guaranteed to be within the allowed candidate lists.
+    """
+    ai = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    chinese = term.get("chinese", "")
+    pinyin  = term.get("pinyin",  "")
+    context = term.get("context", "")
+    notes   = term.get("notes",   "")
+
+    entity_list  = "、".join(ENTITY_TYPES)
+    subject_list = "、".join(SUBJECT_FIELDS)
+
+    ctx_parts = []
+    if pinyin:  ctx_parts.append(f"拼音：{pinyin}")
+    if context: ctx_parts.append(f"語境：{context}")
+    if notes:   ctx_parts.append(f"備注：{notes}")
+    ctx_str = ("\n" + "\n".join(ctx_parts)) if ctx_parts else ""
+
+    response = ai.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=300,
+        messages=[{
+            "role": "user",
+            "content": f"""你是一位佛學術語分類助手。請根據以下佛學詞彙資訊，為其分配 entity_type 和 subject_field。
+
+詞彙：{chinese}{ctx_str}
+
+entity_type 候選值（只能選其中一個，不得自創）：{entity_list}
+說明：「概念術語」是預設大類（教義概念、修行方法等）；其餘為專有名詞細分。
+
+subject_field 候選值（只能選其中一個，不得自創）：{subject_list}
+說明：若 entity_type 為專有名詞類（人名、地名、寺院、宗派、書名典籍、佛菩薩尊號），subject_field 可填「其他」。
+
+請只以 JSON 格式回覆，不要有任何其他文字或 markdown 標記：
+{{"entity_type": "...", "subject_field": "...", "confidence": 0到1之間的小數, "reasoning": "一句話說明分類理由"}}"""
+        }]
+    )
+
+    raw = response.content[0].text.strip()
+    # Strip markdown code fences if present
+    raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
+
+    result = json.loads(raw)
+
+    if result.get("entity_type") not in ENTITY_TYPES:
+        result["entity_type"] = "其他"
+    if result.get("subject_field") not in SUBJECT_FIELDS:
+        result["subject_field"] = "其他"
+    result["confidence"] = float(result.get("confidence", 0.5))
+    result["reasoning"]  = str(result.get("reasoning", ""))
+    return result

@@ -70,6 +70,8 @@ FIELD_LABELS = {
     "notes":        "Notes",
     "source_content_chinese": "Source Content Chinese",
     "source_content_english": "Source Content English",
+    "entity_type":   "Entity Type",
+    "subject_field": "Subject Field",
 }
 
 VOTE_LABELS = {

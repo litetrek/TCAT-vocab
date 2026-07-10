@@ -8,7 +8,7 @@ from config import (
 )
 from repositories.audit_repo import write_audit, get_term_audit
 from repositories import terms_repo
-from ai import generate_term_data, generate_missing_translations
+from ai import generate_term_data, generate_missing_translations, classify_term
 from auth import is_logged_in, is_leader, can_create_term, can_edit_existing
 
 terms_bp = Blueprint('terms', __name__)
@@ -157,13 +157,25 @@ def api_update_term(term_id):
         "pinyin", "trans1", "trans2", "trans3", "trans_known",
         "trans_other1", "trans_other2", "source", "context", "category", "notes",
         "source_content_chinese", "source_content_english",
+        "entity_type", "subject_field",
     }
     if field not in editable:
         return jsonify({"error": "Invalid field"}), 400
     try:
         now_str  = datetime.now().strftime("%Y-%m-%d %H:%M")
         modifier = session["user_email"]
-        chinese, old_value = terms_repo.update_term_field(term_id, field, value, modifier, now_str)
+
+        extra = None
+        if field in ("entity_type", "subject_field"):
+            extra = {
+                "classification_source": "manual",
+                "classified_by":         modifier,
+                "classified_at":         now_str,
+            }
+
+        chinese, old_value = terms_repo.update_term_field(
+            term_id, field, value, modifier, now_str, extra_updates=extra
+        )
         if chinese is None:
             return jsonify({"error": "Term not found"}), 404
         write_audit(term_id, chinese, modifier, session.get("user_name", ""),
@@ -331,6 +343,82 @@ def api_translate_term(term_id):
             "last_modified_by":   modifier if result else "",
             "last_modified_time": now_str  if result else "",
         })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@terms_bp.route("/api/terms/classify_batch", methods=["POST"])
+def api_classify_batch():
+    """Leader-only single-term classify step, called repeatedly by the frontend batch loop."""
+    if not is_logged_in():
+        return jsonify({"error": "Unauthorized"}), 401
+    if not is_leader():
+        return jsonify({"error": "Leader or admin only"}), 403
+    data    = request.json or {}
+    term_id = data.get("id", "").strip()
+    if not term_id:
+        return jsonify({"error": "id is required"}), 400
+    try:
+        term = terms_repo.get_term_record(term_id)
+        if not term:
+            return jsonify({"error": "Term not found"}), 404
+
+        # Skip if already manually classified
+        if terms_repo.get_classification_source(term_id) == "manual":
+            return jsonify({"skipped": True, "reason": "already manual"}), 200
+
+        result = classify_term({
+            "chinese": term.get("Chinese", ""),
+            "pinyin":  term.get("Pinyin",  ""),
+            "context": term.get("Context", ""),
+            "notes":   term.get("Notes",   ""),
+        })
+        now_str = datetime.now().isoformat()
+        terms_repo.update_classification(
+            term_id,
+            entity_type=result["entity_type"],
+            subject_field=result["subject_field"],
+            source="ai",
+            classified_by="ai:claude-haiku-4-5",
+            now_ts=now_str,
+        )
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@terms_bp.route("/api/terms/<term_id>/classify", methods=["POST"])
+def api_classify_term(term_id):
+    """Member+ — call AI to classify one term and write the result to the database."""
+    if not is_logged_in():
+        return jsonify({"error": "Unauthorized"}), 401
+    if not can_edit_existing():
+        return jsonify({"error": "member+ required"}), 403
+    try:
+        term = terms_repo.get_term_record(term_id)
+        if not term:
+            return jsonify({"error": "Term not found"}), 404
+
+        result = classify_term({
+            "chinese": term.get("Chinese", ""),
+            "pinyin":  term.get("Pinyin",  ""),
+            "context": term.get("Context", ""),
+            "notes":   term.get("Notes",   ""),
+        })
+        now_str = datetime.now().isoformat()
+        terms_repo.update_classification(
+            term_id,
+            entity_type=result["entity_type"],
+            subject_field=result["subject_field"],
+            source="ai",
+            classified_by="ai:claude-haiku-4-5",
+            now_ts=now_str,
+        )
+        write_audit(term_id, term.get("Chinese", ""),
+                    session["user_email"], session.get("user_name", ""),
+                    "ai_classified",
+                    details=f"AI: entity_type={result['entity_type']}, subject_field={result['subject_field']}, confidence={result['confidence']:.2f}")
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
