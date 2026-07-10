@@ -510,10 +510,10 @@ Two-axis structured classification added to all vocabulary terms:
 
 **Frontend** (`templates/index.html`):
 - CSS: `.cls-row`, `.cls-badge.cls-ai`, `.cls-badge.cls-manual`, `.cls-confidence-note`
-- Sidebar: "Entity Type" and "Subject Field" filter dropdowns (including "_unclassified" option for entity type)
+- Sidebar: "Entity Type" and "Subject Field" filter dropdowns (including "Unclassified" option for entity type); all options bilingual (e.g. `概念術語 / Doctrinal Term`)
 - Sidebar: "Batch Classify" button for leader+ (drives the batch loop with live progress counter)
-- Edit view: combined classification row with two `<select>` dropdowns, AI badge or manual ✓ badge, "✦ AI 分類" button; confidence note shown inline when AI confidence < 60%
-- `ENTITY_TYPES` / `SUBJECT_FIELDS` JS constants; `currentEntityType` / `currentSubjectField` filter state
+- Edit view: label "Entity Type / Subject Field"; two `<select>` dropdowns with bilingual options; AI badge or manual ✓ badge; "✦ AI Classify" button; confidence note (English) shown inline when AI confidence < 60%; Source Content Chinese/English moved to bottom (below Save to Note)
+- `ENTITY_TYPES` / `SUBJECT_FIELDS` value arrays; `ENTITY_TYPE_LABELS` / `SUBJECT_FIELD_LABELS` bilingual display maps; `currentEntityType` / `currentSubjectField` filter state
 - `setEntityType()`, `setSubjectField()`, `classifyTerm()`, `autoSaveClassify()`, `startBatchClassify()`
 - `getFilteredSorted()` updated to apply entity_type / subject_field filters
 
@@ -524,11 +524,16 @@ Two-axis structured classification added to all vocabulary terms:
 - `--limit N`: process only N terms
 - Skips already-classified rows; safe to interrupt and resume
 
+### CI/CD Fix — Health Check User-Agent (2026-07-10)
+- `deploy.yml`: health check `curl` command now sends a browser `User-Agent` and `Accept` header
+- **Root cause**: GreenGeeks WAF was returning HTTP 415 to requests with the default `curl/x.x` User-Agent, causing every deploy to fail at the post-deploy site check even though the site was up
+- Fix commit: `97df9a2`
+
 ---
 
 ## Next Steps
 
-- **Run backfill**: `python scripts/backfill_classification.py --dry-run` (spot-check 20 rows first), then without `--dry-run` for full 2844-term run
+- **Run backfill**: `python scripts/backfill_classification.py --dry-run --limit 20` (spot-check first), then without flags for full 2844-term run
 - **T0 manual cleanup** (no code changes needed):
   - Export 7 Sheets worksheets as CSV → `backup/sheets_final_export_20260709/` (local only, do not commit)
   - SSH GreenGeeks: remove `SHEET_ID` from `.env`
