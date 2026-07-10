@@ -1,7 +1,7 @@
 import logging
 
 from config import SUPER_ADMIN_EMAIL
-from db import get_conn
+from db import supabase
 
 logger = logging.getLogger(__name__)
 
@@ -36,101 +36,82 @@ def _row_to_sheets_fmt(row):
 
 
 def list_members():
-    conn = get_conn()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT * FROM members ORDER BY email")
-                rows = cur.fetchall()
-    finally:
-        conn.close()
-    return [_row_to_sheets_fmt(r) for r in rows]
+    result = supabase.table("members").select("*").order("email").execute()
+    return [_row_to_sheets_fmt(r) for r in result.data]
 
 
 def lookup_member(email):
     """Return role string for email, or None if not a member."""
     if email.lower() == SUPER_ADMIN_EMAIL.lower():
         return "admin"
-    conn = get_conn()
     try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT role FROM members WHERE email = %s", (email.lower(),))
-                row = cur.fetchone()
+        result = (
+            supabase.table("members")
+            .select("role")
+            .eq("email", email.lower())
+            .limit(1)
+            .execute()
+        )
+        if result.data:
+            return result.data[0].get("role") or "member"
+        return None
     except Exception as exc:
         logger.error("lookup_member query failed for %s: %s", email, exc)
         return None
-    finally:
-        conn.close()
-    if row:
-        return row["role"] or "member"
-    return None
 
 
 def member_exists(email):
-    conn = get_conn()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1 FROM members WHERE email = %s", (email.lower(),))
-                return cur.fetchone() is not None
-    finally:
-        conn.close()
+    result = (
+        supabase.table("members")
+        .select("email")
+        .eq("email", email.lower())
+        .limit(1)
+        .execute()
+    )
+    return bool(result.data)
 
 
 def add_member(email, role, added_by, now_str, name, short_name):
-    conn = get_conn()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """INSERT INTO members (email, role, added_by, added_at, name, short_name)
-                       VALUES (%s, %s, %s, %s, %s, %s)""",
-                    (
-                        email.lower(),
-                        role,
-                        added_by   or None,
-                        now_str    or None,
-                        name       or None,
-                        short_name or None,
-                    )
-                )
-    finally:
-        conn.close()
+    supabase.table("members").insert({
+        "email":      email.lower(),
+        "role":       role,
+        "added_by":   added_by    or None,
+        "added_at":   now_str     or None,
+        "name":       name        or None,
+        "short_name": short_name  or None,
+    }).execute()
 
 
 def remove_member(email):
     """Delete member by email. Returns True if found and deleted, False if not found."""
-    conn = get_conn()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1 FROM members WHERE email = %s", (email.lower(),))
-                if not cur.fetchone():
-                    return False
-                cur.execute("DELETE FROM members WHERE email = %s", (email.lower(),))
-    finally:
-        conn.close()
+    result = (
+        supabase.table("members")
+        .select("email")
+        .eq("email", email.lower())
+        .limit(1)
+        .execute()
+    )
+    if not result.data:
+        return False
+    supabase.table("members").delete().eq("email", email.lower()).execute()
     return True
 
 
 def update_member(email, role=None, name=None, short_name=None):
     """Update member fields. Returns True if found, False if not found."""
-    conn = get_conn()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1 FROM members WHERE email = %s", (email.lower(),))
-                if not cur.fetchone():
-                    return False
-                updates = {}
-                if role       is not None: updates["role"]       = role
-                if name       is not None: updates["name"]       = name or None
-                if short_name is not None: updates["short_name"] = short_name or None
-                if updates:
-                    set_clauses = [f"{c} = %s" for c in updates]
-                    sql = f"UPDATE members SET {', '.join(set_clauses)} WHERE email = %s"
-                    cur.execute(sql, list(updates.values()) + [email.lower()])
-    finally:
-        conn.close()
+    result = (
+        supabase.table("members")
+        .select("email")
+        .eq("email", email.lower())
+        .limit(1)
+        .execute()
+    )
+    if not result.data:
+        return False
+    updates = {}
+    if role       is not None: updates["role"]       = role
+    if name       is not None: updates["name"]       = name or None
+    if short_name is not None: updates["short_name"] = short_name or None
+    if updates:
+        supabase.table("members").update(updates).eq("email", email.lower()).execute()
     return True

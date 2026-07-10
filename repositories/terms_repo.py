@@ -1,11 +1,11 @@
 import logging
 
 from config import strip_tone_marks
-from db import get_conn, generate_display_id
+from db import supabase
 
 logger = logging.getLogger(__name__)
 
-# Frontend field key → Postgres column name (new schema)
+# Frontend field key → Postgres column name
 _FIELD_TO_DB = {
     "pinyin":       "pinyin",
     "trans1":       "translation1",
@@ -22,7 +22,7 @@ _FIELD_TO_DB = {
     "source_content_english": "source_content_english",
 }
 
-# Vote key → Postgres column name (new schema)
+# Vote key → Postgres column name
 _VOTE_TO_DB = {
     "Translation1":      "translation1",
     "Translation2":      "translation2",
@@ -32,7 +32,7 @@ _VOTE_TO_DB = {
     "TranslationOther2": "translation_other2",
 }
 
-# Legacy key names sent by routes layer → current Postgres column names
+# Legacy key names from routes → Postgres column names
 _CREATE_KEY_MAP = {
     "translation_1":       "translation1",
     "translation_2":       "translation2",
@@ -49,6 +49,8 @@ _ALLOWED_INSERT_COLS = {
     "source", "romanization_plain", "source_content_chinese", "source_content_english",
     "added_by", "added_at", "last_modified_by", "last_modified_at",
 }
+
+_PAGE = 1000  # PostgREST default max rows per request
 
 
 def _v(row, key):
@@ -74,7 +76,6 @@ def _to_pg(val):
 
 
 def _row_to_response(row):
-    """Translate a DB row to the frontend API response shape (lowercase keys)."""
     return {
         "id":       _v(row, "display_id"),
         "chinese":  _v(row, "chinese"),
@@ -106,7 +107,6 @@ def _row_to_response(row):
 
 
 def _row_to_sheets_fmt(row):
-    """CamelCase dict consumed by routes/terms.py api_translate_term and find_by_chinese."""
     return {
         "ID":       _v(row, "display_id"),
         "Chinese":  _v(row, "chinese"),
@@ -140,68 +140,59 @@ def _row_to_sheets_fmt(row):
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def find_by_chinese(chinese_text):
-    """Return term in CamelCase format matching the Chinese text, or None."""
-    conn = get_conn()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT * FROM terms WHERE chinese = %s LIMIT 1", (chinese_text,))
-                row = cur.fetchone()
-    finally:
-        conn.close()
-    return _row_to_sheets_fmt(row) if row else None
+    result = supabase.table("terms").select("*").eq("chinese", chinese_text).limit(1).execute()
+    if not result.data:
+        return None
+    return _row_to_sheets_fmt(result.data[0])
 
 
 def list_terms():
-    conn = get_conn()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT * FROM terms ORDER BY display_id")
-                rows = cur.fetchall()
-    finally:
-        conn.close()
+    """Fetch all terms using paginated requests to bypass PostgREST's 1000-row limit."""
+    rows = []
+    offset = 0
+    while True:
+        chunk = (
+            supabase.table("terms")
+            .select("*")
+            .order("display_id")
+            .range(offset, offset + _PAGE - 1)
+            .execute()
+            .data
+        )
+        rows.extend(chunk)
+        if len(chunk) < _PAGE:
+            break
+        offset += _PAGE
+    logger.info("list_terms: fetched %d rows total", len(rows))
     return [_row_to_response(r) for r in rows]
 
 
 def get_term_record(term_id):
-    """Return the term in CamelCase format, or None if not found."""
-    conn = get_conn()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT * FROM terms WHERE display_id = %s", (term_id,))
-                row = cur.fetchone()
-    finally:
-        conn.close()
-    return _row_to_sheets_fmt(row) if row else None
+    result = supabase.table("terms").select("*").eq("display_id", term_id).limit(1).execute()
+    if not result.data:
+        return None
+    return _row_to_sheets_fmt(result.data[0])
 
 
 def create_term(data):
     """
     Insert a new term. data uses legacy key names as sent by routes layer.
-    Returns the generated display_id (e.g. 'T000001').
+    Returns the generated display_id (e.g. 'T002845').
     """
-    conn = get_conn()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                display_id = generate_display_id(cur, 'T', 'seq_terms_display')
-                mapped = {"display_id": display_id}
-                for k, v in data.items():
-                    col = _CREATE_KEY_MAP.get(k, k)
-                    if col in _ALLOWED_INSERT_COLS:
-                        mapped[col] = _to_pg(v)
-                if not mapped.get("status"):
-                    mapped["status"] = "pending"
-                cols = list(mapped.keys())
-                sql = (
-                    f"INSERT INTO terms ({', '.join(cols)}) "
-                    f"VALUES ({', '.join(['%s'] * len(cols))})"
-                )
-                cur.execute(sql, [mapped[c] for c in cols])
-    finally:
-        conn.close()
+    display_id = supabase.rpc(
+        "next_display_id",
+        {"p_prefix": "T", "p_seq_name": "seq_terms_display"}
+    ).execute().data
+
+    mapped = {"display_id": display_id}
+    for k, v in data.items():
+        col = _CREATE_KEY_MAP.get(k, k)
+        if col in _ALLOWED_INSERT_COLS:
+            mapped[col] = _to_pg(v)
+    if not mapped.get("status"):
+        mapped["status"] = "pending"
+
+    supabase.table("terms").insert(mapped).execute()
     return display_id
 
 
@@ -214,33 +205,22 @@ def update_term_field(term_id, field, value, modifier, now_str):
     if not db_col:
         raise ValueError(f"Unknown field: {field!r}")
 
-    conn = get_conn()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    f"SELECT chinese, {db_col} FROM terms WHERE display_id = %s",
-                    (term_id,)
-                )
-                row = cur.fetchone()
-                if not row:
-                    return None, None
-                old_value = row[db_col] or ""
-                chinese   = row["chinese"] or ""
+    result = supabase.table("terms").select(f"chinese,{db_col}").eq("display_id", term_id).execute()
+    if not result.data:
+        return None, None
+    row       = result.data[0]
+    old_value = row.get(db_col) or ""
+    chinese   = row.get("chinese") or ""
 
-                updates = {
-                    db_col: _to_pg(value),
-                    "last_modified_by": modifier,
-                    "last_modified_at": _to_pg(now_str),
-                }
-                if field == "pinyin":
-                    updates["romanization_plain"] = strip_tone_marks(value)
+    updates = {
+        db_col: _to_pg(value),
+        "last_modified_by": modifier,
+        "last_modified_at": _to_pg(now_str),
+    }
+    if field == "pinyin":
+        updates["romanization_plain"] = strip_tone_marks(value)
 
-                set_clauses = [f"{c} = %s" for c in updates]
-                sql = f"UPDATE terms SET {', '.join(set_clauses)} WHERE display_id = %s"
-                cur.execute(sql, list(updates.values()) + [term_id])
-    finally:
-        conn.close()
+    supabase.table("terms").update(updates).eq("display_id", term_id).execute()
     return chinese, old_value
 
 
@@ -253,36 +233,25 @@ def set_final(term_id, vote_key, which, modifier, now_str):
     if not db_col:
         raise ValueError(f"Unknown vote key: {vote_key!r}")
 
-    conn = get_conn()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    f"SELECT chinese, {db_col} FROM terms WHERE display_id = %s",
-                    (term_id,)
-                )
-                row = cur.fetchone()
-                if not row:
-                    return None, None
-                text    = row[db_col] or ""
-                chinese = row["chinese"] or ""
+    result = supabase.table("terms").select(f"chinese,{db_col}").eq("display_id", term_id).execute()
+    if not result.data:
+        return None, None
+    row     = result.data[0]
+    text    = row.get(db_col) or ""
+    chinese = row.get("chinese") or ""
 
-                updates = {
-                    "last_modified_by": modifier,
-                    "last_modified_at": _to_pg(now_str),
-                }
-                if which == "first":
-                    updates["translation_first"] = text
-                    updates["final"]             = vote_key
-                    updates["status"]            = "finalized"
-                else:
-                    updates["translation_second"] = text
+    updates = {
+        "last_modified_by": modifier,
+        "last_modified_at": _to_pg(now_str),
+    }
+    if which == "first":
+        updates["translation_first"] = text
+        updates["final"]             = vote_key
+        updates["status"]            = "finalized"
+    else:
+        updates["translation_second"] = text
 
-                set_clauses = [f"{c} = %s" for c in updates]
-                sql = f"UPDATE terms SET {', '.join(set_clauses)} WHERE display_id = %s"
-                cur.execute(sql, list(updates.values()) + [term_id])
-    finally:
-        conn.close()
+    supabase.table("terms").update(updates).eq("display_id", term_id).execute()
     return text, chinese
 
 
@@ -291,43 +260,30 @@ def reset_final(term_id, modifier, now_str):
     Clear final/translation_first/translation_second and reset status to 'pending'.
     Returns (old_first, old_second, chinese), or (None, None, None) if not found.
     """
-    conn = get_conn()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT chinese, translation_first, translation_second "
-                    "FROM terms WHERE display_id = %s",
-                    (term_id,)
-                )
-                row = cur.fetchone()
-                if not row:
-                    return None, None, None
-                old_first  = row["translation_first"]  or ""
-                old_second = row["translation_second"] or ""
-                chinese    = row["chinese"]            or ""
+    result = supabase.table("terms") \
+        .select("chinese,translation_first,translation_second") \
+        .eq("display_id", term_id) \
+        .execute()
+    if not result.data:
+        return None, None, None
+    row        = result.data[0]
+    old_first  = row.get("translation_first")  or ""
+    old_second = row.get("translation_second") or ""
+    chinese    = row.get("chinese")            or ""
 
-                cur.execute(
-                    """UPDATE terms SET
-                        translation_first  = NULL,
-                        translation_second = NULL,
-                        final              = NULL,
-                        status             = 'pending',
-                        last_modified_by   = %s,
-                        last_modified_at   = %s
-                    WHERE display_id = %s""",
-                    (modifier, _to_pg(now_str), term_id)
-                )
-    finally:
-        conn.close()
+    supabase.table("terms").update({
+        "translation_first":  None,
+        "translation_second": None,
+        "final":              None,
+        "status":             "pending",
+        "last_modified_by":   modifier,
+        "last_modified_at":   _to_pg(now_str),
+    }).eq("display_id", term_id).execute()
     return old_first, old_second, chinese
 
 
 def update_translations(term_id, translation_updates, modifier, now_str):
-    """
-    Save AI-generated translations.
-    translation_updates: dict like {"Translation1": "text", "Translation3": "text"}
-    """
+    """Save AI-generated translations. translation_updates: {vote_key: text, ...}"""
     _vk_to_db = {
         "Translation1": "translation1",
         "Translation2": "translation2",
@@ -336,13 +292,4 @@ def update_translations(term_id, translation_updates, modifier, now_str):
     updates = {_vk_to_db[k]: v for k, v in translation_updates.items() if k in _vk_to_db}
     updates["last_modified_by"] = modifier
     updates["last_modified_at"] = _to_pg(now_str)
-
-    conn = get_conn()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                set_clauses = [f"{c} = %s" for c in updates]
-                sql = f"UPDATE terms SET {', '.join(set_clauses)} WHERE display_id = %s"
-                cur.execute(sql, list(updates.values()) + [term_id])
-    finally:
-        conn.close()
+    supabase.table("terms").update(updates).eq("display_id", term_id).execute()

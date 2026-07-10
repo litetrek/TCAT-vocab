@@ -1,6 +1,6 @@
 import logging
 
-from db import get_conn
+from db import supabase
 
 logger = logging.getLogger(__name__)
 
@@ -25,18 +25,13 @@ def _fmt_ts(val):
 
 def get_term_audit(term_id):
     """Return audit entries for a term in the existing frontend CamelCase shape."""
-    conn = get_conn()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT * FROM audit_log WHERE term_id = %s ORDER BY ts DESC",
-                    (term_id,)
-                )
-                rows = cur.fetchall()
-    finally:
-        conn.close()
-
+    result = (
+        supabase.table("audit_log")
+        .select("*")
+        .eq("term_id", term_id)
+        .order("ts", desc=True)
+        .execute()
+    )
     return [
         {
             "AuditID":      f"A{r.get('id', '')}",
@@ -51,39 +46,27 @@ def get_term_audit(term_id):
             "NewValue":     _v(r, "new_value"),
             "Details":      _v(r, "details"),
         }
-        for r in rows
+        for r in result.data
     ]
 
 
 def write_audit(term_id, term_chinese, user_email, user_name, action_type,
                 field_changed="", old_value="", new_value="", details=""):
     """
-    Write one audit entry to audit_log. Never raises — audit writes must not break the main flow.
-    The ts column is populated by Postgres DEFAULT now().
+    Write one audit entry. Never raises — audit failures must not break the main flow.
+    The ts column is populated by the Postgres DEFAULT now().
     """
     try:
-        conn = get_conn()
-        try:
-            with conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """INSERT INTO audit_log
-                           (term_id, term_chinese, user_email, user_name,
-                            action_type, field_changed, old_value, new_value, details)
-                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                        (
-                            term_id       or None,
-                            term_chinese  or None,
-                            user_email    or None,
-                            user_name     or None,
-                            action_type   or None,
-                            field_changed or None,
-                            old_value     or None,
-                            new_value     or None,
-                            details       or None,
-                        )
-                    )
-        finally:
-            conn.close()
+        supabase.table("audit_log").insert({
+            "term_id":       term_id      or None,
+            "term_chinese":  term_chinese  or None,
+            "user_email":    user_email    or None,
+            "user_name":     user_name     or None,
+            "action_type":   action_type   or None,
+            "field_changed": field_changed or None,
+            "old_value":     old_value     or None,
+            "new_value":     new_value     or None,
+            "details":       details       or None,
+        }).execute()
     except Exception as exc:
         logger.error("Audit write failed: %s", exc)

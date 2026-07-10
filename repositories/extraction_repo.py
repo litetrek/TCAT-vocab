@@ -1,6 +1,6 @@
 import logging
 
-from db import get_conn, generate_display_id
+from db import supabase
 
 logger = logging.getLogger(__name__)
 
@@ -38,53 +38,39 @@ def _doc_to_sheets_fmt(row):
 
 def create_document(title, source_name, zh_paras, en_paras, uploaded_by, uploaded_at):
     """
-    Insert a new document and all its paragraphs in one transaction.
-    Returns the display_id (e.g. 'D000001').
+    Insert a new document and all its paragraphs atomically via RPC.
+    Returns the display_id (e.g. 'D000003').
     """
     para_count = len(zh_paras)
-    conn = get_conn()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                display_id = generate_display_id(cur, 'D', 'seq_ext_documents_display')
-                cur.execute(
-                    """INSERT INTO ext_documents
-                       (display_id, title, source_name, paragraph_count,
-                        uploaded_by, uploaded_at, last_viewed_index, status)
-                       VALUES (%s, %s, %s, %s, %s, %s, 0, 'active')
-                       RETURNING id""",
-                    (display_id, title or None, source_name,
-                     para_count, uploaded_by or None, uploaded_at or None)
-                )
-                doc_internal_id = cur.fetchone()["id"]
+    display_id = supabase.rpc(
+        "next_display_id",
+        {"p_prefix": "D", "p_seq_name": "seq_ext_documents_display"}
+    ).execute().data
 
-                if para_count:
-                    para_rows = [
-                        (doc_internal_id, i, zh_paras[i], en_paras[i])
-                        for i in range(para_count)
-                    ]
-                    # psycopg2.extras.execute_values would be faster but executemany is clear
-                    cur.executemany(
-                        """INSERT INTO ext_paragraphs
-                           (document_id, paragraph_index, chinese_text, english_text)
-                           VALUES (%s, %s, %s, %s)""",
-                        para_rows
-                    )
-    finally:
-        conn.close()
+    paragraphs = [{"zh": zh_paras[i], "en": en_paras[i]} for i in range(para_count)]
+
+    supabase.rpc("create_document_with_paragraphs", {
+        "p_display_id":  display_id,
+        "p_title":       title or "",
+        "p_source_name": source_name,
+        "p_para_count":  para_count,
+        "p_uploaded_by": uploaded_by or "",
+        "p_uploaded_at": uploaded_at or "",
+        "p_paragraphs":  paragraphs,
+    }).execute()
+
     return display_id
 
 
 def list_documents():
-    conn = get_conn()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT * FROM ext_documents ORDER BY source_name, title")
-                rows = cur.fetchall()
-    finally:
-        conn.close()
-    return [_doc_to_sheets_fmt(r) for r in rows]
+    result = (
+        supabase.table("ext_documents")
+        .select("*")
+        .order("source_name")
+        .order("title")
+        .execute()
+    )
+    return [_doc_to_sheets_fmt(r) for r in result.data]
 
 
 def get_paragraphs(document_id):
@@ -92,58 +78,50 @@ def get_paragraphs(document_id):
     document_id is a display_id (e.g. 'D000001').
     Returns {"paragraphs": [...], "last_viewed_index": int}, or None if not found.
     """
-    conn = get_conn()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT id, last_viewed_index FROM ext_documents WHERE display_id = %s",
-                    (document_id,)
-                )
-                doc_row = cur.fetchone()
-                if not doc_row:
-                    return None
-                doc_internal_id   = doc_row["id"]
-                last_viewed_index = doc_row["last_viewed_index"] or 0
+    doc_result = (
+        supabase.table("ext_documents")
+        .select("id,last_viewed_index")
+        .eq("display_id", document_id)
+        .limit(1)
+        .execute()
+    )
+    if not doc_result.data:
+        return None
+    doc_row           = doc_result.data[0]
+    doc_internal_id   = doc_row["id"]
+    last_viewed_index = doc_row.get("last_viewed_index") or 0
 
-                cur.execute(
-                    """SELECT paragraph_index, chinese_text, english_text
-                       FROM ext_paragraphs
-                       WHERE document_id = %s
-                       ORDER BY paragraph_index""",
-                    (doc_internal_id,)
-                )
-                para_rows = cur.fetchall()
-    finally:
-        conn.close()
-
+    para_result = (
+        supabase.table("ext_paragraphs")
+        .select("paragraph_index,chinese_text,english_text")
+        .eq("document_id", doc_internal_id)
+        .order("paragraph_index")
+        .execute()
+    )
     paragraphs = [
         {
             "index":   r["paragraph_index"],
             "chinese": r.get("chinese_text") or "",
             "english": r.get("english_text") or "",
         }
-        for r in para_rows
+        for r in para_result.data
     ]
     return {"paragraphs": paragraphs, "last_viewed_index": last_viewed_index}
 
 
 def update_last_viewed_index(document_id, index):
     """document_id is a display_id. Returns True if found and updated, False if not found."""
-    conn = get_conn()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT 1 FROM ext_documents WHERE display_id = %s",
-                    (document_id,)
-                )
-                if not cur.fetchone():
-                    return False
-                cur.execute(
-                    "UPDATE ext_documents SET last_viewed_index = %s WHERE display_id = %s",
-                    (index, document_id)
-                )
-    finally:
-        conn.close()
+    result = (
+        supabase.table("ext_documents")
+        .select("id")
+        .eq("display_id", document_id)
+        .limit(1)
+        .execute()
+    )
+    if not result.data:
+        return False
+    supabase.table("ext_documents") \
+        .update({"last_viewed_index": index}) \
+        .eq("display_id", document_id) \
+        .execute()
     return True
