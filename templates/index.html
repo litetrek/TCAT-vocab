@@ -3140,9 +3140,9 @@
         <span class="trd-status-badge ${sc}">${sl}</span>
         <div class="trd-para-actions">
           ${!isConfirmed ? `<button class="btn btn-sm btn-secondary" onclick="trdRunAI(${paraIdx})">✦ AI 分組</button>` : ''}
-          <button class="btn btn-sm btn-gold" onclick="trdConfirm(${paraIdx})"${isConfirmed?' disabled':''}>
+          ${(isConfirmed || (draft.draft_groups || []).length >= 3) ? `<button class="btn btn-sm btn-gold" onclick="trdConfirm(${paraIdx})"${isConfirmed?' disabled':''}>
             ${isConfirmed ? '✓ 已確認' : '確認寫入'}
-          </button>
+          </button>` : ''}
         </div>
       </div>
       <div class="trd-save-indicator" id="trd-save-${paraIdx}" style="display:none;"></div>
