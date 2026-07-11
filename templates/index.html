@@ -3150,6 +3150,9 @@
         ${groupsHtml}
         ${newDropHtml}
       </div>
+      ${!isConfirmed ? `<div style="text-align:right;margin-top:0.75rem;">
+        <button class="btn btn-sm btn-gold" onclick="trdConfirm(${paraIdx})">確認寫入</button>
+      </div>` : ''}
     </div>`;
   }
 
