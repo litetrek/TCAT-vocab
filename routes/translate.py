@@ -50,7 +50,7 @@ def api_create_book():
 
     try:
         did = supabase.rpc("next_display_id", {
-            "prefix": "BK", "seq_name": "seq_trans_books_display"
+            "p_prefix": "BK", "p_seq_name": "seq_trans_books_display"
         }).execute().data
 
         result = supabase.table("trans_books").insert({
@@ -137,7 +137,7 @@ def api_upload_chapter(book_id):
     try:
         # Create the chapter
         ch_did = supabase.rpc("next_display_id", {
-            "prefix": "CH", "seq_name": "seq_trans_chapters_display"
+            "p_prefix": "CH", "p_seq_name": "seq_trans_chapters_display"
         }).execute().data
 
         ch_result = supabase.table("trans_chapters").insert({
@@ -373,7 +373,7 @@ def api_confirm_paragraph(chapter_id, para_idx):
             is_long = any(s.get("is_long_sentence", False) for s in sentences)
 
             u_did = supabase.rpc("next_display_id", {
-                "prefix": "U", "seq_name": "seq_trans_units_display"
+                "p_prefix": "U", "p_seq_name": "seq_trans_units_display"
             }).execute().data
 
             supabase.table("trans_units").insert({
