@@ -2299,6 +2299,12 @@
       allSources.map(s => `<option value="${s.SourceID}">${s.SourceName}</option>`).join('');
   }
 
+  function _extSourceIdFromName(name) {
+    if (!name) return '';
+    const src = (allSources || []).find(s => s.SourceName === name);
+    return src ? src.SourceID : '';
+  }
+
   function extOnSourceChange() {
     const sel = document.getElementById('ext-source-select');
     if (!sel) return;
@@ -2874,7 +2880,7 @@
           pali:                   gen.pali     || '',
           sanskrit:               gen.sanskrit || '',
           source_name:            sourceDoc.SourceName || extSourceTitle || '',
-          source_id:              sourceDoc.SourceID  || extSourceId   || '',
+          source_id:              sourceDoc.SourceID  || extSourceId   || _extSourceIdFromName(sourceDoc.SourceName) || '',
           source_content_chinese: zhText,
           source_content_english: enText,
           entity_type:            (document.getElementById('ext-entity-type')   || {}).value || '',

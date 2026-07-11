@@ -137,7 +137,7 @@ def api_extract_save():
                 "added_by":     user_email,
                 "created_at":   now_str,
                 "translation_known":   known_translation,
-                "source":              source_id or source_name,
+                "source":              source_id or None,
                 "translation_first":   "",
                 "translation_second":  "",
                 "translation_other_1": "",
