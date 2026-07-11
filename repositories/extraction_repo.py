@@ -28,6 +28,7 @@ def _doc_to_sheets_fmt(row):
         "DocumentID":      _v(row, "display_id"),
         "Title":           _v(row, "title"),
         "SourceName":      _v(row, "source_name"),
+        "SourceID":        _v(row, "source_id"),
         "ParagraphCount":  row.get("paragraph_count") or 0,
         "UploadedBy":      _v(row, "uploaded_by"),
         "UploadedAt":      _fmt_ts(row.get("uploaded_at")),
@@ -36,7 +37,7 @@ def _doc_to_sheets_fmt(row):
     }
 
 
-def create_document(title, source_name, zh_paras, en_paras, uploaded_by, uploaded_at):
+def create_document(title, source_name, zh_paras, en_paras, uploaded_by, uploaded_at, source_id=None):
     """
     Insert a new document and all its paragraphs atomically via RPC.
     Returns the display_id (e.g. 'D000003').
@@ -58,6 +59,12 @@ def create_document(title, source_name, zh_paras, en_paras, uploaded_by, uploade
         "p_uploaded_at": uploaded_at or "",
         "p_paragraphs":  paragraphs,
     }).execute()
+
+    if source_id:
+        supabase.table("ext_documents") \
+            .update({"source_id": source_id}) \
+            .eq("display_id", display_id) \
+            .execute()
 
     return display_id
 

@@ -1211,6 +1211,7 @@
   let extParagraphs    = [];
   let extCurrentIndex  = 0;
   let extSourceTitle   = '';
+  let extSourceId      = '';   // SourceID (e.g. S000003) when user picks from dropdown
   let extDocumentId    = null;
   let extDocumentsCache = {};
   let extKnownTerms             = [];
@@ -2302,7 +2303,8 @@
     const sel = document.getElementById('ext-source-select');
     if (!sel) return;
     const opt = sel.options[sel.selectedIndex];
-    extSourceTitle = opt && opt.value ? opt.text : '';
+    extSourceTitle = opt && opt.value ? opt.text  : '';
+    extSourceId    = opt && opt.value ? opt.value : '';
   }
 
   function extToggleTitle() {
@@ -2315,6 +2317,7 @@
       input.style.display     = 'none';
       sel.style.display       = '';
       extSourceTitle = '';
+      extSourceId    = '';
     } else {
       toggleBtn.dataset.mode  = 'custom';
       toggleBtn.textContent   = 'Use existing source';
@@ -2342,6 +2345,7 @@
       fd.append('english_file', enFile);
       fd.append('title',       (document.getElementById('ext-chapter-input').value || '').trim());
       fd.append('source_name', extSourceTitle);
+      if (extSourceId) fd.append('source_id', extSourceId);
       const res  = await fetch('/api/extract/documents', { method: 'POST', body: fd });
       const data = await res.json();
       if (data.error) { extShowError(data.error); return; }
@@ -2870,6 +2874,7 @@
           pali:                   gen.pali     || '',
           sanskrit:               gen.sanskrit || '',
           source_name:            sourceDoc.SourceName || extSourceTitle || '',
+          source_id:              sourceDoc.SourceID  || extSourceId   || '',
           source_content_chinese: zhText,
           source_content_english: enText,
           entity_type:            (document.getElementById('ext-entity-type')   || {}).value || '',

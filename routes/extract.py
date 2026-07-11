@@ -108,6 +108,7 @@ def api_extract_save():
     src_en            = (data.get("source_content_english") or "").strip()
     entity_type       = (data.get("entity_type")            or "").strip()
     subject_field     = (data.get("subject_field")          or "").strip()
+    source_id         = (data.get("source_id")              or "").strip()
     if not chinese_term:
         return jsonify({"error": "chinese_term is required"}), 400
     try:
@@ -136,7 +137,7 @@ def api_extract_save():
                 "added_by":     user_email,
                 "created_at":   now_str,
                 "translation_known":   known_translation,
-                "source":              source_name,
+                "source":              source_id or source_name,
                 "translation_first":   "",
                 "translation_second":  "",
                 "translation_other_1": "",
@@ -236,12 +237,14 @@ def api_extract_documents_post():
 
     title       = (request.form.get("title")       or "").strip()
     source_name = (request.form.get("source_name") or "").strip()
+    source_id   = (request.form.get("source_id")   or "").strip()
     uploaded_by = session.get("user_email", "")
     uploaded_at = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     try:
         doc_id = extraction_repo.create_document(
-            title, source_name, zh_paras, en_paras, uploaded_by, uploaded_at
+            title, source_name, zh_paras, en_paras, uploaded_by, uploaded_at,
+            source_id=source_id or None,
         )
     except Exception as e:
         return jsonify({"error": f"Failed to save document: {e}"}), 500
