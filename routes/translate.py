@@ -1,8 +1,11 @@
+import json
+from datetime import datetime, timezone
 from functools import wraps
 from flask import Blueprint, jsonify, request, session
 from auth import is_logged_in, can_access_translation_module
 from db import supabase
 from segmenter import decode, split_paragraphs, detect_section_type, segment_paragraph
+from ai import group_sentences_by_topic
 
 translate_bp = Blueprint("translate", __name__)
 
@@ -23,12 +26,69 @@ def _require_translation(f):
     return wrapper
 
 
+def _now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
 # ── POST /api/trans/books ─────────────────────────────────────────────────────
+# T2.1: create book metadata only (no file upload).
 
 @translate_bp.route("/api/trans/books", methods=["POST"])
 @_require_translation
-def api_import_book():
-    """Upload a .txt file → segment → INSERT trans_books/chapters/units atomically."""
+def api_create_book():
+    """Create a new book record with title only — no content."""
+    if request.is_json:
+        body = request.get_json() or {}
+        title = body.get("title", "").strip()
+    else:
+        title = request.form.get("title", "").strip()
+
+    if not title:
+        return jsonify({"error": "title is required"}), 400
+
+    created_by = session.get("user_email", "")
+
+    try:
+        did = supabase.rpc("next_display_id", {
+            "prefix": "BK", "seq_name": "seq_trans_books_display"
+        }).execute().data
+
+        result = supabase.table("trans_books").insert({
+            "display_id": did,
+            "title": title,
+            "created_by": created_by,
+        }).execute()
+
+        book = result.data[0]
+        return jsonify({
+            "book_id":    book["id"],
+            "display_id": book["display_id"],
+            "title":      book["title"],
+        }), 201
+
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+
+
+# ── GET /api/trans/books ──────────────────────────────────────────────────────
+
+@translate_bp.route("/api/trans/books", methods=["GET"])
+@_require_translation
+def api_list_books():
+    """Return all active books with per-status unit counts."""
+    try:
+        result = supabase.rpc("list_trans_books", {}).execute()
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(result.data)
+
+
+# ── POST /api/trans/books/<id>/chapters ──────────────────────────────────────
+
+@translate_bp.route("/api/trans/books/<int:book_id>/chapters", methods=["POST"])
+@_require_translation
+def api_upload_chapter(book_id):
+    """Upload one chapter .txt file → segment → create trans_unit_drafts."""
     if "file" not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
 
@@ -42,73 +102,80 @@ def api_import_book():
 
     text = decode(raw)
     if text is None:
-        return jsonify({"error": "Cannot decode file — please use UTF-8, GB18030, or Big5"}), 400
+        return jsonify({"error": "Cannot decode file — use UTF-8, GB18030, or Big5"}), 400
 
-    title = request.form.get("title", "").strip() or f.filename
-    created_by = session.get("user_email", "")
+    title = request.form.get("title", "").strip() or f.filename.rsplit(".", 1)[0]
+    section_type_override = request.form.get("section_type", "").strip()
 
-    # ── Segment the file ─────────────────────────────────────────────────────
+    # Segment file: paragraphs → sentences
     paragraphs = split_paragraphs(text)
     if not paragraphs:
         return jsonify({"error": "No content found in file"}), 400
 
-    # Build chapter list (one chapter per paragraph block).
-    # Each paragraph → chapter; units are the sentences within it.
-    chapters = []
-    for ch_idx, para in enumerate(paragraphs):
-        section_type = detect_section_type(para)
-        sentences = segment_paragraph(para)
-        units = [
-            {
-                "paragraph_index": 0,
-                "unit_order": i + 1,
-                "chinese_text": s["text"],
-                "is_long_sentence": s["is_long_sentence"],
-            }
-            for i, s in enumerate(sentences)
-            if s["text"]
-        ]
-        if not units:
-            continue
-        chapters.append({
-            "chapter_index": ch_idx,
-            "title": para[:40].split("。")[0] if para else f"段落 {ch_idx + 1}",
-            "section_type": section_type,
-            "units": units,
-        })
+    section_type = section_type_override or detect_section_type(paragraphs[0])
 
-    if not chapters:
-        return jsonify({"error": "No translatable content found after segmentation"}), 400
-
-    # ── Single atomic RPC ────────────────────────────────────────────────────
+    # Auto-assign chapter_index as next available for this book
     try:
-        result = supabase.rpc("import_trans_book", {
-            "p_title": title,
-            "p_created_by": created_by,
-            "p_chapters": chapters,
+        ci_str = request.form.get("chapter_index", "").strip()
+        if ci_str:
+            chapter_index = int(ci_str)
+        else:
+            existing = (
+                supabase.table("trans_chapters")
+                .select("chapter_index")
+                .eq("book_id", book_id)
+                .order("chapter_index", desc=True)
+                .limit(1)
+                .execute()
+            )
+            chapter_index = (existing.data[0]["chapter_index"] + 1) if existing.data else 0
+    except (ValueError, Exception) as exc:
+        return jsonify({"error": f"Could not determine chapter_index: {exc}"}), 400
+
+    created_by = session.get("user_email", "")
+
+    try:
+        # Create the chapter
+        ch_did = supabase.rpc("next_display_id", {
+            "prefix": "CH", "seq_name": "seq_trans_chapters_display"
+        }).execute().data
+
+        ch_result = supabase.table("trans_chapters").insert({
+            "display_id":    ch_did,
+            "book_id":       book_id,
+            "chapter_index": chapter_index,
+            "title":         title,
+            "section_type":  section_type,
         }).execute()
+        chapter_id = ch_result.data[0]["id"]
+
+        # Build draft rows — one per non-empty paragraph
+        drafts = []
+        for para_idx, para in enumerate(paragraphs):
+            sentences = segment_paragraph(para)
+            if not sentences:
+                continue
+            # Initial grouping: each sentence is its own group
+            draft_groups = [{"sentences": [s]} for s in sentences]
+            drafts.append({
+                "chapter_id":      chapter_id,
+                "paragraph_index": para_idx,
+                "draft_groups":    draft_groups,
+                "status":          "pending",
+                "last_modified_by": created_by,
+            })
+
+        if drafts:
+            supabase.table("trans_unit_drafts").insert(drafts).execute()
+
+        return jsonify({
+            "chapter_id":      chapter_id,
+            "display_id":      ch_did,
+            "paragraph_count": len(drafts),
+        }), 201
+
     except Exception as exc:
         return jsonify({"error": f"Database error: {exc}"}), 500
-
-    data = result.data
-    return jsonify({
-        "book_display_id": data.get("display_id"),
-        "chapter_count":   data.get("chapter_count"),
-        "unit_count":      data.get("unit_count"),
-    }), 201
-
-
-# ── GET /api/trans/books ──────────────────────────────────────────────────────
-
-@translate_bp.route("/api/trans/books", methods=["GET"])
-@_require_translation
-def api_list_books():
-    """Return all active books with per-status unit counts (single GROUP BY query)."""
-    try:
-        result = supabase.rpc("list_trans_books", {}).execute()
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
-    return jsonify(result.data)
 
 
 # ── GET /api/trans/books/<book_id>/chapters ───────────────────────────────────
@@ -135,7 +202,7 @@ def api_list_chapters(book_id):
 @translate_bp.route("/api/trans/chapters/<int:chapter_id>/units", methods=["GET"])
 @_require_translation
 def api_list_units(chapter_id):
-    """Return all units in a chapter ordered by paragraph_index, unit_order."""
+    """Return all confirmed units in a chapter ordered by paragraph_index, unit_order."""
     try:
         result = (
             supabase.table("trans_units")
@@ -148,3 +215,185 @@ def api_list_units(chapter_id):
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
     return jsonify(result.data)
+
+
+# ── GET /api/trans/chapters/<chapter_id>/drafts ───────────────────────────────
+
+@translate_bp.route("/api/trans/chapters/<int:chapter_id>/drafts", methods=["GET"])
+@_require_translation
+def api_get_drafts(chapter_id):
+    """Return all paragraph drafts for a chapter (ordered by paragraph_index)."""
+    try:
+        result = (
+            supabase.table("trans_unit_drafts")
+            .select("*")
+            .eq("chapter_id", chapter_id)
+            .order("paragraph_index")
+            .execute()
+        )
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(result.data)
+
+
+# ── POST /api/trans/chapters/<id>/paragraphs/<idx>/group-preview ──────────────
+
+@translate_bp.route(
+    "/api/trans/chapters/<int:chapter_id>/paragraphs/<int:para_idx>/group-preview",
+    methods=["POST"],
+)
+@_require_translation
+def api_group_preview(chapter_id, para_idx):
+    """Run AI topic grouping on a paragraph; update draft; return result."""
+    try:
+        draft_res = (
+            supabase.table("trans_unit_drafts")
+            .select("*")
+            .eq("chapter_id", chapter_id)
+            .eq("paragraph_index", para_idx)
+            .execute()
+        )
+        if not draft_res.data:
+            return jsonify({"error": "Draft not found"}), 404
+        draft = draft_res.data[0]
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+
+    # Flatten current draft_groups to get flat sentence list
+    groups = draft.get("draft_groups") or []
+    sentences = [s for g in groups for s in g.get("sentences", [])]
+
+    if not sentences:
+        return jsonify({"error": "No sentences in draft"}), 400
+
+    # AI grouping — never raises (returns fallback on failure)
+    index_groups = group_sentences_by_topic(sentences)
+
+    new_draft_groups = [
+        {"sentences": [sentences[i] for i in grp]}
+        for grp in index_groups
+    ]
+
+    modified_by = session.get("user_email", "")
+    try:
+        upd = (
+            supabase.table("trans_unit_drafts")
+            .update({
+                "draft_groups":    new_draft_groups,
+                "status":          "ai_suggested",
+                "last_modified_by": modified_by,
+                "last_modified_at": _now_iso(),
+            })
+            .eq("chapter_id", chapter_id)
+            .eq("paragraph_index", para_idx)
+            .execute()
+        )
+        return jsonify(upd.data[0])
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+
+
+# ── PATCH /api/trans/chapters/<id>/paragraphs/<idx>/draft ────────────────────
+
+@translate_bp.route(
+    "/api/trans/chapters/<int:chapter_id>/paragraphs/<int:para_idx>/draft",
+    methods=["PATCH"],
+)
+@_require_translation
+def api_patch_draft(chapter_id, para_idx):
+    """Human adjustment: update draft_groups and status; auto-saved on every change."""
+    data = request.get_json()
+    if not data or "draft_groups" not in data:
+        return jsonify({"error": "draft_groups required"}), 400
+
+    modified_by = session.get("user_email", "")
+    try:
+        result = (
+            supabase.table("trans_unit_drafts")
+            .update({
+                "draft_groups":    data["draft_groups"],
+                "status":          "human_adjusted",
+                "last_modified_by": modified_by,
+                "last_modified_at": _now_iso(),
+            })
+            .eq("chapter_id", chapter_id)
+            .eq("paragraph_index", para_idx)
+            .execute()
+        )
+        if not result.data:
+            return jsonify({"error": "Draft not found"}), 404
+        return jsonify(result.data[0])
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+# ── POST /api/trans/chapters/<id>/paragraphs/<idx>/confirm ───────────────────
+
+@translate_bp.route(
+    "/api/trans/chapters/<int:chapter_id>/paragraphs/<int:para_idx>/confirm",
+    methods=["POST"],
+)
+@_require_translation
+def api_confirm_paragraph(chapter_id, para_idx):
+    """Write confirmed draft groups into trans_units; mark draft confirmed."""
+    try:
+        draft_res = (
+            supabase.table("trans_unit_drafts")
+            .select("*")
+            .eq("chapter_id", chapter_id)
+            .eq("paragraph_index", para_idx)
+            .execute()
+        )
+        if not draft_res.data:
+            return jsonify({"error": "Draft not found"}), 404
+        draft = draft_res.data[0]
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+
+    draft_groups = draft.get("draft_groups") or []
+    if not draft_groups:
+        return jsonify({"error": "No groups to confirm"}), 400
+
+    # Re-confirm is allowed: delete any existing units for this paragraph first
+    try:
+        supabase.table("trans_units").delete() \
+            .eq("chapter_id", chapter_id) \
+            .eq("paragraph_index", para_idx) \
+            .execute()
+    except Exception:
+        pass
+
+    unit_count = 0
+    try:
+        for unit_order, group in enumerate(draft_groups, start=1):
+            sentences = group.get("sentences", [])
+            if not sentences:
+                continue
+            chinese_text = "".join(s["text"] for s in sentences)
+            is_long = any(s.get("is_long_sentence", False) for s in sentences)
+
+            u_did = supabase.rpc("next_display_id", {
+                "prefix": "U", "seq_name": "seq_trans_units_display"
+            }).execute().data
+
+            supabase.table("trans_units").insert({
+                "display_id":      u_did,
+                "chapter_id":      chapter_id,
+                "paragraph_index": para_idx,
+                "unit_order":      unit_order,
+                "chinese_text":    chinese_text,
+                "is_long_sentence": is_long,
+                "sentence_map":    sentences,
+            }).execute()
+            unit_count += 1
+
+        # Mark draft as confirmed (keep the row for AI-quality tracking)
+        supabase.table("trans_unit_drafts").update({
+            "status":          "confirmed",
+            "last_modified_at": _now_iso(),
+        }).eq("chapter_id", chapter_id).eq("paragraph_index", para_idx).execute()
+
+        return jsonify({"status": "confirmed", "unit_count": unit_count})
+
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500

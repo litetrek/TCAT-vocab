@@ -62,11 +62,13 @@ buddhist-vocab/
 │   ├── 003_romanization_plain.sql  # unaccent extension, trigger, backfill, index for romanization_plain
 │   ├── 004_entity_subject_classification.sql  # entity_type / subject_field columns on terms
 │   ├── 005_t1_translation_module.sql  # T1: five translation-module tables (idempotent IF NOT EXISTS)
-│   └── 006_t2_import_book_rpc.sql    # T2: import_trans_book + list_trans_books RPC functions
+│   ├── 006_t2_import_book_rpc.sql    # T2: import_trans_book + list_trans_books RPC functions
+│   └── 007_t2_1_sentence_map.sql     # T2.1: sentence_map column + trans_unit_drafts table
 ├── scripts/
 │   ├── run_migration.py        # Applies 001_initial_schema.sql via DATABASE_URL / psycopg2
 │   ├── run_migration_005.py    # T1: applies 005 + runs acceptance tests (insert/unique/fractional/cleanup)
 │   ├── run_migration_006.py    # T2: applies 006 + runs 4 acceptance tests (import/list/section_type/cleanup)
+│   ├── run_migration_007.py    # T2.1: applies 007 + 5 acceptance tests + T2 test data cleanup
 │   ├── migrate_from_sheets.py  # T0-2: one-shot Sheets → Postgres migration
 │   ├── migrate_extraction_only.py  # T0-4: re-migrate extraction data only
 │   └── backfill_classification.py  # Backfill entity_type/subject_field for unclassified terms
@@ -126,7 +128,8 @@ each display_id to eliminate the race condition from the old Sheets "scan for ma
 | `ext_paragraphs` | — | FK → ext_documents(id); UNIQUE (document_id, paragraph_index) |
 | `trans_books` | B000001 | FK → sources(id); status: active/archived |
 | `trans_chapters` | C000001 | FK → trans_books(id); section_type + status check constraints |
-| `trans_units` | U000001 | unit_order numeric (fractional indexing); split_map jsonb; embedding-ready |
+| `trans_units` | U000001 | unit_order numeric (fractional indexing); `sentence_map jsonb` (original sentence list, added T2.1); embedding-ready |
+| `trans_unit_drafts` | — | `(chapter_id, paragraph_index)` unique; `draft_groups jsonb`; status: pending/ai_suggested/human_adjusted/confirmed |
 | `trans_revisions` | R000001 | embedding vector(1536) for pgvector RAG |
 | `style_guide` | S000001 | active boolean; source_revision_ids bigint[] |
 
@@ -571,6 +574,69 @@ JS added (`{% if can_access_translation %}` block):
 
 ---
 
+### T2.1 — Sentence-Map + Draft Review Workflow (2026-07-10)
+
+**Scope**: Per-sentence grouping workspace — segment chapter into draft groups, run AI topic grouping per paragraph, drag-and-drop human review, confirm to write `trans_units`.
+
+#### Migration 007
+- `migrations/007_t2_1_sentence_map.sql`:
+  - `ALTER TABLE trans_units ADD COLUMN IF NOT EXISTS sentence_map jsonb` — stores original sentence list for split-back
+  - `CREATE TABLE trans_unit_drafts` — `(chapter_id bigint FK, paragraph_index int, draft_groups jsonb, status text CHECK(pending/ai_suggested/human_adjusted/confirmed), last_modified_by, last_modified_at)`; UNIQUE `(chapter_id, paragraph_index)`; `idx_drafts_chapter` index
+- `scripts/run_migration_007.py` — applies 007 + 5 acceptance tests (column, table, unique constraint, index, check constraint) + T2 test-data cleanup
+- Migration applied to Supabase via MCP; all 5 acceptance tests passed
+
+#### ai.py — `group_sentences_by_topic()`
+- New function added before `classify_term`
+- Input: `[{"text": str, "is_long_sentence": bool}, ...]`; output: `[[0,1], [2], [3,4,5]]` — index lists per group
+- Prompts Claude Haiku in Chinese to group sentences by topic coherence; strips markdown fences; validates all indices present exactly once
+- Fallback: `[[i] for i in range(len(sentences))]` on any exception — never raises
+
+#### routes/translate.py — Full Rewrite (T2.1 endpoints)
+
+`POST /api/trans/books` changed to **metadata-only** — JSON body `{"title": "..."}`, no file upload.
+
+New endpoints (all guarded by `_require_translation`):
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/trans/books/<id>/chapters` | Upload `.txt` → `split_paragraphs` + `segment_paragraph` → create `trans_unit_drafts` rows (one per paragraph, `status='pending'`) |
+| `GET /api/trans/chapters/<id>/drafts` | Return all paragraph drafts ordered by `paragraph_index` |
+| `POST /api/trans/chapters/<id>/paragraphs/<idx>/group-preview` | Flatten current draft_groups → call `group_sentences_by_topic()` → UPDATE draft with `status='ai_suggested'` |
+| `PATCH /api/trans/chapters/<id>/paragraphs/<idx>/draft` | Human adjustment — auto-save on every UI change; sets `status='human_adjusted'` |
+| `POST /api/trans/chapters/<id>/paragraphs/<idx>/confirm` | DELETE existing `trans_units` for this paragraph, INSERT one row per group (`chinese_text`, `sentence_map`, `is_long_sentence`), mark draft `confirmed` |
+
+Key design decisions:
+- Chapter upload runs only pure-algorithm code (no AI calls) to avoid CGI timeout on GreenGeeks shared hosting. AI grouping is triggered per-paragraph by the frontend separately.
+- Re-confirm is idempotent: `confirm` DELETEs existing `trans_units` for the paragraph before inserting, so re-running never duplicates.
+- `_now_iso()` helper (`datetime.now(timezone.utc).isoformat()`) used for `last_modified_at` in PATCH/confirm — PostgREST doesn't execute SQL functions inside value strings.
+
+#### templates/index.html — Review Workspace UI
+
+CSS additions: paragraph card stack (`.trd-para-card`, confirmed variant), status badges (4 states: pending/ai/adjusted/confirmed), sentence/group drag-and-drop targets, "new group" drop zone, save indicator, chapter upload section.
+
+HTML additions:
+- Upload form: removed `<input type="file">` (book creation is now metadata-only); added chapter upload section `<div class="trans-ch-upload">` inside chapter list view
+- `<div id="trans-review-view">` — new sub-view with title, progress line, paragraph card body
+- Chapter rows: now render two buttons per row — "Review Drafts" and "Browse Units"
+
+JS additions:
+- `_transHideAll()` hides all 4 sub-views; each `transShow*` calls it then shows one
+- `transOpenBook` → `transReloadChapters()` renders chapter rows with two-button layout
+- `transUploadChapter()` — FormData POST, refreshes chapter list on success
+- `transUploadBook()` — JSON POST (title only), refreshes book grid on success
+- `transOpenReview(chapterId, title)` → `trdLoad()` → GET /drafts → `trdRenderAll()`
+- `trdParaCardHtml()` / `trdGroupHtml()` — render paragraph cards with drag handles, AI button, confirm button
+- Drag-drop: `trdDragStart`, `trdDropGroup`, `trdDropNew`, `_trdMoveSentence` — sentence moves between groups; re-renders card in-place; calls `trdScheduleSave()`
+- `trdScheduleSave(paraIdx)` — 600ms debounce → `trdSave()` → PATCH auto-save on every UI change
+- `trdRunAI(paraIdx)` — POST group-preview, re-renders paragraph card with AI grouping
+- `trdConfirm(paraIdx)` — confirm dialog → POST confirm → re-renders as confirmed
+- `trdUpdateProgress()` — tracks confirmed count vs total
+
+#### E2E Validation
+- Full flow tested via SQL DO block in Supabase: insert book → chapter → draft → update draft → confirm → assert 2 `trans_units` rows → cleanup — all steps passed
+
+---
+
 ### T1 — Translation Module Data Layer + Segmenter (2026-07-10)
 
 **Scope**: Pure data layer + algorithm. No UI, no API endpoints.
@@ -628,6 +694,7 @@ JS added (`{% if can_access_translation %}` block):
 | **T0** | **Done** | Schema, data migration, data layer rewrite, Sheets retirement |
 | **T1** | **Done** | 5 translation tables verified + sequences; `segmenter.py` + 15 pytest cases passing |
 | **T2** | **Done** | Access gate (admin-only routed via env flag), import pipeline, read-only Picker + chapter + sentence browse UI |
+| **T2.1** | **Done** | Sentence-map column, trans_unit_drafts table, chapter upload → segmentation → drafts, AI topic grouping per paragraph, drag-and-drop review workspace, debounced auto-save, confirm → trans_units |
 | **T3** | Planned | AI translation: draft English for each unit via Claude; write english_draft |
 | **T4** | Planned | Translation UI: per-unit review, approve, revise workflow |
 | **T5** | Planned | Style guide integration: RAG lookup on trans_revisions.embedding |
@@ -636,6 +703,8 @@ JS added (`{% if can_access_translation %}` block):
 
 ## Next Steps
 
+- **T2.1 data cleanup**: T2 test data (1 book, 35 chapters, 131 units) still in DB — run `python scripts/run_migration_007.py` with `DATABASE_URL` set, or execute `DELETE FROM trans_unit_drafts; DELETE FROM trans_units; DELETE FROM trans_chapters; DELETE FROM trans_books;` via Supabase SQL editor to clear before production use
+- **T2.1 live testing**: Start Flask server locally and test: create book → upload chapter → open review view → run AI grouping → drag-drop → confirm → verify trans_units content
 - **T3**: AI translation — draft English for each unit via Claude; write `english_draft`; update status to `ai_drafted`
 - **T4**: Translation UI — per-unit review, approve, revise workflow
 - **Run backfill**: `python scripts/backfill_classification.py --dry-run --limit 20` (spot-check), then full run

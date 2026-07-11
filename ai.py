@@ -139,6 +139,57 @@ TRANSLATION: [verbatim phrase copied from the English paragraph, or NOT_FOUND]""
     return ""
 
 
+def group_sentences_by_topic(sentences: list) -> list:
+    """Group sentences by topic for translation coherence.
+
+    Input:  [{"text": str, "is_long_sentence": bool}, ...]
+    Output: [[0,1], [2], [3,4,5]]  — index lists per group.
+
+    On any failure returns each sentence as its own group (safe fallback).
+    """
+    if not sentences:
+        return []
+    fallback = [[i] for i in range(len(sentences))]
+    if len(sentences) == 1:
+        return fallback
+    try:
+        ai = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        numbered = "\n".join(f"[{i}] {s['text']}" for i, s in enumerate(sentences))
+        response = ai.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=600,
+            messages=[{
+                "role": "user",
+                "content": f"""你是一位佛學翻譯助理。以下是從同一段落拆分出的句子，請根據主題相關性將它們分組，使每組合併後成為一個連貫的翻譯單元。
+
+每組理想長度為 1–4 句。語意緊密、敘述同一主題的句子應歸為同一組。
+
+句子清單：
+{numbered}
+
+請只以 JSON 陣列格式回覆，不要有任何其他文字或 markdown 標記。格式：[[索引,...],...]
+例：[[0,1],[2],[3,4,5]]"""
+            }]
+        )
+        raw = response.content[0].text.strip()
+        raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
+        groups = json.loads(raw)
+        # Validate all indices present exactly once
+        seen = set()
+        for g in groups:
+            for idx in g:
+                if not isinstance(idx, int) or idx < 0 or idx >= len(sentences):
+                    return fallback
+                if idx in seen:
+                    return fallback
+                seen.add(idx)
+        if seen != set(range(len(sentences))):
+            return fallback
+        return groups
+    except Exception:
+        return fallback
+
+
 def classify_term(term: dict) -> dict:
     """Classify a Buddhist term into entity_type and subject_field.
 

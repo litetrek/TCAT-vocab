@@ -592,6 +592,40 @@
       .trans-book-grid { grid-template-columns: 1fr; }
       .trans-upload-row { flex-direction: column; align-items: stretch; }
     }
+
+    /* ── TRANSLATION REVIEW WORKSPACE (T2.1) ────────────────────────────── */
+    .trd-para-card { background: white; border: 1px solid var(--border); border-radius: 4px; padding: 1.25rem 1.5rem; margin-bottom: 1.25rem; box-shadow: var(--shadow); }
+    .trd-para-card.trd-para-confirmed { border-left: 4px solid #3a9c5c; }
+    .trd-para-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.9rem; flex-wrap: wrap; }
+    .trd-para-num { font-family: 'Cormorant Garamond', serif; font-size: 1rem; font-weight: 700; color: var(--ink); white-space: nowrap; }
+    .trd-status-badge { font-size: 0.65rem; padding: 0.12rem 0.45rem; border-radius: 2px; border: 1px solid; white-space: nowrap; }
+    .trd-status-pending   { color: #6b5a3a; border-color: rgba(107,90,58,0.3);  background: rgba(107,90,58,0.06); }
+    .trd-status-ai        { color: #2a6aaa; border-color: rgba(74,144,217,0.4); background: rgba(74,144,217,0.08); }
+    .trd-status-adjusted  { color: #7a5010; border-color: rgba(201,168,76,0.5); background: rgba(201,168,76,0.1); }
+    .trd-status-confirmed { color: #1a6b35; border-color: rgba(58,156,92,0.4);  background: rgba(58,156,92,0.09); }
+    .trd-para-actions { margin-left: auto; display: flex; gap: 0.5rem; flex-shrink: 0; }
+    .trd-save-indicator { font-size: 0.75rem; color: #2d7a4f; font-style: italic; padding: 0.2rem 0; }
+    .trd-groups { display: flex; flex-direction: column; gap: 0.65rem; }
+    .trd-group { border: 1px dashed rgba(201,168,76,0.4); border-radius: 3px; padding: 0.6rem 0.75rem; background: rgba(245,240,232,0.5); transition: border-color 0.15s, background 0.15s; min-height: 46px; }
+    .trd-group.trd-drag-over { border-color: var(--gold); background: rgba(201,168,76,0.12); }
+    .trd-group-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-soft); margin-bottom: 0.45rem; }
+    .trd-sent { font-family: 'Noto Serif TC', serif; font-size: 0.95rem; color: var(--ink); line-height: 1.65; padding: 0.3rem 0.5rem; border-radius: 3px; background: white; border: 1px solid rgba(26,18,8,0.1); margin-bottom: 0.3rem; display: flex; align-items: baseline; gap: 0.35rem; transition: box-shadow 0.15s, opacity 0.15s; }
+    .trd-sent:last-child { margin-bottom: 0; }
+    .trd-sent[draggable="true"] { cursor: grab; }
+    .trd-sent.trd-dragging { opacity: 0.45; box-shadow: 0 4px 12px rgba(26,18,8,0.2); cursor: grabbing; }
+    .trd-sent-handle { color: rgba(107,90,58,0.28); font-size: 0.72rem; flex-shrink: 0; user-select: none; }
+    .trd-sent-text { flex: 1; }
+    .trd-long-flag { font-size: 0.58rem; color: #a04010; border: 1px solid rgba(224,120,48,0.4); background: rgba(224,120,48,0.08); padding: 0.03rem 0.28rem; border-radius: 2px; flex-shrink: 0; letter-spacing: 0.05em; }
+    .trd-new-group-drop { border: 2px dashed rgba(201,168,76,0.22); border-radius: 3px; padding: 0.5rem; text-align: center; font-size: 0.78rem; color: var(--text-soft); font-style: italic; transition: border-color 0.15s, background 0.15s; }
+    .trd-new-group-drop.trd-drag-over { border-color: var(--gold); background: rgba(201,168,76,0.08); color: var(--ink); }
+    .trd-ch-actions { margin-left: auto; display: flex; gap: 0.4rem; flex-shrink: 0; }
+    .trans-ch-upload { background: white; border: 1px solid var(--border); border-radius: 4px; padding: 1rem 1.25rem; margin-bottom: 1.25rem; box-shadow: var(--shadow); }
+    .trans-ch-upload-title { font-family: 'Cormorant Garamond', serif; font-size: 0.95rem; font-style: italic; color: var(--ink); margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
+    @media (max-width: 768px) {
+      .trd-para-header { flex-direction: column; align-items: flex-start; }
+      .trd-para-actions { margin-left: 0; }
+      .trd-ch-actions { margin-left: 0; flex-wrap: wrap; }
+    }
   </style>
 </head>
 <body>
@@ -867,19 +901,15 @@
         <button class="btn btn-secondary" onclick="transLoadBooks()">↻ Refresh</button>
       </div>
 
-      <!-- Upload form -->
+      <!-- Create book form (metadata only — chapters uploaded separately) -->
       <div class="trans-upload-section">
-        <div class="trans-upload-title">Upload New Book</div>
+        <div class="trans-upload-title">Create New Book</div>
         <div class="trans-upload-row">
           <div class="trans-upload-field">
-            <label>Book Title</label>
+            <label>Book Title *</label>
             <input type="text" id="trans-upload-title" placeholder="e.g. 大乘起信論">
           </div>
-          <div class="trans-upload-field" style="flex:0 0 auto;">
-            <label>Chinese .txt File</label>
-            <input type="file" id="trans-upload-file" accept=".txt">
-          </div>
-          <button class="btn btn-primary" style="align-self:flex-end;" onclick="transUploadBook()" id="trans-upload-btn">Upload &amp; Import</button>
+          <button class="btn btn-primary" style="align-self:flex-end;" onclick="transUploadBook()" id="trans-upload-btn">Create Book</button>
         </div>
         <div class="trans-upload-msg" id="trans-upload-msg" style="display:none;"></div>
       </div>
@@ -892,16 +922,48 @@
 
     <!-- ── CHAPTER LIST SUB-VIEW ─────────────────────────────────────────── -->
     <div id="trans-chapter-view" style="display:none;">
-      <div class="main-toolbar" style="margin-bottom:1.5rem;">
+      <div class="main-toolbar" style="margin-bottom:1.25rem;">
         <div style="display:flex;align-items:center;gap:1rem;">
           <button class="btn-back" onclick="transShowPicker()">← Books</button>
           <h1 class="main-title" id="trans-chapter-title">Chapters</h1>
         </div>
       </div>
+
+      <!-- Upload chapter section -->
+      <div class="trans-ch-upload">
+        <div class="trans-ch-upload-title">Upload Chapter</div>
+        <div class="trans-upload-row">
+          <div class="trans-upload-field">
+            <label>Chapter Title (optional)</label>
+            <input type="text" id="trans-ch-title" placeholder="e.g. 第一章">
+          </div>
+          <div class="trans-upload-field" style="flex:0 0 auto;">
+            <label>Chapter .txt File *</label>
+            <input type="file" id="trans-ch-file" accept=".txt">
+          </div>
+          <button class="btn btn-primary" style="align-self:flex-end;" onclick="transUploadChapter()" id="trans-ch-upload-btn">Upload Chapter</button>
+        </div>
+        <div class="trans-upload-msg" id="trans-ch-upload-msg" style="display:none;"></div>
+      </div>
+
       <div id="trans-chapter-list" class="trans-chapter-list">
         <div class="loading">☸ Loading chapters…</div>
       </div>
     </div><!-- #trans-chapter-view -->
+
+    <!-- ── DRAFT REVIEW SUB-VIEW (T2.1) ─────────────────────────────────── -->
+    <div id="trans-review-view" style="display:none;">
+      <div class="main-toolbar" style="margin-bottom:1rem;">
+        <div style="display:flex;align-items:center;gap:1rem;">
+          <button class="btn-back" onclick="transShowChapterList()">← Chapters</button>
+          <h1 class="main-title" id="trans-review-title">Review Drafts</h1>
+        </div>
+        <span style="font-size:0.85rem;color:var(--text-soft);" id="trans-review-progress"></span>
+      </div>
+      <div id="trans-review-body">
+        <div class="loading">☸ Loading drafts…</div>
+      </div>
+    </div><!-- #trans-review-view -->
 
     <!-- ── UNIT LIST SUB-VIEW ────────────────────────────────────────────── -->
     <div id="trans-unit-view" style="display:none;">
@@ -2752,24 +2814,33 @@
     approved:     'Approved',
   };
 
+  function _transHideAll() {
+    ['trans-picker','trans-chapter-view','trans-review-view','trans-unit-view']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+  }
+
   function transShowPicker() {
-    document.getElementById('trans-picker').style.display       = '';
-    document.getElementById('trans-chapter-view').style.display = 'none';
-    document.getElementById('trans-unit-view').style.display    = 'none';
+    _transHideAll();
+    document.getElementById('trans-picker').style.display = '';
     transLoadBooks();
   }
 
   function transShowChapterList() {
-    document.getElementById('trans-picker').style.display       = 'none';
+    _transHideAll();
     document.getElementById('trans-chapter-view').style.display = '';
-    document.getElementById('trans-unit-view').style.display    = 'none';
   }
 
   function transShowUnitList() {
-    document.getElementById('trans-picker').style.display       = 'none';
-    document.getElementById('trans-chapter-view').style.display = 'none';
-    document.getElementById('trans-unit-view').style.display    = '';
+    _transHideAll();
+    document.getElementById('trans-unit-view').style.display = '';
   }
+
+  function transShowReviewView() {
+    _transHideAll();
+    document.getElementById('trans-review-view').style.display = '';
+  }
+
+  // ── Book list ────────────────────────────────────────────────────────────
 
   async function transLoadBooks() {
     const grid = document.getElementById('trans-book-grid');
@@ -2779,7 +2850,7 @@
       if (!r.ok) throw new Error(await r.text());
       const books = await r.json();
       if (!books.length) {
-        grid.innerHTML = '<div class="empty-state"><span class="wheel">☸</span><h3>No books yet</h3><p>Upload a .txt file above to get started.</p></div>';
+        grid.innerHTML = '<div class="empty-state"><span class="wheel">☸</span><h3>No books yet</h3><p>Create a book above, then upload chapters.</p></div>';
         return;
       }
       grid.innerHTML = books.map(b => {
@@ -2799,9 +2870,9 @@
         const date = b.created_at ? new Date(b.created_at).toLocaleDateString() : '';
         return `<div class="trans-book-card" onclick="transOpenBook(${b.id},'${escHtml(b.title)}')">
           <div class="trans-book-title">${escHtml(b.title)}</div>
-          <div class="trans-book-meta">${chapters} chapters · ${total} sentences · ${date}</div>
+          <div class="trans-book-meta">${chapters} chapter${chapters!==1?'s':''} · ${total} sentences · ${date}</div>
           <div class="trans-progress-bar">${bar}</div>
-          <div class="trans-status-dots">${dots || '<span class="trans-dot trans-dot-untranslated">Untranslated: '+total+'</span>'}</div>
+          <div class="trans-status-dots">${dots || '<span class="trans-dot trans-dot-untranslated">No confirmed units yet</span>'}</div>
         </div>`;
       }).join('');
     } catch(e) {
@@ -2809,35 +2880,107 @@
     }
   }
 
+  // ── Chapter list ─────────────────────────────────────────────────────────
+
   async function transOpenBook(bookId, bookTitle) {
     _transCurrentBookId    = bookId;
     _transCurrentBookTitle = bookTitle;
     document.getElementById('trans-chapter-title').innerHTML =
       `<span style="font-size:1.1rem;font-style:normal;">${escHtml(bookTitle)}</span> — Chapters`;
+    document.getElementById('trans-ch-upload-msg').style.display = 'none';
+    document.getElementById('trans-ch-title').value = '';
+    document.getElementById('trans-ch-file').value  = '';
+    transShowChapterList();
+    await transReloadChapters(bookId);
+  }
+
+  async function transReloadChapters(bookId) {
+    const bid = bookId || _transCurrentBookId;
     const list = document.getElementById('trans-chapter-list');
     list.innerHTML = '<div class="loading">☸ Loading chapters…</div>';
-    transShowChapterList();
     try {
-      const r = await fetch(`/api/trans/books/${bookId}/chapters`);
+      const r = await fetch(`/api/trans/books/${bid}/chapters`);
       if (!r.ok) throw new Error(await r.text());
       const chapters = await r.json();
       if (!chapters.length) {
-        list.innerHTML = '<div class="empty-state"><h3>No chapters found</h3></div>';
+        list.innerHTML = '<div class="empty-state" style="padding:2.5rem;"><h3>No chapters yet</h3><p>Upload the first chapter above.</p></div>';
         return;
       }
       list.innerHTML = chapters.map(c => {
         const typeTag = c.section_type && c.section_type !== 'body'
           ? `<span class="trans-ch-type">${escHtml(c.section_type)}</span>` : '';
-        return `<div class="trans-chapter-row" onclick="transOpenChapter(${c.id},'${escHtml(c.title||'')}')">
+        const titleSafe = escHtml(c.title || '');
+        return `<div class="trans-chapter-row" style="cursor:default;">
           <span class="trans-ch-idx">${c.chapter_index + 1}</span>
           <span class="trans-ch-title">${escHtml(c.title || '(untitled)')}</span>
           ${typeTag}
+          <div class="trd-ch-actions">
+            <button class="btn btn-sm btn-primary" onclick="transOpenReview(${c.id},'${titleSafe}')">Review Drafts</button>
+            <button class="btn btn-sm btn-secondary" onclick="transOpenChapter(${c.id},'${titleSafe}')">Browse Units</button>
+          </div>
         </div>`;
       }).join('');
     } catch(e) {
       list.innerHTML = `<div class="ext-error-banner">Error: ${escHtml(e.message)}</div>`;
     }
   }
+
+  // ── Upload chapter ────────────────────────────────────────────────────────
+
+  async function transUploadChapter() {
+    const fileInput = document.getElementById('trans-ch-file');
+    const titleInput = document.getElementById('trans-ch-title');
+    const btn = document.getElementById('trans-ch-upload-btn');
+    const msg = document.getElementById('trans-ch-upload-msg');
+    msg.style.display = 'none';
+    msg.className = 'trans-upload-msg';
+
+    if (!fileInput.files.length) {
+      msg.textContent = 'Please select a chapter .txt file.';
+      msg.className = 'trans-upload-msg error';
+      msg.style.display = '';
+      return;
+    }
+    if (!_transCurrentBookId) {
+      msg.textContent = 'No book selected.';
+      msg.className = 'trans-upload-msg error';
+      msg.style.display = '';
+      return;
+    }
+
+    const file = fileInput.files[0];
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('title', titleInput.value.trim() || file.name.replace(/\.txt$/i, ''));
+
+    btn.disabled = true;
+    btn.textContent = 'Uploading…';
+
+    try {
+      const r = await fetch(`/api/trans/books/${_transCurrentBookId}/chapters`, { method: 'POST', body: fd });
+      const data = await r.json();
+      if (!r.ok) {
+        msg.textContent = data.error || 'Upload failed.';
+        msg.className = 'trans-upload-msg error';
+      } else {
+        msg.textContent = `Chapter uploaded: ${data.display_id} — ${data.paragraph_count} paragraphs (status: pending AI grouping)`;
+        msg.className = 'trans-upload-msg success';
+        titleInput.value = '';
+        fileInput.value  = '';
+        transReloadChapters();
+      }
+      msg.style.display = '';
+    } catch(e) {
+      msg.textContent = 'Network error — please try again.';
+      msg.className = 'trans-upload-msg error';
+      msg.style.display = '';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Upload Chapter';
+    }
+  }
+
+  // ── Unit browse (read-only) ───────────────────────────────────────────────
 
   async function transOpenChapter(chapterId, chapterTitle) {
     document.getElementById('trans-unit-title').innerHTML =
@@ -2850,7 +2993,7 @@
       if (!r.ok) throw new Error(await r.text());
       const units = await r.json();
       if (!units.length) {
-        list.innerHTML = '<div class="empty-state"><h3>No sentences found</h3></div>';
+        list.innerHTML = '<div class="empty-state"><h3>No confirmed sentences yet</h3><p>Use "Review Drafts" to confirm paragraphs first.</p></div>';
         return;
       }
       let lastPara = -1;
@@ -2871,52 +3014,303 @@
     }
   }
 
+  // ── Create book (metadata only) ───────────────────────────────────────────
+
   async function transUploadBook() {
     const titleInput = document.getElementById('trans-upload-title');
-    const fileInput  = document.getElementById('trans-upload-file');
     const btn  = document.getElementById('trans-upload-btn');
     const msg  = document.getElementById('trans-upload-msg');
     msg.style.display = 'none';
     msg.className = 'trans-upload-msg';
 
-    if (!fileInput.files.length) {
-      msg.textContent = 'Please select a .txt file first.';
+    const title = titleInput.value.trim();
+    if (!title) {
+      msg.textContent = 'Please enter a book title.';
       msg.className = 'trans-upload-msg error';
       msg.style.display = '';
       return;
     }
-    const file  = fileInput.files[0];
-    const title = titleInput.value.trim() || file.name.replace(/\.txt$/i, '');
-    const fd = new FormData();
-    fd.append('file', file);
-    fd.append('title', title);
 
     btn.disabled = true;
-    btn.textContent = 'Importing…';
-    msg.style.display = 'none';
+    btn.textContent = 'Creating…';
 
     try {
-      const r = await fetch('/api/trans/books', { method: 'POST', body: fd });
+      const r = await fetch('/api/trans/books', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({title}),
+      });
       const data = await r.json();
       if (!r.ok) {
-        msg.textContent = data.error || 'Import failed.';
+        msg.textContent = data.error || 'Failed to create book.';
         msg.className = 'trans-upload-msg error';
       } else {
-        msg.textContent = `Imported: ${data.chapter_count} chapters, ${data.unit_count} sentences (${data.book_display_id})`;
+        msg.textContent = `Book created: ${data.display_id} — "${escHtml(data.title)}"`;
         msg.className = 'trans-upload-msg success';
         titleInput.value = '';
-        fileInput.value  = '';
         transLoadBooks();
       }
+      msg.style.display = '';
     } catch(e) {
       msg.textContent = 'Network error — please try again.';
       msg.className = 'trans-upload-msg error';
+      msg.style.display = '';
     } finally {
       btn.disabled = false;
-      btn.textContent = 'Upload & Import';
-      msg.style.display = '';
+      btn.textContent = 'Create Book';
     }
   }
+
+  // ── Draft review workspace ────────────────────────────────────────────────
+
+  let _trdChapterId = null;
+  let _trdDrafts    = {};      // paraIdx → draft object
+  let _trdDragging  = null;    // {paraIdx, groupIdx, sentIdx}
+  let _trdSaveTimers = {};     // debounce per paragraph
+
+  async function transOpenReview(chapterId, chapterTitle) {
+    _trdChapterId = chapterId;
+    _trdDrafts    = {};
+    document.getElementById('trans-review-title').innerHTML =
+      `<span style="font-size:1.1rem;font-style:normal;">${escHtml(_transCurrentBookTitle)}</span> — ${escHtml(chapterTitle || 'Chapter')} — Review Drafts`;
+    transShowReviewView();
+    await trdLoad();
+  }
+
+  async function trdLoad() {
+    const body = document.getElementById('trans-review-body');
+    body.innerHTML = '<div class="loading">☸ Loading drafts…</div>';
+    try {
+      const r = await fetch(`/api/trans/chapters/${_trdChapterId}/drafts`);
+      if (!r.ok) throw new Error(await r.text());
+      const drafts = await r.json();
+      _trdDrafts = {};
+      for (const d of drafts) _trdDrafts[d.paragraph_index] = d;
+      trdRenderAll();
+    } catch(e) {
+      body.innerHTML = `<div class="ext-error-banner">Error: ${escHtml(e.message)}</div>`;
+    }
+  }
+
+  function trdRenderAll() {
+    const paraIndices = Object.keys(_trdDrafts).map(Number).sort((a,b) => a-b);
+    if (!paraIndices.length) {
+      document.getElementById('trans-review-body').innerHTML =
+        '<div class="empty-state" style="padding:3rem;"><h3>No drafts found</h3><p>Upload a chapter first.</p></div>';
+      trdUpdateProgress([]);
+      return;
+    }
+    trdUpdateProgress(paraIndices);
+    document.getElementById('trans-review-body').innerHTML =
+      paraIndices.map(i => trdParaCardHtml(i)).join('');
+  }
+
+  function trdUpdateProgress(paraIndices) {
+    const total     = paraIndices.length;
+    const confirmed = paraIndices.filter(i => (_trdDrafts[i] || {}).status === 'confirmed').length;
+    const prog = document.getElementById('trans-review-progress');
+    if (prog) prog.textContent = total ? `${confirmed} / ${total} 段落已確認` : '';
+  }
+
+  function trdParaCardHtml(paraIdx) {
+    const draft = _trdDrafts[paraIdx];
+    if (!draft) return '';
+    const isConfirmed = draft.status === 'confirmed';
+    const statusLabels = { pending:'Pending', ai_suggested:'AI 建議', human_adjusted:'已調整', confirmed:'已確認' };
+    const statusClasses = { pending:'trd-status-pending', ai_suggested:'trd-status-ai', human_adjusted:'trd-status-adjusted', confirmed:'trd-status-confirmed' };
+    const sl = statusLabels[draft.status] || draft.status;
+    const sc = statusClasses[draft.status] || '';
+
+    const groupsHtml = (draft.draft_groups || []).map((g, gi) => trdGroupHtml(paraIdx, gi, g, isConfirmed)).join('');
+    const newDropHtml = isConfirmed ? '' :
+      `<div class="trd-new-group-drop"
+          ondragover="trdDragOver(event,this)"
+          ondrop="trdDropNew(event,${paraIdx})"
+          ondragleave="trdDragLeave(event,this)">
+        ↓ 拖曳到此建立新組
+      </div>`;
+
+    return `<div class="trd-para-card${isConfirmed?' trd-para-confirmed':''}" id="trd-para-${paraIdx}">
+      <div class="trd-para-header">
+        <span class="trd-para-num">段落 ${paraIdx + 1}</span>
+        <span class="trd-status-badge ${sc}">${sl}</span>
+        <div class="trd-para-actions">
+          ${!isConfirmed ? `<button class="btn btn-sm btn-secondary" onclick="trdRunAI(${paraIdx})">✦ AI 分組</button>` : ''}
+          <button class="btn btn-sm btn-gold" onclick="trdConfirm(${paraIdx})"${isConfirmed?' disabled':''}>
+            ${isConfirmed ? '✓ 已確認' : '確認寫入'}
+          </button>
+        </div>
+      </div>
+      <div class="trd-save-indicator" id="trd-save-${paraIdx}" style="display:none;"></div>
+      <div class="trd-groups">
+        ${groupsHtml}
+        ${newDropHtml}
+      </div>
+    </div>`;
+  }
+
+  function trdGroupHtml(paraIdx, groupIdx, group, isConfirmed) {
+    const sents = (group.sentences || []);
+    const sentsHtml = sents.map((s, si) => {
+      const longFlag = s.is_long_sentence ? ' <span class="trd-long-flag">長</span>' : '';
+      if (isConfirmed) {
+        return `<div class="trd-sent"><span class="trd-sent-text">${escHtml(s.text)}</span>${longFlag}</div>`;
+      }
+      return `<div class="trd-sent" draggable="true"
+          ondragstart="trdDragStart(event,${paraIdx},${groupIdx},${si})"
+          ondragend="trdDragEnd(event)">
+        <span class="trd-sent-handle">⠿</span>
+        <span class="trd-sent-text">${escHtml(s.text)}</span>${longFlag}
+      </div>`;
+    }).join('');
+    const dropAttrs = isConfirmed ? '' :
+      `ondragover="trdDragOver(event,this)" ondrop="trdDropGroup(event,${paraIdx},${groupIdx})" ondragleave="trdDragLeave(event,this)"`;
+    return `<div class="trd-group" ${dropAttrs}>
+      <div class="trd-group-label">第 ${groupIdx + 1} 組 (${sents.length} 句)</div>
+      ${sentsHtml}
+    </div>`;
+  }
+
+  // ── Drag-and-drop handlers ────────────────────────────────────────────────
+
+  function trdDragStart(e, paraIdx, groupIdx, sentIdx) {
+    _trdDragging = {paraIdx, groupIdx, sentIdx};
+    e.dataTransfer.effectAllowed = 'move';
+    e.currentTarget.classList.add('trd-dragging');
+  }
+
+  function trdDragEnd(e) {
+    e.currentTarget.classList.remove('trd-dragging');
+    document.querySelectorAll('.trd-drag-over').forEach(el => el.classList.remove('trd-drag-over'));
+  }
+
+  function trdDragOver(e, el) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (el) el.classList.add('trd-drag-over');
+  }
+
+  function trdDragLeave(e, el) {
+    if (el) el.classList.remove('trd-drag-over');
+  }
+
+  function trdDropGroup(e, paraIdx, targetGroupIdx) {
+    e.preventDefault();
+    if (!_trdDragging || _trdDragging.paraIdx !== paraIdx) return;
+    const {groupIdx: srcGi, sentIdx: srcSi} = _trdDragging;
+    _trdDragging = null;
+    if (srcGi === targetGroupIdx) return;
+    _trdMoveSentence(paraIdx, srcGi, srcSi, targetGroupIdx);
+  }
+
+  function trdDropNew(e, paraIdx) {
+    e.preventDefault();
+    if (!_trdDragging || _trdDragging.paraIdx !== paraIdx) return;
+    const {groupIdx: srcGi, sentIdx: srcSi} = _trdDragging;
+    _trdDragging = null;
+    _trdMoveSentence(paraIdx, srcGi, srcSi, null);
+  }
+
+  function _trdMoveSentence(paraIdx, srcGi, srcSi, targetGi) {
+    const draft = _trdDrafts[paraIdx];
+    if (!draft) return;
+    const dg = draft.draft_groups;
+
+    const sentence = dg[srcGi].sentences[srcSi];
+
+    // Remove from source
+    dg[srcGi].sentences.splice(srcSi, 1);
+
+    let adjTarget = targetGi;
+    if (dg[srcGi].sentences.length === 0) {
+      dg.splice(srcGi, 1);
+      if (adjTarget !== null && adjTarget > srcGi) adjTarget--;
+    }
+
+    if (adjTarget === null) {
+      dg.push({sentences: [sentence]});
+    } else {
+      dg[adjTarget].sentences.push(sentence);
+    }
+
+    // Re-render this paragraph card
+    const card = document.getElementById(`trd-para-${paraIdx}`);
+    if (card) card.outerHTML = trdParaCardHtml(paraIdx);
+    trdScheduleSave(paraIdx);
+  }
+
+  // ── Save (debounced) ─────────────────────────────────────────────────────
+
+  function trdScheduleSave(paraIdx) {
+    clearTimeout(_trdSaveTimers[paraIdx]);
+    _trdSaveTimers[paraIdx] = setTimeout(() => trdSave(paraIdx), 600);
+  }
+
+  async function trdSave(paraIdx) {
+    const draft = _trdDrafts[paraIdx];
+    if (!draft) return;
+    const ind = document.getElementById(`trd-save-${paraIdx}`);
+    if (ind) { ind.textContent = '儲存中…'; ind.style.display = ''; }
+    try {
+      const r = await fetch(
+        `/api/trans/chapters/${_trdChapterId}/paragraphs/${paraIdx}/draft`,
+        { method:'PATCH', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({draft_groups: draft.draft_groups}) }
+      );
+      if (!r.ok) throw new Error(await r.text());
+      const updated = await r.json();
+      _trdDrafts[paraIdx] = Object.assign({}, draft, updated);
+      if (ind) { ind.textContent = '✓ 已儲存'; setTimeout(() => { ind.style.display='none'; }, 2000); }
+    } catch(err) {
+      if (ind) { ind.textContent = '⚠ 儲存失敗：' + err.message; ind.style.display = ''; }
+    }
+  }
+
+  // ── AI grouping ──────────────────────────────────────────────────────────
+
+  async function trdRunAI(paraIdx) {
+    const card = document.getElementById(`trd-para-${paraIdx}`);
+    const btn = card ? card.querySelector('.btn-secondary') : null;
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ AI 處理中…'; }
+    try {
+      const r = await fetch(
+        `/api/trans/chapters/${_trdChapterId}/paragraphs/${paraIdx}/group-preview`,
+        { method: 'POST' }
+      );
+      if (!r.ok) throw new Error(await r.text());
+      const updated = await r.json();
+      _trdDrafts[paraIdx] = updated;
+      const c = document.getElementById(`trd-para-${paraIdx}`);
+      if (c) c.outerHTML = trdParaCardHtml(paraIdx);
+      trdUpdateProgress(Object.keys(_trdDrafts).map(Number));
+      showToast('AI 分組完成');
+    } catch(err) {
+      showToast('AI 分組失敗：' + err.message);
+      if (btn) { btn.disabled = false; btn.textContent = '✦ AI 分組'; }
+    }
+  }
+
+  // ── Confirm paragraph ────────────────────────────────────────────────────
+
+  async function trdConfirm(paraIdx) {
+    if (!confirm(`確認將段落 ${paraIdx + 1} 的分組寫入正式資料庫？此操作會覆蓋該段落的舊翻譯單元。`)) return;
+    try {
+      const r = await fetch(
+        `/api/trans/chapters/${_trdChapterId}/paragraphs/${paraIdx}/confirm`,
+        { method: 'POST' }
+      );
+      if (!r.ok) throw new Error(await r.text());
+      const res = await r.json();
+      if (_trdDrafts[paraIdx]) _trdDrafts[paraIdx].status = 'confirmed';
+      const c = document.getElementById(`trd-para-${paraIdx}`);
+      if (c) c.outerHTML = trdParaCardHtml(paraIdx);
+      trdUpdateProgress(Object.keys(_trdDrafts).map(Number));
+      showToast(`段落 ${paraIdx + 1} 已確認，共 ${res.unit_count} 個翻譯單元`);
+    } catch(err) {
+      showToast('確認失敗：' + err.message);
+    }
+  }
+
   {% endif %}
 </script>
 </body>
