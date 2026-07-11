@@ -2358,6 +2358,13 @@
       extDocumentId   = data.document_id;
       extParagraphs   = data.paragraphs;
       extCurrentIndex = 0;
+      // If backend created a new source from free-text title, capture its ID and refresh dropdown.
+      if (data.source_id && !extSourceId) {
+        extSourceId = data.source_id;
+        fetch('/api/sources').then(r => r.ok ? r.json() : []).then(d => {
+          allSources = d; extPopulateSources();
+        }).catch(() => {});
+      }
       extRenderParagraph();
       extLoadDocumentList();
       extShowWorking(extSourceTitle, (document.getElementById('ext-chapter-input').value || '').trim());

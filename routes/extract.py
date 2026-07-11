@@ -4,7 +4,7 @@ from flask import Blueprint, jsonify, request, session
 from auth import is_logged_in, can_create_term, can_edit_existing
 from ai import find_known_translation, generate_term_data, classify_term
 from config import FIELD_LABELS, strip_tone_marks
-from repositories import terms_repo, extraction_repo
+from repositories import terms_repo, extraction_repo, sources_repo
 from repositories.audit_repo import write_audit
 
 extract_bp = Blueprint('extract', __name__)
@@ -241,6 +241,13 @@ def api_extract_documents_post():
     uploaded_by = session.get("user_email", "")
     uploaded_at = datetime.now().strftime("%Y-%m-%d %H:%M")
 
+    # If user typed a free-text book title with no source_id, create a new source record.
+    if not source_id and source_name:
+        try:
+            source_id = sources_repo.add_source(source_name, None, None)
+        except Exception as e:
+            return jsonify({"error": f"Failed to create source record: {e}"}), 500
+
     try:
         doc_id = extraction_repo.create_document(
             title, source_name, zh_paras, en_paras, uploaded_by, uploaded_at,
@@ -253,7 +260,8 @@ def api_extract_documents_post():
         {"index": i, "chinese": zh_paras[i], "english": en_paras[i]}
         for i in range(len(zh_paras))
     ]
-    return jsonify({"document_id": doc_id, "paragraphs": paragraphs, "count": len(paragraphs)})
+    return jsonify({"document_id": doc_id, "paragraphs": paragraphs,
+                    "count": len(paragraphs), "source_id": source_id})
 
 
 @extract_bp.route("/api/extract/documents", methods=["GET"])
