@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from flask import Blueprint, jsonify, request, session
 from auth import is_logged_in, can_create_term, can_edit_existing
-from ai import find_known_translation, generate_term_data
+from ai import find_known_translation, generate_term_data, classify_term
 from config import FIELD_LABELS, strip_tone_marks
 from repositories import terms_repo, extraction_repo
 from repositories.audit_repo import write_audit
@@ -106,6 +106,8 @@ def api_extract_save():
     source_name       = (data.get("source_name")            or "").strip()
     src_zh            = (data.get("source_content_chinese") or "").strip()
     src_en            = (data.get("source_content_english") or "").strip()
+    entity_type       = (data.get("entity_type")            or "").strip()
+    subject_field     = (data.get("subject_field")          or "").strip()
     if not chinese_term:
         return jsonify({"error": "chinese_term is required"}), 400
     try:
@@ -144,6 +146,11 @@ def api_extract_save():
                 "romanization_plain":  strip_tone_marks(pinyin),
                 "source_content_chinese": src_zh,
                 "source_content_english": src_en,
+                "entity_type":            entity_type or None,
+                "subject_field":          subject_field or None,
+                "classification_source":  "manual" if entity_type else None,
+                "classified_by":          user_email if entity_type else None,
+                "classified_at":          now_str if entity_type else None,
             })
             write_audit(term_id, chinese_term, user_email, user_name,
                         "created", details=f"Term created via Extraction (Pinyin={pinyin})")
@@ -164,6 +171,24 @@ def api_extract_save():
             return jsonify({"path": "update", "id": existing_term_id})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@extract_bp.route("/api/extract/classify-candidate", methods=["POST"])
+def api_classify_candidate():
+    """AI-classify a candidate term (before it is saved). Login required."""
+    if not is_logged_in():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    chinese = (data.get("chinese") or "").strip()
+    if not chinese:
+        return jsonify({"error": "chinese is required"}), 400
+    result = classify_term({
+        "chinese": chinese,
+        "context": data.get("context", ""),
+        "notes":   "",
+        "pinyin":  "",
+    })
+    return jsonify(result)
 
 
 @extract_bp.route("/api/extract/documents", methods=["POST"])

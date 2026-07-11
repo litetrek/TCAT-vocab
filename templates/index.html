@@ -2651,12 +2651,40 @@
       }
     } else {
       inner += `<div class="ext-candidate-badge ext-candidate-new">New term — not yet in database</div>`;
+      // Source (read-only, from current document)
+      const srcName = (extDocumentsCache[extDocumentId] || {}).SourceName || extSourceTitle || '';
+      if (srcName) {
+        inner += `<div style="margin-bottom:0.75rem;font-size:0.82rem;color:var(--text-soft);">
+          <span style="font-family:'Cormorant Garamond',serif;text-transform:uppercase;letter-spacing:.1em;font-size:0.72rem;">Source</span>
+          &nbsp;${escHtml(srcName)}</div>`;
+      }
       inner += extEnPassageHtml('Select text in the English passage below to capture it as the Known Translation.', '');
       inner += `<div class="ext-find-row" style="margin-top:0.65rem;">`;
       inner += `<button class="btn-ext-find" id="ext-gen-btn" onclick="extGenerateTranslations()">✨ Generate 3 AI Translations</button>`;
       inner += `<span class="ext-find-msg" id="ext-gen-msg"></span>`;
       inner += `</div>`;
       inner += `<div id="ext-gen-fields"></div>`;
+      // Entity type / Subject field classification
+      const etOpts  = ENTITY_TYPES.map(v  => `<option value="${v}">${ENTITY_TYPE_LABELS[v]||v}</option>`).join('');
+      const sfOpts  = SUBJECT_FIELDS.map(v => `<option value="${v}">${SUBJECT_FIELD_LABELS[v]||v}</option>`).join('');
+      inner += `<div style="margin-top:1rem;display:grid;grid-template-columns:1fr 1fr;gap:0.5rem 1rem;align-items:end;">
+        <div>
+          <label style="font-family:'Cormorant Garamond',serif;font-size:0.72rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text-soft);display:block;margin-bottom:0.2rem;">Entity Type</label>
+          <select id="ext-entity-type" style="width:100%;padding:0.3rem 0.4rem;border:1px solid var(--border);border-radius:3px;font-size:0.85rem;">
+            <option value="">— select —</option>${etOpts}
+          </select>
+        </div>
+        <div>
+          <label style="font-family:'Cormorant Garamond',serif;font-size:0.72rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text-soft);display:block;margin-bottom:0.2rem;">Subject Field</label>
+          <select id="ext-subject-field" style="width:100%;padding:0.3rem 0.4rem;border:1px solid var(--border);border-radius:3px;font-size:0.85rem;">
+            <option value="">— select —</option>${sfOpts}
+          </select>
+        </div>
+      </div>
+      <div class="ext-find-row" style="margin-top:0.4rem;">
+        <button class="btn-ext-find" id="ext-cls-btn" onclick="extClassifyCandidate()">✦ AI Classify</button>
+        <span id="ext-cls-msg" style="font-size:0.8rem;color:var(--text-soft);"></span>
+      </div>`;
     }
 
     inner += `<div class="ext-save-row">`;
@@ -2737,6 +2765,34 @@
     if (msg) msg.textContent = '';
   }
 
+  async function extClassifyCandidate() {
+    const btn = document.getElementById('ext-cls-btn');
+    const msg = document.getElementById('ext-cls-msg');
+    if (!btn) return;
+    btn.disabled = true; btn.textContent = 'Classifying…';
+    if (msg) msg.textContent = '';
+    const zhText = extParagraphs.length ? extParagraphs[extCurrentIndex].chinese : '';
+    try {
+      const res = await fetch('/api/extract/classify-candidate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chinese: extCurrentChineseTerm, context: zhText }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      const etSel = document.getElementById('ext-entity-type');
+      const sfSel = document.getElementById('ext-subject-field');
+      if (etSel && data.entity_type)  etSel.value = data.entity_type;
+      if (sfSel && data.subject_field) sfSel.value = data.subject_field;
+      const conf = data.confidence ? ` (${Math.round(data.confidence * 100)}%)` : '';
+      if (msg) msg.textContent = `✓ ${data.entity_type} · ${data.subject_field}${conf}`;
+    } catch(e) {
+      if (msg) msg.textContent = 'Classification failed.';
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '✦ AI Classify'; }
+    }
+  }
+
   async function extGenerateTranslations() {
     const btn = document.getElementById('ext-gen-btn');
     const msg = document.getElementById('ext-gen-msg');
@@ -2813,9 +2869,11 @@
           pinyin:                 gen.pinyin   || '',
           pali:                   gen.pali     || '',
           sanskrit:               gen.sanskrit || '',
-          source_name:            sourceDoc.SourceName || '',
+          source_name:            sourceDoc.SourceName || extSourceTitle || '',
           source_content_chinese: zhText,
           source_content_english: enText,
+          entity_type:            (document.getElementById('ext-entity-type')   || {}).value || '',
+          subject_field:          (document.getElementById('ext-subject-field') || {}).value || '',
         }),
       });
       const data = await res.json();
