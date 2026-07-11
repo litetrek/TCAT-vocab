@@ -512,6 +512,86 @@
       .ext-file-row { flex-direction: column; align-items: stretch; }
       .ext-file-row .btn { width: 100%; }
     }
+
+    /* ── TRANSLATION MODULE ─────────────────────────────────────────────── */
+    #translation-view { min-height: calc(100vh - 108px); background: var(--paper); }
+    .trans-container { max-width: 1060px; margin: 0 auto; padding: 2rem; }
+
+    /* Book cards — Picker */
+    .trans-book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.25rem; margin-bottom: 2rem; }
+    .trans-book-card {
+      background: white; border: 1px solid var(--border); border-radius: 4px;
+      padding: 1.25rem 1.5rem; box-shadow: var(--shadow); cursor: pointer; transition: box-shadow 0.2s, border-color 0.2s;
+    }
+    .trans-book-card:hover { box-shadow: 0 6px 30px rgba(26,18,8,0.16); border-color: rgba(201,168,76,0.5); }
+    .trans-book-title { font-family: 'Noto Serif TC', serif; font-size: 1.15rem; font-weight: 600; color: var(--ink); margin-bottom: 0.35rem; }
+    .trans-book-meta  { font-size: 0.8rem; color: var(--text-soft); font-style: italic; margin-bottom: 0.85rem; }
+    .trans-progress-bar { height: 6px; border-radius: 3px; background: rgba(26,18,8,0.08); overflow: hidden; margin-bottom: 0.6rem; display: flex; }
+    .trans-pb-seg { height: 100%; }
+    .trans-pb-untranslated { background: rgba(107,90,58,0.3); }
+    .trans-pb-ai_drafted   { background: #4a90d9; }
+    .trans-pb-in_review    { background: #c9a84c; }
+    .trans-pb-revised      { background: #e07830; }
+    .trans-pb-approved     { background: #3a9c5c; }
+    .trans-status-dots { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .trans-dot { font-size: 0.68rem; padding: 0.12rem 0.45rem; border-radius: 2px; border: 1px solid; }
+    .trans-dot-untranslated { color: #6b5a3a; border-color: rgba(107,90,58,0.3); background: rgba(107,90,58,0.07); }
+    .trans-dot-ai_drafted   { color: #2a6aaa; border-color: rgba(74,144,217,0.4); background: rgba(74,144,217,0.09); }
+    .trans-dot-in_review    { color: #7a5010; border-color: rgba(201,168,76,0.5); background: rgba(201,168,76,0.1); }
+    .trans-dot-revised      { color: #a04010; border-color: rgba(224,120,48,0.4); background: rgba(224,120,48,0.09); }
+    .trans-dot-approved     { color: #1a6b35; border-color: rgba(58,156,92,0.4); background: rgba(58,156,92,0.09); }
+
+    /* Upload form */
+    .trans-upload-section { background: white; border: 1px solid var(--border); border-radius: 4px; padding: 1.5rem; box-shadow: var(--shadow); margin-bottom: 2rem; }
+    .trans-upload-title { font-family: 'Cormorant Garamond', serif; font-size: 1.1rem; font-style: italic; color: var(--ink); margin-bottom: 1rem; padding-bottom: 0.6rem; border-bottom: 1px solid var(--border); }
+    .trans-upload-row { display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap; }
+    .trans-upload-field { display: flex; flex-direction: column; gap: 0.3rem; flex: 1; min-width: 200px; }
+    .trans-upload-field label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-soft); }
+    .trans-upload-field input[type="text"] { font-family: 'EB Garamond', serif; font-size: 1rem; padding: 0.45rem 0.7rem; border: 1px solid rgba(26,18,8,0.18); border-radius: 3px; color: var(--text); background: rgba(255,255,255,0.9); }
+    .trans-upload-field input[type="text"]:focus { outline: none; border-color: var(--gold); }
+    .trans-upload-msg { font-size: 0.85rem; font-style: italic; margin-top: 0.6rem; }
+    .trans-upload-msg.error   { color: var(--red-soft); }
+    .trans-upload-msg.success { color: #2d7a4f; }
+
+    /* Chapter list */
+    .trans-chapter-list { background: white; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; box-shadow: var(--shadow); }
+    .trans-chapter-row {
+      display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1.25rem;
+      border-bottom: 1px solid rgba(201,168,76,0.1); cursor: pointer; transition: background 0.15s;
+    }
+    .trans-chapter-row:last-child { border-bottom: none; }
+    .trans-chapter-row:hover { background: rgba(201,168,76,0.06); }
+    .trans-ch-idx   { font-size: 0.72rem; color: var(--text-soft); width: 28px; text-align: right; flex-shrink: 0; }
+    .trans-ch-title { flex: 1; font-family: 'Noto Serif TC', serif; font-size: 1rem; color: var(--ink); }
+    .trans-ch-meta  { font-size: 0.75rem; color: var(--text-soft); white-space: nowrap; }
+    .trans-ch-type  { font-size: 0.65rem; padding: 0.1rem 0.4rem; border-radius: 2px; border: 1px solid rgba(107,90,58,0.25); background: rgba(107,90,58,0.06); color: var(--text-soft); margin-left: 0.5rem; }
+
+    /* Unit list (read-only) */
+    .trans-unit-list { background: white; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; box-shadow: var(--shadow); }
+    .trans-unit-row {
+      display: flex; align-items: baseline; gap: 1rem; padding: 0.65rem 1.25rem;
+      border-bottom: 1px solid rgba(201,168,76,0.08);
+    }
+    .trans-unit-row:last-child { border-bottom: none; }
+    .trans-unit-row.long-sentence { background: rgba(201,168,76,0.04); }
+    .trans-unit-id   { font-size: 0.62rem; color: rgba(107,90,58,0.4); width: 60px; flex-shrink: 0; font-family: monospace; }
+    .trans-unit-text { flex: 1; font-family: 'Noto Serif TC', serif; font-size: 1rem; color: var(--ink); line-height: 1.7; }
+    .trans-unit-status { flex-shrink: 0; }
+
+    /* Status badge */
+    .trans-status { font-size: 0.62rem; padding: 0.1rem 0.4rem; border-radius: 2px; border: 1px solid; white-space: nowrap; }
+    .trans-status-untranslated { color: #6b5a3a; border-color: rgba(107,90,58,0.3); background: rgba(107,90,58,0.06); }
+    .trans-status-ai_drafted   { color: #2a6aaa; border-color: rgba(74,144,217,0.4); background: rgba(74,144,217,0.08); }
+    .trans-status-in_review    { color: #7a5010; border-color: rgba(201,168,76,0.5); background: rgba(201,168,76,0.1); }
+    .trans-status-revised      { color: #a04010; border-color: rgba(224,120,48,0.4); background: rgba(224,120,48,0.09); }
+    .trans-status-approved     { color: #1a6b35; border-color: rgba(58,156,92,0.4); background: rgba(58,156,92,0.09); }
+
+    @media (max-width: 768px) {
+      #translation-view { min-height: calc(100vh - 96px); }
+      .trans-container { padding: 1rem; }
+      .trans-book-grid { grid-template-columns: 1fr; }
+      .trans-upload-row { flex-direction: column; align-items: stretch; }
+    }
   </style>
 </head>
 <body>
@@ -544,6 +624,9 @@
 <div class="top-tab-bar" id="top-tab-bar">
   <button class="top-tab-btn active" data-tab="vocabulary" onclick="switchTopTab('vocabulary')">Vocabulary</button>
   <button class="top-tab-btn" data-tab="extraction" onclick="switchTopTab('extraction')">Extraction</button>
+  {% if can_access_translation %}
+  <button class="top-tab-btn" data-tab="translation" onclick="switchTopTab('translation')">Translation</button>
+  {% endif %}
 </div>
 
 <!-- ── LAYOUT (Vocabulary tab) ──────────────────────────────────────────────── -->
@@ -771,6 +854,71 @@
     </div>
   </div>
 </div>
+
+<!-- ── TRANSLATION VIEW ────────────────────────────────────────────────────── -->
+{% if can_access_translation %}
+<div id="translation-view" style="display:none;">
+  <div class="trans-container">
+
+    <!-- ── PICKER SUB-VIEW ──────────────────────────────────────────────── -->
+    <div id="trans-picker">
+      <div class="main-toolbar" style="margin-bottom:1.5rem;">
+        <h1 class="main-title">Translation <span>Books</span></h1>
+        <button class="btn btn-secondary" onclick="transLoadBooks()">↻ Refresh</button>
+      </div>
+
+      <!-- Upload form -->
+      <div class="trans-upload-section">
+        <div class="trans-upload-title">Upload New Book</div>
+        <div class="trans-upload-row">
+          <div class="trans-upload-field">
+            <label>Book Title</label>
+            <input type="text" id="trans-upload-title" placeholder="e.g. 大乘起信論">
+          </div>
+          <div class="trans-upload-field" style="flex:0 0 auto;">
+            <label>Chinese .txt File</label>
+            <input type="file" id="trans-upload-file" accept=".txt">
+          </div>
+          <button class="btn btn-primary" style="align-self:flex-end;" onclick="transUploadBook()" id="trans-upload-btn">Upload &amp; Import</button>
+        </div>
+        <div class="trans-upload-msg" id="trans-upload-msg" style="display:none;"></div>
+      </div>
+
+      <!-- Book card grid -->
+      <div id="trans-book-grid" class="trans-book-grid">
+        <div class="loading">☸ Loading books…</div>
+      </div>
+    </div><!-- #trans-picker -->
+
+    <!-- ── CHAPTER LIST SUB-VIEW ─────────────────────────────────────────── -->
+    <div id="trans-chapter-view" style="display:none;">
+      <div class="main-toolbar" style="margin-bottom:1.5rem;">
+        <div style="display:flex;align-items:center;gap:1rem;">
+          <button class="btn-back" onclick="transShowPicker()">← Books</button>
+          <h1 class="main-title" id="trans-chapter-title">Chapters</h1>
+        </div>
+      </div>
+      <div id="trans-chapter-list" class="trans-chapter-list">
+        <div class="loading">☸ Loading chapters…</div>
+      </div>
+    </div><!-- #trans-chapter-view -->
+
+    <!-- ── UNIT LIST SUB-VIEW ────────────────────────────────────────────── -->
+    <div id="trans-unit-view" style="display:none;">
+      <div class="main-toolbar" style="margin-bottom:1.5rem;">
+        <div style="display:flex;align-items:center;gap:1rem;">
+          <button class="btn-back" onclick="transShowChapterList()">← Chapters</button>
+          <h1 class="main-title" id="trans-unit-title">Units</h1>
+        </div>
+      </div>
+      <div id="trans-unit-list" class="trans-unit-list">
+        <div class="loading">☸ Loading sentences…</div>
+      </div>
+    </div><!-- #trans-unit-view -->
+
+  </div>
+</div><!-- #translation-view -->
+{% endif %}
 
 <!-- ── TEAM MODAL ─────────────────────────────────────────────────────────── -->
 <div class="modal-overlay" id="team-modal" onclick="closeTeamModalOutside(event)">
@@ -1977,14 +2125,17 @@
   // ── TOP TAB SWITCHING ────────────────────────────────────────────────────
   function switchTopTab(name) {
     document.querySelectorAll('.top-tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelector(`.top-tab-btn[data-tab="${name}"]`).classList.add('active');
-    const vocab      = document.getElementById('vocab-view');
-    const extraction = document.getElementById('extraction-view');
+    const activeBtn = document.querySelector(`.top-tab-btn[data-tab="${name}"]`);
+    if (activeBtn) activeBtn.classList.add('active');
+    const vocab       = document.getElementById('vocab-view');
+    const extraction  = document.getElementById('extraction-view');
+    const translation = document.getElementById('translation-view');
+    vocab.style.display       = 'none';
+    extraction.style.display  = 'none';
+    if (translation) translation.style.display = 'none';
     if (name === 'vocabulary') {
-      vocab.style.display      = '';
-      extraction.style.display = 'none';
-    } else {
-      vocab.style.display      = 'none';
+      vocab.style.display = '';
+    } else if (name === 'extraction') {
       extraction.style.display = '';
       if (!allSources.length) {
         fetch('/api/sources').then(r => r.ok ? r.json() : []).then(data => {
@@ -1995,6 +2146,9 @@
         extPopulateSources();
       }
       extLoadDocumentList();
+    } else if (name === 'translation' && translation) {
+      translation.style.display = '';
+      transLoadBooks();
     }
   }
 
@@ -2584,6 +2738,186 @@
   document.getElementById('ext-text-zh').addEventListener('mouseup', extHandleSelection);
   document.addEventListener('mouseup', extHandleModalEnglishSelection);
   document.addEventListener('keydown', e => { if (e.key === 'Escape') extClearSelection(); });
+
+  {% if can_access_translation %}
+  // ── TRANSLATION MODULE ───────────────────────────────────────────────────
+  let _transCurrentBookId    = null;
+  let _transCurrentBookTitle = '';
+
+  const _STATUS_LABEL = {
+    untranslated: 'Untranslated',
+    ai_drafted:   'AI Draft',
+    in_review:    'In Review',
+    revised:      'Revised',
+    approved:     'Approved',
+  };
+
+  function transShowPicker() {
+    document.getElementById('trans-picker').style.display       = '';
+    document.getElementById('trans-chapter-view').style.display = 'none';
+    document.getElementById('trans-unit-view').style.display    = 'none';
+    transLoadBooks();
+  }
+
+  function transShowChapterList() {
+    document.getElementById('trans-picker').style.display       = 'none';
+    document.getElementById('trans-chapter-view').style.display = '';
+    document.getElementById('trans-unit-view').style.display    = 'none';
+  }
+
+  function transShowUnitList() {
+    document.getElementById('trans-picker').style.display       = 'none';
+    document.getElementById('trans-chapter-view').style.display = 'none';
+    document.getElementById('trans-unit-view').style.display    = '';
+  }
+
+  async function transLoadBooks() {
+    const grid = document.getElementById('trans-book-grid');
+    grid.innerHTML = '<div class="loading">☸ Loading books…</div>';
+    try {
+      const r = await fetch('/api/trans/books');
+      if (!r.ok) throw new Error(await r.text());
+      const books = await r.json();
+      if (!books.length) {
+        grid.innerHTML = '<div class="empty-state"><span class="wheel">☸</span><h3>No books yet</h3><p>Upload a .txt file above to get started.</p></div>';
+        return;
+      }
+      grid.innerHTML = books.map(b => {
+        const total = parseInt(b.unit_count) || 0;
+        const statuses = ['untranslated','ai_drafted','in_review','revised','approved'];
+        const bar = total > 0 ? statuses.map(s => {
+          const cnt = parseInt(b['cnt_' + s]) || 0;
+          const pct = (cnt / total * 100).toFixed(1);
+          return `<div class="trans-pb-seg trans-pb-${s}" style="width:${pct}%" title="${_STATUS_LABEL[s]}: ${cnt}"></div>`;
+        }).join('') : '<div class="trans-pb-seg trans-pb-untranslated" style="width:100%"></div>';
+        const dots = statuses.map(s => {
+          const cnt = parseInt(b['cnt_' + s]) || 0;
+          if (!cnt) return '';
+          return `<span class="trans-dot trans-dot-${s}">${_STATUS_LABEL[s]}: ${cnt}</span>`;
+        }).filter(Boolean).join('');
+        const chapters = parseInt(b.chapter_count) || 0;
+        const date = b.created_at ? new Date(b.created_at).toLocaleDateString() : '';
+        return `<div class="trans-book-card" onclick="transOpenBook(${b.id},'${escHtml(b.title)}')">
+          <div class="trans-book-title">${escHtml(b.title)}</div>
+          <div class="trans-book-meta">${chapters} chapters · ${total} sentences · ${date}</div>
+          <div class="trans-progress-bar">${bar}</div>
+          <div class="trans-status-dots">${dots || '<span class="trans-dot trans-dot-untranslated">Untranslated: '+total+'</span>'}</div>
+        </div>`;
+      }).join('');
+    } catch(e) {
+      grid.innerHTML = `<div class="ext-error-banner">Error loading books: ${escHtml(e.message)}</div>`;
+    }
+  }
+
+  async function transOpenBook(bookId, bookTitle) {
+    _transCurrentBookId    = bookId;
+    _transCurrentBookTitle = bookTitle;
+    document.getElementById('trans-chapter-title').innerHTML =
+      `<span style="font-size:1.1rem;font-style:normal;">${escHtml(bookTitle)}</span> — Chapters`;
+    const list = document.getElementById('trans-chapter-list');
+    list.innerHTML = '<div class="loading">☸ Loading chapters…</div>';
+    transShowChapterList();
+    try {
+      const r = await fetch(`/api/trans/books/${bookId}/chapters`);
+      if (!r.ok) throw new Error(await r.text());
+      const chapters = await r.json();
+      if (!chapters.length) {
+        list.innerHTML = '<div class="empty-state"><h3>No chapters found</h3></div>';
+        return;
+      }
+      list.innerHTML = chapters.map(c => {
+        const typeTag = c.section_type && c.section_type !== 'body'
+          ? `<span class="trans-ch-type">${escHtml(c.section_type)}</span>` : '';
+        return `<div class="trans-chapter-row" onclick="transOpenChapter(${c.id},'${escHtml(c.title||'')}')">
+          <span class="trans-ch-idx">${c.chapter_index + 1}</span>
+          <span class="trans-ch-title">${escHtml(c.title || '(untitled)')}</span>
+          ${typeTag}
+        </div>`;
+      }).join('');
+    } catch(e) {
+      list.innerHTML = `<div class="ext-error-banner">Error: ${escHtml(e.message)}</div>`;
+    }
+  }
+
+  async function transOpenChapter(chapterId, chapterTitle) {
+    document.getElementById('trans-unit-title').innerHTML =
+      `<span style="font-size:1.1rem;font-style:normal;">${escHtml(_transCurrentBookTitle)}</span> — ${escHtml(chapterTitle || 'Chapter')}`;
+    const list = document.getElementById('trans-unit-list');
+    list.innerHTML = '<div class="loading">☸ Loading sentences…</div>';
+    transShowUnitList();
+    try {
+      const r = await fetch(`/api/trans/chapters/${chapterId}/units`);
+      if (!r.ok) throw new Error(await r.text());
+      const units = await r.json();
+      if (!units.length) {
+        list.innerHTML = '<div class="empty-state"><h3>No sentences found</h3></div>';
+        return;
+      }
+      let lastPara = -1;
+      list.innerHTML = units.map(u => {
+        const paraBreak = u.paragraph_index !== lastPara && lastPara !== -1
+          ? '<div style="height:1px;background:rgba(201,168,76,0.12);margin:0.25rem 0;"></div>' : '';
+        lastPara = u.paragraph_index;
+        const cls = u.is_long_sentence ? ' long-sentence' : '';
+        const statusCls = 'trans-status trans-status-' + (u.status || 'untranslated');
+        return `${paraBreak}<div class="trans-unit-row${cls}">
+          <span class="trans-unit-id">${escHtml(u.display_id || '')}</span>
+          <span class="trans-unit-text">${escHtml(u.chinese_text || '')}</span>
+          <span class="trans-unit-status"><span class="${statusCls}">${_STATUS_LABEL[u.status] || u.status}</span></span>
+        </div>`;
+      }).join('');
+    } catch(e) {
+      list.innerHTML = `<div class="ext-error-banner">Error: ${escHtml(e.message)}</div>`;
+    }
+  }
+
+  async function transUploadBook() {
+    const titleInput = document.getElementById('trans-upload-title');
+    const fileInput  = document.getElementById('trans-upload-file');
+    const btn  = document.getElementById('trans-upload-btn');
+    const msg  = document.getElementById('trans-upload-msg');
+    msg.style.display = 'none';
+    msg.className = 'trans-upload-msg';
+
+    if (!fileInput.files.length) {
+      msg.textContent = 'Please select a .txt file first.';
+      msg.className = 'trans-upload-msg error';
+      msg.style.display = '';
+      return;
+    }
+    const file  = fileInput.files[0];
+    const title = titleInput.value.trim() || file.name.replace(/\.txt$/i, '');
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('title', title);
+
+    btn.disabled = true;
+    btn.textContent = 'Importing…';
+    msg.style.display = 'none';
+
+    try {
+      const r = await fetch('/api/trans/books', { method: 'POST', body: fd });
+      const data = await r.json();
+      if (!r.ok) {
+        msg.textContent = data.error || 'Import failed.';
+        msg.className = 'trans-upload-msg error';
+      } else {
+        msg.textContent = `Imported: ${data.chapter_count} chapters, ${data.unit_count} sentences (${data.book_display_id})`;
+        msg.className = 'trans-upload-msg success';
+        titleInput.value = '';
+        fileInput.value  = '';
+        transLoadBooks();
+      }
+    } catch(e) {
+      msg.textContent = 'Network error — please try again.';
+      msg.className = 'trans-upload-msg error';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Upload & Import';
+      msg.style.display = '';
+    }
+  }
+  {% endif %}
 </script>
 </body>
 </html>

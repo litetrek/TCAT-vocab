@@ -40,14 +40,15 @@ buddhist-vocab/
 ├── archive/sheets.py.bak       # Google Sheets client — archived (T0-5); no longer imported by app
 ├── db.py                       # supabase-py client: create_client() using SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
 ├── ai.py                       # Anthropic Claude AI generation (Pinyin, Pali, Sanskrit, translations)
-├── auth.py                     # Session helpers: is_logged_in, is_admin, is_leader
+├── auth.py                     # Session helpers: is_logged_in, is_admin, is_leader, can_access_translation_module
 ├── segmenter.py                # Chinese sentence segmentation — T1; decode/split_paragraphs/segment_paragraph
 ├── routes/
 │   ├── __init__.py
 │   ├── terms.py                # /api/terms/* endpoints
 │   ├── members.py              # /api/members/* endpoints
 │   ├── sources.py              # /api/sources + /api/init endpoints
-│   └── extract.py              # /api/extract/* endpoints — Extraction module
+│   ├── extract.py              # /api/extract/* endpoints — Extraction module
+│   └── translate.py            # /api/trans/* endpoints — Translation module (T2); guard: _require_translation
 ├── repositories/               # psycopg2 data-access layer — pure Postgres, no Sheets mirror
 │   ├── __init__.py
 │   ├── members_repo.py
@@ -60,10 +61,12 @@ buddhist-vocab/
 │   ├── 002_rpc_functions.sql   # next_display_id RPC + atomic write RPCs
 │   ├── 003_romanization_plain.sql  # unaccent extension, trigger, backfill, index for romanization_plain
 │   ├── 004_entity_subject_classification.sql  # entity_type / subject_field columns on terms
-│   └── 005_t1_translation_module.sql  # T1: five translation-module tables (idempotent IF NOT EXISTS)
+│   ├── 005_t1_translation_module.sql  # T1: five translation-module tables (idempotent IF NOT EXISTS)
+│   └── 006_t2_import_book_rpc.sql    # T2: import_trans_book + list_trans_books RPC functions
 ├── scripts/
 │   ├── run_migration.py        # Applies 001_initial_schema.sql via DATABASE_URL / psycopg2
 │   ├── run_migration_005.py    # T1: applies 005 + runs acceptance tests (insert/unique/fractional/cleanup)
+│   ├── run_migration_006.py    # T2: applies 006 + runs 4 acceptance tests (import/list/section_type/cleanup)
 │   ├── migrate_from_sheets.py  # T0-2: one-shot Sheets → Postgres migration
 │   ├── migrate_extraction_only.py  # T0-4: re-migrate extraction data only
 │   └── backfill_classification.py  # Backfill entity_type/subject_field for unclassified terms
@@ -77,7 +80,7 @@ buddhist-vocab/
 │   └── apple-touch-icon.png    # 180×180 PNG (iOS home screen)
 ├── index.cgi                   # CGI entry point (shebang: venv310/bin/python3.10)
 ├── templates/
-│   ├── index.html              # Main app UI — two top-level tabs: Extraction and Vocabulary
+│   ├── index.html              # Main app UI — three top-level tabs: Vocabulary / Extraction / Translation (admin-only)
 │   ├── login.html              # Google OAuth login page
 │   └── denied.html             # Access denied (user not in Members sheet)
 ├── requirements.txt
@@ -517,6 +520,57 @@ Two-axis structured classification added to all vocabulary terms:
 
 ---
 
+### T2 — Translation Module: Access Gate + Import + Browse (2026-07-10)
+
+**Scope**: Admin-only access gate, book import pipeline, and read-only browse UI. No editing or AI translation (T3 scope).
+
+#### 任務一 — 存取旗標（開發期 admin-only gate）
+
+- `auth.py`: added `TRANSLATION_MODULE_MIN_ROLE = os.environ.get("TRANSLATION_MIN_ROLE", "admin")` and `can_access_translation_module(user_role)` — single centralized check using `_ROLE_ORDER` index comparison
+- `.env`: `TRANSLATION_MIN_ROLE=admin` (development default)
+- `.env.example`: documented new variable and its on/off semantics
+- `app.py`: imports `can_access_translation_module`; passes `can_access_translation=can_access_translation_module(role)` to the template
+- `templates/index.html`: Translation top tab button wrapped in `{% if can_access_translation %}` — non-admin users see no tab at all (not greyed-out; completely absent)
+- `routes/translate.py`: `_require_translation` decorator on every endpoint — checks `is_logged_in()` + `can_access_translation_module(session role)` → 403 if either fails
+- Result: non-admin users cannot see the Translation tab, cannot navigate to it, and any direct API call to `/api/trans/...` returns 403
+
+#### 任務二 — Migration 006 + RPC Functions
+
+- `migrations/006_t2_import_book_rpc.sql`:
+  - `import_trans_book(p_title, p_created_by, p_chapters jsonb)` — single atomic transaction: INSERT trans_books → N×INSERT trans_chapters → all×INSERT trans_units; generates all display_ids via `next_display_id()` inside the function; returns `{book_id, display_id, chapter_count, unit_count}`
+  - `list_trans_books()` — single `GROUP BY` query across trans_books/trans_chapters/trans_units; returns per-book counts for all 5 unit statuses (untranslated/ai_drafted/in_review/revised/approved)
+- `scripts/run_migration_006.py` — applies migration + 4 acceptance tests: import_trans_book creates correct counts; list_trans_books finds the test book; section_type='editorial' stored correctly; cleanup removes all test rows
+- Migration applied; all 4 acceptance tests passed (BK000003 / BK000004 created and cleaned up)
+
+#### 任務二 — routes/translate.py
+
+New blueprint registered in `app.py`:
+- `_require_translation` decorator — guard for all endpoints
+- `POST /api/trans/books` — file upload → `decode()` → `split_paragraphs()` → one chapter per paragraph, `detect_section_type()` for each, `segment_paragraph()` for each → `import_trans_book` RPC → 201 `{book_display_id, chapter_count, unit_count}`
+- `GET /api/trans/books` — calls `list_trans_books()` RPC; returns book list with progress stats
+- `GET /api/trans/books/<book_id>/chapters` — PostgREST SELECT ordered by `chapter_index`
+- `GET /api/trans/chapters/<chapter_id>/units` — PostgREST SELECT ordered by `paragraph_index, unit_order`
+
+#### 任務三 — Translation UI (index.html)
+
+CSS added for: book card grid (`.trans-book-card`), progress bar (`.trans-progress-bar`), status dots, upload form, chapter list, unit list, status badges — all 5 status colors (grey/blue/gold/orange/green).
+
+HTML added (`{% if can_access_translation %}` block):
+- `#translation-view` (hidden div, shown by `switchTopTab('translation')`)
+  - `#trans-picker` — book card grid + upload form
+  - `#trans-chapter-view` — chapter list with back button
+  - `#trans-unit-view` — sentence list with back button
+
+JS added (`{% if can_access_translation %}` block):
+- `transLoadBooks()` — calls `GET /api/trans/books`; renders book cards with progress bar + status dots
+- `transOpenBook(bookId, title)` — calls `GET /api/trans/books/<id>/chapters`; renders chapter list
+- `transOpenChapter(chapterId, title)` — calls `GET /api/trans/chapters/<id>/units`; renders sentence list (paragraph breaks, long-sentence highlight, status badges)
+- `transUploadBook()` — `FormData` POST to `/api/trans/books`; shows inline success/error message; refreshes book grid
+- `transShowPicker()` / `transShowChapterList()` / `transShowUnitList()` — sub-view toggle helpers
+- `switchTopTab()` refactored to handle 3 tabs cleanly (vocabulary / extraction / translation)
+
+---
+
 ### T1 — Translation Module Data Layer + Segmenter (2026-07-10)
 
 **Scope**: Pure data layer + algorithm. No UI, no API endpoints.
@@ -573,7 +627,7 @@ Two-axis structured classification added to all vocabulary terms:
 |---|---|---|
 | **T0** | **Done** | Schema, data migration, data layer rewrite, Sheets retirement |
 | **T1** | **Done** | 5 translation tables verified + sequences; `segmenter.py` + 15 pytest cases passing |
-| **T2** | Planned | Import pipeline: upload .txt → segmenter → write trans_units to DB |
+| **T2** | **Done** | Access gate (admin-only routed via env flag), import pipeline, read-only Picker + chapter + sentence browse UI |
 | **T3** | Planned | AI translation: draft English for each unit via Claude; write english_draft |
 | **T4** | Planned | Translation UI: per-unit review, approve, revise workflow |
 | **T5** | Planned | Style guide integration: RAG lookup on trans_revisions.embedding |
@@ -582,7 +636,8 @@ Two-axis structured classification added to all vocabulary terms:
 
 ## Next Steps
 
-- **T2**: Build import pipeline — `routes/trans.py`, endpoint accepts .txt, calls `segmenter.segment_paragraph()`, writes rows to `trans_books` / `trans_chapters` / `trans_units`
+- **T3**: AI translation — draft English for each unit via Claude; write `english_draft`; update status to `ai_drafted`
+- **T4**: Translation UI — per-unit review, approve, revise workflow
 - **Run backfill**: `python scripts/backfill_classification.py --dry-run --limit 20` (spot-check), then full run
 - **T0 manual cleanup** (no code changes needed):
   - Export 7 Sheets worksheets as CSV → `backup/sheets_final_export_20260709/` (local only, do not commit)

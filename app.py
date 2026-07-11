@@ -5,11 +5,12 @@ import os
 
 from config import BASE_DIR, SUPER_ADMIN_EMAIL
 from repositories.members_repo import lookup_member
-from auth import is_logged_in, is_admin
-from routes.terms   import terms_bp
-from routes.members import members_bp
-from routes.sources import sources_bp
-from routes.extract import extract_bp
+from auth import is_logged_in, is_admin, can_access_translation_module
+from routes.terms     import terms_bp
+from routes.members   import members_bp
+from routes.sources   import sources_bp
+from routes.extract   import extract_bp
+from routes.translate import translate_bp
 
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, 'templates'))
 CORS(app)
@@ -33,6 +34,7 @@ app.register_blueprint(terms_bp)
 app.register_blueprint(members_bp)
 app.register_blueprint(sources_bp)
 app.register_blueprint(extract_bp)
+app.register_blueprint(translate_bp)
 
 
 # ── Page routes ───────────────────────────────────────────────────────────
@@ -40,11 +42,13 @@ app.register_blueprint(extract_bp)
 def home():
     if not is_logged_in():
         return redirect(url_for("login"))
+    role = session.get("user_role", "member")
     return render_template("index.html",
                            user=session["user_email"],
                            user_name=session.get("user_name", ""),
                            is_admin=is_admin(),
-                           user_role=session.get("user_role", "member"),
+                           user_role=role,
+                           can_access_translation=can_access_translation_module(role),
                            super_admin=SUPER_ADMIN_EMAIL)
 
 
