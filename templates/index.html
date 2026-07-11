@@ -746,6 +746,7 @@
       {% if is_admin %}
       <button class="btn btn-secondary" style="width:100%;margin-bottom:0.5rem;" onclick="openTeamModal()">☷ Team</button>
       <button class="btn btn-secondary" style="width:100%;margin-bottom:0.5rem;" onclick="openSourcesModal()">⊕ Sources</button>
+      <button class="btn btn-secondary" style="width:100%;margin-bottom:0.5rem;" onclick="openLoginLogModal()">⏱ Login Records</button>
       {% endif %}
     </div>
     </div><!-- /.sidebar-inner -->
@@ -1029,6 +1030,19 @@
         <button class="btn btn-secondary" onclick="closeSourcesModal()">Close</button>
         <button class="btn btn-gold" onclick="addSource()">Add Source ✦</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- LOGIN LOG MODAL -->
+<div class="modal-overlay" id="login-log-modal" onclick="closeLoginLogModalOutside(event)">
+  <div class="modal modal-wide">
+    <div class="modal-title">Login Records</div>
+    <div id="login-log-body" style="max-height:420px;overflow-y:auto;margin-top:0.5rem;">
+      <div class="loading" style="padding:1.5rem;">☸ Loading…</div>
+    </div>
+    <div class="modal-footer" style="margin-top:0.75rem;">
+      <button class="btn btn-secondary" onclick="closeLoginLogModal()">Close</button>
     </div>
   </div>
 </div>
@@ -2047,6 +2061,38 @@
   function openSourcesModal()          { document.getElementById('sources-modal').classList.add('open'); loadSources(); }
   function closeSourcesModal()         { document.getElementById('sources-modal').classList.remove('open'); }
   function closeSourcesModalOutside(e) { if (e.target.id==='sources-modal') closeSourcesModal(); }
+
+  // ── Login Log modal ───────────────────────────────────────────────────────
+  function openLoginLogModal()          { document.getElementById('login-log-modal').classList.add('open'); loadLoginLog(); }
+  function closeLoginLogModal()         { document.getElementById('login-log-modal').classList.remove('open'); }
+  function closeLoginLogModalOutside(e) { if (e.target.id==='login-log-modal') closeLoginLogModal(); }
+
+  async function loadLoginLog() {
+    const body = document.getElementById('login-log-body');
+    body.innerHTML = '<div class="loading" style="padding:1.5rem;">☸ Loading…</div>';
+    try {
+      const r = await fetch('/api/admin/login-log');
+      if (!r.ok) throw new Error(await r.text());
+      const rows = await r.json();
+      if (!rows.length) { body.innerHTML = '<div style="padding:1rem;color:var(--text-soft);">No records yet.</div>'; return; }
+      body.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+        <thead><tr style="border-bottom:2px solid var(--border);text-align:left;">
+          <th style="padding:0.4rem 0.75rem;">Time</th>
+          <th style="padding:0.4rem 0.75rem;">Name</th>
+          <th style="padding:0.4rem 0.75rem;">Email</th>
+          <th style="padding:0.4rem 0.75rem;">Role</th>
+        </tr></thead>
+        <tbody>${rows.map(r => `<tr style="border-bottom:1px solid rgba(201,168,76,0.1);">
+          <td style="padding:0.4rem 0.75rem;white-space:nowrap;color:var(--text-soft);">${escHtml(new Date(r.logged_in_at).toLocaleString())}</td>
+          <td style="padding:0.4rem 0.75rem;">${escHtml(r.name || '')}</td>
+          <td style="padding:0.4rem 0.75rem;color:var(--text-soft);">${escHtml(r.email)}</td>
+          <td style="padding:0.4rem 0.75rem;">${escHtml(r.role || '')}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    } catch(e) {
+      body.innerHTML = `<div class="ext-error-banner">Error: ${escHtml(e.message)}</div>`;
+    }
+  }
 
   async function loadSources() {
     document.getElementById('sources-list').innerHTML = '<div class="loading" style="padding:1.5rem;">☸ Loading…</div>';

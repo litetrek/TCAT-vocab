@@ -11,6 +11,7 @@ from routes.members   import members_bp
 from routes.sources   import sources_bp
 from routes.extract   import extract_bp
 from routes.translate import translate_bp
+from routes.admin     import admin_bp
 
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, 'templates'))
 CORS(app)
@@ -35,6 +36,7 @@ app.register_blueprint(members_bp)
 app.register_blueprint(sources_bp)
 app.register_blueprint(extract_bp)
 app.register_blueprint(translate_bp)
+app.register_blueprint(admin_bp)
 
 
 # ── Page routes ───────────────────────────────────────────────────────────
@@ -70,9 +72,15 @@ def callback():
     role  = lookup_member(email)
     if role is None:
         return render_template("denied.html"), 403
+    name = token["userinfo"].get("name", email)
     session["user_email"] = email
-    session["user_name"]  = token["userinfo"].get("name", email)
+    session["user_name"]  = name
     session["user_role"]  = role
+    try:
+        from db import supabase
+        supabase.table("login_log").insert({"email": email, "name": name, "role": role}).execute()
+    except Exception:
+        pass
     return redirect(url_for("home"))
 
 
