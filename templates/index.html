@@ -3086,6 +3086,8 @@
       const drafts = await r.json();
       _trdDrafts = {};
       for (const d of drafts) _trdDrafts[d.paragraph_index] = d;
+      // Stamp each sentence with its original flat index (client-only, enforces order)
+      for (const d of Object.values(_trdDrafts)) _trdStampOrigIdx(d.draft_groups);
       trdRenderAll();
     } catch(e) {
       body.innerHTML = `<div class="ext-error-banner">Error: ${escHtml(e.message)}</div>`;
@@ -3211,6 +3213,18 @@
     _trdMoveSentence(paraIdx, srcGi, srcSi, null);
   }
 
+  // Stamp each sentence with its original flat index (client-only; never sent to server)
+  function _trdStampOrigIdx(draft_groups) {
+    let idx = 0;
+    for (const g of draft_groups) for (const s of g.sentences) s._origIdx = idx++;
+  }
+
+  // Re-sort groups and sentences within groups to preserve original document order
+  function _trdRestoreOrder(dg) {
+    for (const g of dg) g.sentences.sort((a, b) => a._origIdx - b._origIdx);
+    dg.sort((a, b) => (a.sentences[0]?._origIdx ?? 0) - (b.sentences[0]?._origIdx ?? 0));
+  }
+
   function _trdMoveSentence(paraIdx, srcGi, srcSi, targetGi) {
     const draft = _trdDrafts[paraIdx];
     if (!draft) return;
@@ -3218,20 +3232,25 @@
 
     const sentence = dg[srcGi].sentences[srcSi];
 
-    // Remove from source
+    // Remove from source group; keep group reference for target lookup
     dg[srcGi].sentences.splice(srcSi, 1);
 
+    // Adjust target index when source group becomes empty and is removed before target
     let adjTarget = targetGi;
     if (dg[srcGi].sentences.length === 0) {
       dg.splice(srcGi, 1);
       if (adjTarget !== null && adjTarget > srcGi) adjTarget--;
     }
 
+    // Add to target (new group, or existing group — exact position doesn't matter; sort fixes order)
     if (adjTarget === null) {
       dg.push({sentences: [sentence]});
     } else {
       dg[adjTarget].sentences.push(sentence);
     }
+
+    // Enforce original document order: sort sentences within groups and sort groups
+    _trdRestoreOrder(dg);
 
     // Re-render this paragraph card
     const card = document.getElementById(`trd-para-${paraIdx}`);
@@ -3255,11 +3274,14 @@
       const r = await fetch(
         `/api/trans/chapters/${_trdChapterId}/paragraphs/${paraIdx}/draft`,
         { method:'PATCH', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({draft_groups: draft.draft_groups}) }
+          body: JSON.stringify({draft_groups: draft.draft_groups.map(g => ({
+            sentences: g.sentences.map(({_origIdx, ...s}) => s)
+          }))}) }
       );
       if (!r.ok) throw new Error(await r.text());
       const updated = await r.json();
       _trdDrafts[paraIdx] = Object.assign({}, draft, updated);
+      _trdStampOrigIdx(_trdDrafts[paraIdx].draft_groups);
       if (ind) { ind.textContent = '✓ 已儲存'; setTimeout(() => { ind.style.display='none'; }, 2000); }
     } catch(err) {
       if (ind) { ind.textContent = '⚠ 儲存失敗：' + err.message; ind.style.display = ''; }
@@ -3280,6 +3302,7 @@
       if (!r.ok) throw new Error(await r.text());
       const updated = await r.json();
       _trdDrafts[paraIdx] = updated;
+      _trdStampOrigIdx(_trdDrafts[paraIdx].draft_groups);
       const c = document.getElementById(`trd-para-${paraIdx}`);
       if (c) c.outerHTML = trdParaCardHtml(paraIdx);
       trdUpdateProgress(Object.keys(_trdDrafts).map(Number));
