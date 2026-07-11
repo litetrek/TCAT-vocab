@@ -2,14 +2,17 @@ import json
 from datetime import datetime, timezone
 from functools import wraps
 from flask import Blueprint, jsonify, request, session
-from auth import is_logged_in, can_access_translation_module
+from auth import is_logged_in, can_access_translation_module, can_edit_existing, is_leader
 from db import supabase
 from segmenter import decode, split_paragraphs, detect_section_type, segment_paragraph
-from ai import group_sentences_by_topic
+from ai import group_sentences_by_topic, translate_unit
+from repositories import terms_repo
+from repositories.audit_repo import write_audit
 
 translate_bp = Blueprint("translate", __name__)
 
 MAX_FILE_SIZE = 2 * 1024 * 1024  # 2 MB
+AI_MODEL_NAME = "claude-haiku-4-5-20251001"
 
 
 # ── Access guard ──────────────────────────────────────────────────────────────
@@ -28,6 +31,41 @@ def _require_translation(f):
 
 def _now_iso():
     return datetime.now(timezone.utc).isoformat()
+
+
+# ── T3 helpers ─────────────────────────────────────────────────────────────
+
+def _match_constraint_terms(chinese_text, limit=15):
+    """Find Final/Known terms that appear in chinese_text (longest match first)."""
+    try:
+        all_terms = terms_repo.get_translation_constraint_terms()
+    except Exception:
+        return []
+    hits = [t for t in all_terms if t["chinese"] and t["chinese"] in chinese_text]
+    hits.sort(key=lambda t: len(t["chinese"]), reverse=True)
+    return hits[:limit]
+
+
+def _get_context(chapter_id, unit_id):
+    """Return (prev_chinese, next_chinese) — adjacent confirmed units in the same chapter."""
+    try:
+        result = (
+            supabase.table("trans_units")
+            .select("id,chinese_text")
+            .eq("chapter_id", chapter_id)
+            .order("paragraph_index")
+            .order("unit_order")
+            .execute()
+        )
+    except Exception:
+        return "", ""
+    rows = result.data or []
+    idx = next((i for i, r in enumerate(rows) if r["id"] == unit_id), None)
+    if idx is None:
+        return "", ""
+    prev_text = rows[idx - 1]["chinese_text"] if idx > 0 else ""
+    next_text = rows[idx + 1]["chinese_text"] if idx < len(rows) - 1 else ""
+    return prev_text or "", next_text or ""
 
 
 # ── POST /api/trans/books ─────────────────────────────────────────────────────
@@ -206,7 +244,7 @@ def api_list_units(chapter_id):
     try:
         result = (
             supabase.table("trans_units")
-            .select("id,display_id,paragraph_index,unit_order,chinese_text,status,is_long_sentence")
+            .select("*")
             .eq("chapter_id", chapter_id)
             .order("paragraph_index")
             .order("unit_order")
@@ -397,3 +435,158 @@ def api_confirm_paragraph(chapter_id, para_idx):
 
     except Exception as exc:
         return jsonify({"error": f"Database error: {exc}"}), 500
+
+
+# ── T3 — AI Translation Drafting ──────────────────────────────────────────────
+
+# ── POST /api/trans/units/<id>/translate ──────────────────────────────────────
+
+@translate_bp.route("/api/trans/units/<int:unit_id>/translate", methods=["POST"])
+@_require_translation
+def api_translate_unit(unit_id):
+    """Trigger (or re-trigger) AI translation for one unit. Member+.
+
+    First run: writes english_draft (never overwritten again) and english_final.
+    Re-run ("regenerate"): english_draft is preserved; the new attempt is written
+    to english_final only, for side-by-side comparison against the current text.
+    """
+    if not can_edit_existing():
+        return jsonify({"error": "Member role or higher required"}), 403
+
+    try:
+        result = supabase.table("trans_units").select("*").eq("id", unit_id).execute()
+        if not result.data:
+            return jsonify({"error": "Unit not found"}), 404
+        unit = result.data[0]
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+
+    chinese_text = unit.get("chinese_text") or ""
+    if not chinese_text.strip():
+        return jsonify({"error": "Unit has no Chinese text"}), 400
+
+    term_hits          = _match_constraint_terms(chinese_text)
+    ctx_before, ctx_after = _get_context(unit["chapter_id"], unit_id)
+
+    ai_result = translate_unit(
+        chinese_text,
+        term_constraints=term_hits,
+        context_before=ctx_before,
+        context_after=ctx_after,
+        is_long_sentence=bool(unit.get("is_long_sentence")),
+    )
+
+    is_first_draft = not (unit.get("english_draft") or "").strip()
+    modifier = session.get("user_email", "")
+
+    updates = {
+        "english_final":     ai_result["english"],
+        "ai_model":          AI_MODEL_NAME,
+        "translated_by":     modifier,
+        "status":            "ai_drafted",
+        "last_modified_by":  modifier,
+        "last_modified_at":  _now_iso(),
+    }
+    if is_first_draft:
+        updates["english_draft"] = ai_result["english"]
+    if ai_result.get("split_map"):
+        updates["split_map"] = ai_result["split_map"]
+
+    try:
+        upd = supabase.table("trans_units").update(updates).eq("id", unit_id).execute()
+        if not upd.data:
+            return jsonify({"error": "Unit not found"}), 404
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+
+    write_audit(
+        unit.get("display_id", ""), chinese_text, modifier, session.get("user_name", ""),
+        "ai_translate", field_changed="english_final",
+        old_value=unit.get("english_final") or "", new_value=ai_result["english"],
+        details="initial draft" if is_first_draft else "regenerate",
+    )
+
+    return jsonify(upd.data[0])
+
+
+# ── PATCH /api/trans/units/<id> ───────────────────────────────────────────────
+
+@translate_bp.route("/api/trans/units/<int:unit_id>", methods=["PATCH"])
+@_require_translation
+def api_patch_unit(unit_id):
+    """Save an edited translation. Member+ to save; Leader+ required to approve.
+
+    Body: {"english_text": str, "approve": bool (optional), "revision_type": str (optional), "note": str (optional)}
+    - approve=true,  text unchanged from baseline → status=approved, no revision written
+    - approve=true,  text changed from baseline   → status=revised,  revision written, approved_by set
+    - approve=false (default)                     → status=in_review, work-in-progress save
+    """
+    if not can_edit_existing():
+        return jsonify({"error": "Member role or higher required"}), 403
+
+    data = request.get_json() or {}
+    if "english_text" not in data:
+        return jsonify({"error": "english_text is required"}), 400
+    new_text = (data.get("english_text") or "").strip()
+    approve  = bool(data.get("approve"))
+
+    if approve and not is_leader():
+        return jsonify({"error": "Leader role or higher required to approve"}), 403
+
+    try:
+        result = supabase.table("trans_units").select("*").eq("id", unit_id).execute()
+        if not result.data:
+            return jsonify({"error": "Unit not found"}), 404
+        unit = result.data[0]
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+
+    baseline = (unit.get("english_final") or unit.get("english_draft") or "").strip()
+    changed  = new_text != baseline
+    modifier = session.get("user_email", "")
+
+    updates = {
+        "english_final":    new_text,
+        "reviewed_by":      modifier,
+        "last_modified_by": modifier,
+        "last_modified_at": _now_iso(),
+    }
+    if approve:
+        updates["status"]      = "revised" if changed else "approved"
+        updates["approved_by"] = modifier
+    else:
+        updates["status"] = "in_review"
+
+    if changed and approve:
+        try:
+            r_did = supabase.rpc("next_display_id", {
+                "p_prefix": "R", "p_seq_name": "seq_trans_revisions_display"
+            }).execute().data
+            supabase.table("trans_revisions").insert({
+                "display_id":     r_did,
+                "unit_id":        unit_id,
+                "chinese_text":   unit.get("chinese_text") or "",
+                "english_before": baseline,
+                "english_after":  new_text,
+                "revision_type":  data.get("revision_type") or "other",
+                "note":           data.get("note") or "",
+                "revised_by":     modifier,
+            }).execute()
+        except Exception as exc:
+            return jsonify({"error": f"Database error writing revision: {exc}"}), 500
+
+    try:
+        upd = supabase.table("trans_units").update(updates).eq("id", unit_id).execute()
+        if not upd.data:
+            return jsonify({"error": "Unit not found"}), 404
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+
+    if changed:
+        write_audit(
+            unit.get("display_id", ""), unit.get("chinese_text") or "", modifier, session.get("user_name", ""),
+            "translation_approved" if approve else "translation_saved",
+            field_changed="english_final", old_value=baseline, new_value=new_text,
+        )
+
+    return jsonify(upd.data[0])

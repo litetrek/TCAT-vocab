@@ -190,6 +190,86 @@ def group_sentences_by_topic(sentences: list) -> list:
         return fallback
 
 
+def translate_unit(chinese_text: str, term_constraints: list = None,
+                    context_before: str = "", context_after: str = "",
+                    is_long_sentence: bool = False) -> dict:
+    """Draft an English translation for one trans_unit via Claude (T3).
+
+    term_constraints: [{"chinese": str, "english": str}, ...] — terms hit in
+    chinese_text that already have a Final or Known translation; these must
+    be used verbatim in the output.
+    context_before / context_after: adjacent sentence text, for coherence only
+    (must not be re-translated).
+    is_long_sentence: if True, also ask for a split_map (long sentence broken
+    into shorter English sentences, mapped back to the Chinese portions).
+
+    Returns {"english": str, "split_map": list[{"zh","en"}] | None}.
+    Never raises — falls back to a best-effort result on any API/parse error.
+    """
+    if not chinese_text or not chinese_text.strip():
+        return {"english": "", "split_map": None}
+
+    fallback = {"english": "", "split_map": None}
+    try:
+        ai = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+        term_hint = ""
+        if term_constraints:
+            pairs = "; ".join(
+                f'{t["chinese"]} → {t["english"]}'
+                for t in term_constraints if t.get("chinese") and t.get("english")
+            )
+            if pairs:
+                term_hint = (
+                    "\nFixed terminology — these terms MUST be rendered exactly as "
+                    f"given, wherever they appear: {pairs}"
+                )
+
+        context_hint = ""
+        if context_before:
+            context_hint += f"\nPrevious sentence (context only — do not translate this): {context_before}"
+        if context_after:
+            context_hint += f"\nNext sentence (context only — do not translate this): {context_after}"
+
+        split_hint = ""
+        if is_long_sentence:
+            split_hint = (
+                "\nThis is a long sentence. If it reads more naturally in English as two or "
+                "more shorter sentences, split it. Also return split_map: a list of "
+                "{\"zh\": \"...\", \"en\": \"...\"} pairs showing which portion of the original "
+                "Chinese text corresponds to each English sentence (the zh portions together "
+                "should cover the whole original sentence)."
+            )
+
+        response = ai.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=800,
+            messages=[{
+                "role": "user",
+                "content": (
+                    "You are an expert translator of Chinese Buddhist texts into English, "
+                    "writing for a scholarly but accessible general readership. Translate "
+                    "faithfully; prefer natural, readable English over a literal word-for-word "
+                    f"rendering.{term_hint}{context_hint}{split_hint}\n\n"
+                    f"Chinese sentence to translate: {chinese_text}\n\n"
+                    "Reply ONLY with a JSON object, no other text or markdown fences:\n"
+                    "{\"english\": \"the English translation\", \"split_map\": null or "
+                    "[{\"zh\": \"...\", \"en\": \"...\"}, ...]}"
+                )
+            }]
+        )
+        raw = response.content[0].text.strip()
+        raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
+        parsed = json.loads(raw)
+        english = str(parsed.get("english", "")).strip()
+        split_map = parsed.get("split_map")
+        if not isinstance(split_map, list):
+            split_map = None
+        return {"english": english, "split_map": split_map}
+    except Exception:
+        return fallback
+
+
 def classify_term(term: dict) -> dict:
     """Classify a Buddhist term into entity_type and subject_field.
 

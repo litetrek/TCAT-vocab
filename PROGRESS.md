@@ -647,6 +647,42 @@ Bugs and UX issues found during first live test of the review workspace:
 
 ---
 
+### T3 — AI Translation Drafting (2026-07-11)
+
+**Scope**: `translate_unit()` AI drafting (system instruction + terminology constraints), plus save/approve endpoints that write revisions to `trans_revisions`. Per the design guide roadmap, RAG example retrieval (pgvector) and style-guide prompt injection are **T4**, not T3, and were not built here. No migration was needed — `trans_units` (`english_draft`/`english_final`/`split_map`/`status`/`ai_model`/`translated_by`/`reviewed_by`/`approved_by`) and `trans_revisions` already existed from T0-1/T1.
+
+#### ai.py — `translate_unit()`
+- New function: `translate_unit(chinese_text, term_constraints=None, context_before="", context_after="", is_long_sentence=False) -> {"english": str, "split_map": list|None}`
+- Prompt assembly: translator role instruction + terminology constraints (`Fixed terminology — MUST be rendered exactly as given: …`) + adjacent-sentence context (labelled "context only — do not translate") + long-sentence split_map request
+- Reply parsed as JSON (`{"english": ..., "split_map": ...}`) — same markdown-fence-stripping pattern as `classify_term()` / `group_sentences_by_topic()`
+- Never raises — returns `{"english": "", "split_map": None}` on any API/parse failure
+
+#### repositories/terms_repo.py — `get_translation_constraint_terms()`
+- Returns `[{"chinese": str, "english": str}, ...]` for every term with a non-empty `TranslationKnown`, or a `translation_first` when `final` is set (i.e. Final/Known per the design doc's constraint rule)
+- Paginated fetch (same `_PAGE` pattern as `list_terms()`); filtering done client-side rather than a PostgREST `.or_()` filter, to match this module's existing query style
+
+#### routes/translate.py — new endpoints
+| Endpoint | Method | Guard | Purpose |
+|---|---|---|---|
+| `/api/trans/units/<id>/translate` | POST | `_require_translation` + member+ | Runs AI drafting for one unit. First run writes `english_draft` (never overwritten again) + `english_final`; re-runs ("regenerate") leave `english_draft` untouched and overwrite only `english_final`, for comparison. Sets `ai_model`, `translated_by`, `status='ai_drafted'`. |
+| `/api/trans/units/<id>` | PATCH | `_require_translation` + member+ (approve requires leader+) | Saves an edited translation. Body: `{"english_text", "approve"}`. `approve=true` + unchanged → `status='approved'`, no revision row. `approve=true` + changed → `status='revised'`, writes a `trans_revisions` row (`english_before`/`english_after`/`revision_type`/`note`), sets `approved_by`. `approve=false` → `status='in_review'` (work-in-progress save, no revision write). |
+
+- `_match_constraint_terms()`: substring-matches `get_translation_constraint_terms()` against the unit's Chinese text, longest match first, capped at 15 terms to keep the prompt compact
+- `_get_context()`: fetches the previous/next unit's Chinese text within the same chapter for coherence context
+- Both endpoints write to the shared `audit_log` via `write_audit()` (reusing the vocabulary module's audit mechanism, per the design doc's "reusable assets" list), keyed on the unit's `display_id`
+- `GET /api/trans/chapters/<id>/units` widened from a fixed column list to `select("*")` so the browse view can read `english_draft`/`english_final`/`status` etc.
+
+#### templates/index.html — minimal working UI
+- `trans-unit-row` restructured from a single-line read-only row into a card: id + status badge, Chinese text, an editable English textarea (member+), and action buttons
+- New JS: `transTranslateUnit()` (calls the translate endpoint), `transSaveUnit(unitId, approve)` (calls the PATCH endpoint), `_transUnitRowHtml()` / `_transReplaceUnitRow()` (render/patch a single row in place)
+- Button visibility gated client-side by `userRole`: Translate/Save require member+ (`_CAN_TRANSLATE`), Approve requires leader+ (`_CAN_APPROVE`) — mirrors the server-side checks, which remain the actual authority
+- **Deferred to T4/T5** (per the design doc's own roadmap, not an oversight): the three-column review workspace (chapter tree / sentence cards / reference panel), diff highlighting between `english_draft` and `english_final`, chapter claiming, and style-guide + pgvector example injection
+
+#### Not yet verified
+- No live end-to-end test run yet (no local server / Supabase round-trip performed this session) — see Next Steps
+
+---
+
 ### T1 — Translation Module Data Layer + Segmenter (2026-07-10)
 
 **Scope**: Pure data layer + algorithm. No UI, no API endpoints.
@@ -705,18 +741,18 @@ Bugs and UX issues found during first live test of the review workspace:
 | **T1** | **Done** | 5 translation tables verified + sequences; `segmenter.py` + 15 pytest cases passing |
 | **T2** | **Done** | Access gate (admin-only routed via env flag), import pipeline, read-only Picker + chapter + sentence browse UI |
 | **T2.1** | **Done** | Sentence-map column, trans_unit_drafts table, chapter upload → segmentation → drafts, AI topic grouping per paragraph, drag-and-drop review workspace, debounced auto-save, confirm → trans_units |
-| **T3** | Planned | AI translation: draft English for each unit via Claude; write english_draft |
-| **T4** | Planned | Translation UI: per-unit review, approve, revise workflow |
-| **T5** | Planned | Style guide integration: RAG lookup on trans_revisions.embedding |
+| **T3** | **Done (MVP)** | `translate_unit()` AI drafting + terminology constraints; save/approve endpoints writing `trans_revisions`; minimal per-unit textarea + button UI |
+| **T4** | Planned | Three-column review workspace polish, diff highlighting (english_draft vs english_final), style guide management + prompt injection, pgvector RAG example retrieval |
+| **T5** | Planned | Chapter claiming, collaborative approval flow, annotations |
 
 ---
 
 ## Next Steps
 
+- **T3 live testing**: Start Flask server locally and test: open a confirmed chapter → AI Translate a unit → verify terminology constraints/context are applied → edit + Save → edit + Approve (leader) → verify a `trans_revisions` row was written
 - **T2.1 data cleanup**: T2 test data (1 book, 35 chapters, 131 units) still in DB — run `python scripts/run_migration_007.py` with `DATABASE_URL` set, or execute `DELETE FROM trans_unit_drafts; DELETE FROM trans_units; DELETE FROM trans_chapters; DELETE FROM trans_books;` via Supabase SQL editor to clear before production use
 - **T2.1 live testing**: Start Flask server locally and test: create book → upload chapter → open review view → run AI grouping → drag-drop → confirm → verify trans_units content
-- **T3**: AI translation — draft English for each unit via Claude; write `english_draft`; update status to `ai_drafted`
-- **T4**: Translation UI — per-unit review, approve, revise workflow
+- **T4**: Three-column review workspace, diff highlighting, style_guide CRUD + prompt injection, pgvector RAG example retrieval
 - **Run backfill**: `python scripts/backfill_classification.py --dry-run --limit 20` (spot-check), then full run
 - **T0 manual cleanup** (no code changes needed):
   - Export 7 Sheets worksheets as CSV → `backup/sheets_final_export_20260709/` (local only, do not commit)

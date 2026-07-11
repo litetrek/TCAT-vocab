@@ -566,17 +566,25 @@
     .trans-ch-meta  { font-size: 0.75rem; color: var(--text-soft); white-space: nowrap; }
     .trans-ch-type  { font-size: 0.65rem; padding: 0.1rem 0.4rem; border-radius: 2px; border: 1px solid rgba(107,90,58,0.25); background: rgba(107,90,58,0.06); color: var(--text-soft); margin-left: 0.5rem; }
 
-    /* Unit list (read-only) */
+    /* Unit list (T3: AI-translate / save / approve) */
     .trans-unit-list { background: white; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; box-shadow: var(--shadow); }
     .trans-unit-row {
-      display: flex; align-items: baseline; gap: 1rem; padding: 0.65rem 1.25rem;
+      display: block; padding: 0.75rem 1.25rem;
       border-bottom: 1px solid rgba(201,168,76,0.08);
     }
     .trans-unit-row:last-child { border-bottom: none; }
     .trans-unit-row.long-sentence { background: rgba(201,168,76,0.04); }
-    .trans-unit-id   { font-size: 0.62rem; color: rgba(107,90,58,0.4); width: 60px; flex-shrink: 0; font-family: monospace; }
-    .trans-unit-text { flex: 1; font-family: 'Noto Serif TC', serif; font-size: 1rem; color: var(--ink); line-height: 1.7; }
-    .trans-unit-status { flex-shrink: 0; }
+    .trans-unit-top   { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.35rem; }
+    .trans-unit-id    { font-size: 0.62rem; color: rgba(107,90,58,0.4); font-family: monospace; flex-shrink: 0; }
+    .trans-unit-text  { flex: 1; font-family: 'Noto Serif TC', serif; font-size: 1rem; color: var(--ink); line-height: 1.7; margin-bottom: 0.5rem; }
+    .trans-unit-status { flex-shrink: 0; margin-left: auto; }
+    .trans-unit-en-input {
+      width: 100%; min-height: 2.4em; font-size: 0.92rem; padding: 0.45rem 0.6rem;
+      border: 1px solid var(--border); border-radius: 3px; resize: vertical; margin-bottom: 0.5rem;
+      font-family: inherit; box-sizing: border-box;
+    }
+    .trans-unit-actions { display: flex; gap: 0.5rem; align-items: center; }
+    .trans-unit-actions .trans-unit-hint { font-size: 0.72rem; color: var(--text-soft); }
 
     /* Status badge */
     .trans-status { font-size: 0.62rem; padding: 0.1rem 0.4rem; border-radius: 2px; border: 1px solid; white-space: nowrap; }
@@ -2816,6 +2824,10 @@
     approved:     'Approved',
   };
 
+  // T3: role gates for translate/save/approve actions (roles shared app-wide)
+  const _CAN_TRANSLATE = ['member','leader','admin'].includes(userRole);
+  const _CAN_APPROVE   = ['leader','admin'].includes(userRole);
+
   function _transHideAll() {
     ['trans-picker','trans-chapter-view','trans-review-view','trans-unit-view']
       .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
@@ -3003,17 +3015,69 @@
         const paraBreak = u.paragraph_index !== lastPara && lastPara !== -1
           ? '<div style="height:1px;background:rgba(201,168,76,0.12);margin:0.25rem 0;"></div>' : '';
         lastPara = u.paragraph_index;
-        const cls = u.is_long_sentence ? ' long-sentence' : '';
-        const statusCls = 'trans-status trans-status-' + (u.status || 'untranslated');
-        return `${paraBreak}<div class="trans-unit-row${cls}">
-          <span class="trans-unit-id">${escHtml(u.display_id || '')}</span>
-          <span class="trans-unit-text">${escHtml(u.chinese_text || '')}</span>
-          <span class="trans-unit-status"><span class="${statusCls}">${_STATUS_LABEL[u.status] || u.status}</span></span>
-        </div>`;
+        return `${paraBreak}${_transUnitRowHtml(u)}`;
       }).join('');
     } catch(e) {
       list.innerHTML = `<div class="ext-error-banner">Error: ${escHtml(e.message)}</div>`;
     }
+  }
+
+  function _transUnitRowHtml(u) {
+    const cls = u.is_long_sentence ? ' long-sentence' : '';
+    const statusCls = 'trans-status trans-status-' + (u.status || 'untranslated');
+    const englishText = u.english_final || u.english_draft || '';
+    const translateLabel = (u.english_draft || '').trim() ? 'Re-translate' : 'AI Translate';
+    return `<div class="trans-unit-row${cls}" data-unit-id="${u.id}">
+      <div class="trans-unit-top">
+        <span class="trans-unit-id">${escHtml(u.display_id || '')}</span>
+        <span class="trans-unit-status"><span class="${statusCls}">${_STATUS_LABEL[u.status] || u.status}</span></span>
+      </div>
+      <div class="trans-unit-text">${escHtml(u.chinese_text || '')}</div>
+      ${_CAN_TRANSLATE ? `<textarea class="trans-unit-en-input" id="trans-en-${u.id}" rows="2" placeholder="No translation yet — click AI Translate.">${escHtml(englishText)}</textarea>` : (englishText ? `<div class="trans-unit-text" style="color:var(--text-soft);">${escHtml(englishText)}</div>` : '')}
+      ${_CAN_TRANSLATE ? `<div class="trans-unit-actions">
+        <button class="btn btn-sm btn-secondary trans-unit-translate-btn" onclick="transTranslateUnit(${u.id})">${translateLabel}</button>
+        <button class="btn btn-sm btn-secondary" onclick="transSaveUnit(${u.id}, false)">Save</button>
+        ${_CAN_APPROVE ? `<button class="btn btn-sm btn-primary" onclick="transSaveUnit(${u.id}, true)">Approve</button>` : ''}
+      </div>` : ''}
+    </div>`;
+  }
+
+  async function transTranslateUnit(unitId) {
+    const row = document.querySelector(`.trans-unit-row[data-unit-id="${unitId}"]`);
+    const btn = row ? row.querySelector('.trans-unit-translate-btn') : null;
+    if (btn) { btn.disabled = true; btn.textContent = 'Translating…'; }
+    try {
+      const r = await fetch(`/api/trans/units/${unitId}/translate`, { method: 'POST' });
+      if (!r.ok) throw new Error(await r.text());
+      const unit = await r.json();
+      _transReplaceUnitRow(unit);
+    } catch(e) {
+      alert('AI translation failed: ' + e.message);
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function transSaveUnit(unitId, approve) {
+    const input = document.getElementById(`trans-en-${unitId}`);
+    const text = input ? input.value : '';
+    try {
+      const r = await fetch(`/api/trans/units/${unitId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ english_text: text, approve: !!approve }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      const unit = await r.json();
+      _transReplaceUnitRow(unit);
+    } catch(e) {
+      alert((approve ? 'Approve' : 'Save') + ' failed: ' + e.message);
+    }
+  }
+
+  function _transReplaceUnitRow(unit) {
+    const row = document.querySelector(`.trans-unit-row[data-unit-id="${unit.id}"]`);
+    if (!row) return;
+    row.outerHTML = _transUnitRowHtml(unit);
   }
 
   // ── Create book (metadata only) ───────────────────────────────────────────

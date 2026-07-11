@@ -321,6 +321,42 @@ def get_classification_source(term_id):
     return result.data[0].get("classification_source")
 
 
+def get_translation_constraint_terms():
+    """Return terms usable as AI translation constraints (T3): those with a
+    non-empty Final selection or a TranslationKnown value.
+
+    Each item: {"chinese": str, "english": str}. Filtered client-side (rather
+    than a PostgREST .or_() filter) to keep the query shape identical to the
+    rest of this module's paginated fetches.
+    """
+    rows = []
+    offset = 0
+    while True:
+        chunk = (
+            supabase.table("terms")
+            .select("chinese,translation_known,translation_first,final")
+            .range(offset, offset + _PAGE - 1)
+            .execute()
+            .data
+        )
+        rows.extend(chunk)
+        if len(chunk) < _PAGE:
+            break
+        offset += _PAGE
+
+    out = []
+    for r in rows:
+        chinese = (r.get("chinese") or "").strip()
+        if not chinese:
+            continue
+        english = (r.get("translation_known") or "").strip()
+        if not english and r.get("final"):
+            english = (r.get("translation_first") or "").strip()
+        if english:
+            out.append({"chinese": chinese, "english": english})
+    return out
+
+
 def update_translations(term_id, translation_updates, modifier, now_str):
     """Save AI-generated translations. translation_updates: {vote_key: text, ...}"""
     _vk_to_db = {
