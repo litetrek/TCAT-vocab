@@ -929,7 +929,8 @@
         </div>
       </div>
 
-      <!-- Upload chapter section -->
+      <!-- Upload chapter section — admin only -->
+      {% if is_admin %}
       <div class="trans-ch-upload">
         <div class="trans-ch-upload-title">Upload Chapter</div>
         <div class="trans-upload-row">
@@ -945,6 +946,7 @@
         </div>
         <div class="trans-upload-msg" id="trans-ch-upload-msg" style="display:none;"></div>
       </div>
+      {% endif %}
 
       <div id="trans-chapter-list" class="trans-chapter-list">
         <div class="loading">☸ Loading chapters…</div>
@@ -2912,7 +2914,7 @@
         const titleSafe = escHtml(c.title || '');
         return `<div class="trans-chapter-row" style="cursor:default;">
           <span class="trans-ch-idx">${c.chapter_index + 1}</span>
-          <span class="trans-ch-title">${escHtml(c.title || '(untitled)')}</span>
+          <span class="trans-ch-title">${escHtml(c.title || _transCurrentBookTitle)}</span>
           ${typeTag}
           <div class="trd-ch-actions">
             <button class="btn btn-sm btn-primary" onclick="transOpenReview(${c.id},'${titleSafe}')">Review Drafts</button>

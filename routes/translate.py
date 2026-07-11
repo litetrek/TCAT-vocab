@@ -104,7 +104,7 @@ def api_upload_chapter(book_id):
     if text is None:
         return jsonify({"error": "Cannot decode file — use UTF-8, GB18030, or Big5"}), 400
 
-    title = request.form.get("title", "").strip() or f.filename.rsplit(".", 1)[0]
+    title = request.form.get("title", "").strip()
     section_type_override = request.form.get("section_type", "").strip()
 
     # Segment file: paragraphs → sentences
