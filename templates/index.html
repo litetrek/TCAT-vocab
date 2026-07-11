@@ -2724,6 +2724,11 @@
     }
     const handle = document.getElementById('ext-modal-handle');
     if (modal && handle) _extMakeDraggable(modal, handle);
+
+    // Auto-populate all AI fields for new terms.
+    if (extCurrentCandidateIsNew) {
+      setTimeout(() => { extGenerateTranslations(); extClassifyCandidate(); }, 50);
+    }
   }
 
   let _extPanelPos = null;
