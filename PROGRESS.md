@@ -635,6 +635,16 @@ JS additions:
 #### E2E Validation
 - Full flow tested via SQL DO block in Supabase: insert book → chapter → draft → update draft → confirm → assert 2 `trans_units` rows → cleanup — all steps passed
 
+### T2.1 Post-Launch Fixes (2026-07-11)
+
+Bugs and UX issues found during first live test of the review workspace:
+
+- **RPC parameter name bug** (`routes/translate.py`): `next_display_id` RPC was called with `prefix`/`seq_name` but the function signature uses `p_prefix`/`p_seq_name`. Fixed all three call sites (book, chapter, unit creation). Commit `9a3fb74`.
+- **Drag-drop enforces original sentence order**: Sentences can only be regrouped — they cannot be reordered. Added `_trdStampOrigIdx()` (stamps each sentence with its flat position on load) and `_trdRestoreOrder()` (sorts sentences within groups and groups by min index after every move). `_origIdx` is stripped from the payload before saving to DB. Also re-stamps after AI grouping response. Commit `cff1ac8`.
+- **Upload Chapter hidden from non-admins**: The chapter upload form is now wrapped in `{% if is_admin %}` — only admins see it. Commit `9af7f27`.
+- **Chapter title no longer defaults to filename**: Removed the `or f.filename.rsplit(".", 1)[0]` fallback in `api_upload_chapter()`; title is now empty if not supplied. Frontend falls back to the book name when chapter title is empty. Commit `9af7f27`.
+- **Confirm button at bottom of card**: Added a second "確認寫入" button at the bottom of each paragraph card so users don't need to scroll back up. For paragraphs with fewer than 3 groups, the top button is hidden (only bottom shown). Commits `0548df6`, `b097af8`.
+
 ---
 
 ### T1 — Translation Module Data Layer + Segmenter (2026-07-10)
