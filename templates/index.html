@@ -404,9 +404,9 @@
     .term-known:hover { background: rgba(201,168,76,0.32); }
     .term-known.term-has-known { background: rgba(70,130,180,0.12); border-bottom: 1.5px solid rgba(70,130,180,0.7); }
     .term-known.term-has-known:hover { background: rgba(70,130,180,0.22); }
-    #ext-candidate-panel { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(26,18,8,0.45); z-index: 500; display: flex; align-items: center; justify-content: center; }
-    .ext-term-modal { background: white; border: 1px solid var(--border); border-radius: 4px; padding: 1.5rem 1.75rem; box-shadow: 0 8px 32px rgba(26,18,8,0.22); min-width: 300px; max-width: 520px; width: 90vw; max-height: 80vh; overflow-y: auto; }
-    .ext-candidate-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.9rem; gap: 1rem; }
+    #ext-candidate-panel { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 500; pointer-events: none; }
+    .ext-term-modal { position: fixed; top: 80px; right: 24px; width: 500px; max-width: calc(100vw - 48px); max-height: 80vh; overflow-y: auto; background: white; border: 1px solid var(--border); border-radius: 4px; padding: 1.5rem 1.75rem; box-shadow: 0 8px 32px rgba(26,18,8,0.22); pointer-events: all; }
+    .ext-candidate-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.9rem; gap: 1rem; cursor: move; user-select: none; }
     .ext-candidate-zh { font-family: 'Noto Serif TC', serif; font-size: 1.5rem; font-weight: 600; color: var(--ink); line-height: 1.2; flex: 1; }
     .ext-candidate-clear { font-family: 'EB Garamond', serif; font-size: 1rem; line-height: 1; background: transparent; border: none; color: var(--text-soft); padding: 0.2rem 0.4rem; cursor: pointer; transition: color 0.15s; flex-shrink: 0; }
     .ext-candidate-clear:hover { color: var(--ink); }
@@ -1051,7 +1051,7 @@
 <div class="toast" id="toast"></div>
 
 <!-- ── TERM CANDIDATE MODAL (direct body child so position:fixed is viewport-relative) -->
-<div id="ext-candidate-panel" style="display:none;" onclick="extClearSelection()"></div>
+<div id="ext-candidate-panel" style="display:none;"></div>
 
 <script>
   // ── STATE ────────────────────────────────────────────────────────────────
@@ -2625,8 +2625,8 @@
     extCurrentCandidateIsNew = !match;
     extCapturedEnglish = match ? (match.trans_known || '') : '';
 
-    let inner = `<div class="ext-term-modal" onclick="event.stopPropagation()">`;
-    inner += `<div class="ext-candidate-header">`;
+    let inner = `<div class="ext-term-modal" id="ext-modal-inner">`;
+    inner += `<div class="ext-candidate-header" id="ext-modal-handle">`;
     inner += `<span class="ext-candidate-zh">${escHtml(selectedText)}</span>`;
     inner += `<button class="ext-candidate-clear" onclick="extClearSelection()" title="Close">✕</button>`;
     inner += `</div>`;
@@ -2667,7 +2667,45 @@
     inner += `</div>`;
 
     const panel = document.getElementById('ext-candidate-panel');
-    if (panel) { panel.innerHTML = inner; panel.style.display = 'flex'; }
+    if (!panel) return;
+    panel.innerHTML = inner;
+    panel.style.display = 'block';
+    // Restore last drag position if set
+    const modal = document.getElementById('ext-modal-inner');
+    if (modal && _extPanelPos) {
+      modal.style.left = _extPanelPos.x + 'px';
+      modal.style.top  = _extPanelPos.y + 'px';
+      modal.style.right = 'auto';
+    }
+    const handle = document.getElementById('ext-modal-handle');
+    if (modal && handle) _extMakeDraggable(modal, handle);
+  }
+
+  let _extPanelPos = null;
+
+  function _extMakeDraggable(modal, handle) {
+    let startX, startY, startL, startT;
+    handle.addEventListener('mousedown', e => {
+      const rect = modal.getBoundingClientRect();
+      startX = e.clientX; startY = e.clientY;
+      startL = rect.left;  startT = rect.top;
+      modal.style.left  = startL + 'px';
+      modal.style.top   = startT + 'px';
+      modal.style.right = 'auto';
+      function onMove(e) {
+        const x = startL + e.clientX - startX;
+        const y = startT + e.clientY - startY;
+        modal.style.left = x + 'px';
+        modal.style.top  = y + 'px';
+        _extPanelPos = {x, y};
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
   }
 
   function extHideCandidatePanel() {
