@@ -721,6 +721,52 @@ Bugs and UX issues found during first live test of the review workspace:
 
 ---
 
+### Translation Module — Term Highlighting + Candidate Modal (2026-07-12)
+
+**Scope**: Click-to-lookup term highlighting in the Translation module's T2.1 Review Drafts and T3 Browse Units views, plus a floating candidate modal for viewing or creating terms.
+
+#### Backend — `GET /api/trans/known-terms`
+
+- New endpoint in `routes/translate.py`, guarded by `_require_translation`
+- Calls `terms_repo.list_terms()` and returns a lightweight array: `id, chinese, pinyin, pali, sanskrit, trans_known, trans1, trans2, trans3, status, final`
+- `status` and `final` included so the frontend can show the term's current state without a second fetch
+
+#### Frontend — Highlighting
+
+- `trdFetchKnownTerms()` — fetches from `/api/trans/known-terms` on entering Review Drafts or Browse Units; stores result in `trdKnownTerms[]`
+- `trdHighlightKnownTerms(text)` — greedy longest-match-first algorithm using `Uint8Array` for claimed-character tracking; produces `<span class="term-known">` elements (gold tint = no Known Translation; blue tint = has Known Translation)
+- Applied in `trdGroupHtml()` (T2.1 sentence cards) and `_transUnitRowHtml()` (T3 Browse Units rows)
+- Term span click handlers use `onclick` + `stopPropagation()` (not mousedown) so drag-and-drop is not disrupted
+
+#### Frontend — Candidate Modal (`#trd-candidate-panel`)
+
+- Separate panel from Extraction's `#ext-candidate-panel` (own ID, own state variables, own drag handler)
+- Triggered by either term span click (`trdHandleTermClick`) or text selection (`trdHandleSelection`) in T2.1 or T3
+- **Known term branch**: read-only field grid (Known Trans., Translation 1–3, Pinyin, Pali, Sanskrit)
+- **New term branch**: "✨ Generate 3 AI Translations" button → `POST /api/extract/generate` → populated fields → "Add to Database" button → `POST /api/extract/save`
+- Escape key or ✕ closes modal
+- Draggable via `_trdMakeDraggable()` (separate from `_extMakeDraggable`, uses own `_trdPanelPos` state)
+
+#### Edit Term
+
+- Read-only modal has "✎ Edit Term" button → `trdShowTermEditMode()`
+- Edit mode renders 7 input fields (trans_known, trans1, trans2, trans3, pinyin, pali, sanskrit) pre-filled with current values
+- "Save Changes" → `trdSaveTermEdits()` — calls `PATCH /api/terms/<id>` per changed field (one call per field); updates `trdKnownTerms` cache in-place; returns to read-only view after 1 second
+- "Cancel" returns to read-only view without saving
+
+#### Status Badge + Finalize Button (added same day)
+
+- Read-only modal now shows a status badge next to "Already in database":
+  - **Pending** — amber badge
+  - **Finalized — Translation N** — green badge (shows which translation was finalized)
+- Edit mode adds a **Finalize** button next to trans_known, trans1, trans2, trans3 inputs that have a non-empty value
+- `trdFinalizeTerm(voteKey)` — confirm dialog → `POST /api/terms/<id>/final` (requires Leader+ role) → updates `status`/`final` in `trdKnownTerms` cache → returns to read-only view with updated status badge
+- Finalize is Leader/Admin only; Member clicking the button sees a "Leader or admin only" error from the server
+
+Commits: `0d9010e` (highlighting + modal + edit term), `42feaf9` (status badge + finalize button)
+
+---
+
 ## Known Issues / Notes
 
 - `ftp.cyber-tech.com` does not resolve in DNS — raw IP `108.163.242.106` must be used
