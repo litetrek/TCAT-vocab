@@ -86,6 +86,8 @@ def api_trans_known_terms():
                 "trans1":      t.get("trans1",      ""),
                 "trans2":      t.get("trans2",      ""),
                 "trans3":      t.get("trans3",      ""),
+                "status":      t.get("status",      "pending"),
+                "final":       t.get("final",       ""),
             }
             for t in all_terms
         ]
