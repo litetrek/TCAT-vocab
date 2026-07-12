@@ -3169,6 +3169,7 @@
     const list = document.getElementById('trans-unit-list');
     list.innerHTML = '<div class="loading">☸ Loading sentences…</div>';
     transShowUnitList();
+    await trdFetchKnownTerms();
     try {
       const r = await fetch(`/api/trans/chapters/${chapterId}/units`);
       if (!r.ok) throw new Error(await r.text());
@@ -3199,7 +3200,7 @@
         <span class="trans-unit-id">${escHtml(u.display_id || '')}</span>
         <span class="trans-unit-status"><span class="${statusCls}">${_STATUS_LABEL[u.status] || u.status}</span></span>
       </div>
-      <div class="trans-unit-text">${escHtml(u.chinese_text || '')}</div>
+      <div class="trans-unit-text">${trdHighlightKnownTerms(u.chinese_text || '')}</div>
       ${_CAN_TRANSLATE ? `<textarea class="trans-unit-en-input" id="trans-en-${u.id}" rows="2" placeholder="No translation yet — click AI Translate.">${escHtml(englishText)}</textarea>` : (englishText ? `<div class="trans-unit-text" style="color:var(--text-soft);">${escHtml(englishText)}</div>` : '')}
       ${_CAN_TRANSLATE ? `<div class="trans-unit-actions">
         <button class="btn btn-sm btn-secondary trans-unit-translate-btn" onclick="transTranslateUnit(${u.id})">${translateLabel}</button>
@@ -3639,10 +3640,12 @@
     if (!sel || sel.isCollapsed) return;
     const text = sel.toString().trim();
     if (!text) return;
-    const body = document.getElementById('trans-review-body');
-    if (!body) return;
     const range = sel.getRangeAt(0);
-    if (!body.contains(range.commonAncestorContainer)) return;
+    const reviewBody = document.getElementById('trans-review-body');
+    const unitList   = document.getElementById('trans-unit-list');
+    const inReview = reviewBody && reviewBody.contains(range.commonAncestorContainer);
+    const inUnits  = unitList   && unitList.contains(range.commonAncestorContainer);
+    if (!inReview && !inUnits) return;
     trdShowCandidatePanel(text);
   }
 
@@ -3830,6 +3833,7 @@
   }
 
   document.getElementById('trans-review-body').addEventListener('mouseup', trdHandleSelection);
+  document.getElementById('trans-unit-list').addEventListener('mouseup', trdHandleSelection);
   document.addEventListener('keydown', e => { if (e.key === 'Escape') trdClearSelection(); });
 
   {% endif %}
