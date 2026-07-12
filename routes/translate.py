@@ -68,6 +68,32 @@ def _get_context(chapter_id, unit_id):
     return prev_text or "", next_text or ""
 
 
+# ── GET /api/trans/known-terms ───────────────────────────────────────────────
+
+@translate_bp.route("/api/trans/known-terms", methods=["GET"])
+@_require_translation
+def api_trans_known_terms():
+    try:
+        all_terms = terms_repo.list_terms()
+        result = [
+            {
+                "id":          t.get("id",          ""),
+                "chinese":     t.get("chinese",     ""),
+                "pinyin":      t.get("pinyin",      ""),
+                "pali":        t.get("pali",        ""),
+                "sanskrit":    t.get("sanskrit",    ""),
+                "trans_known": t.get("trans_known", ""),
+                "trans1":      t.get("trans1",      ""),
+                "trans2":      t.get("trans2",      ""),
+                "trans3":      t.get("trans3",      ""),
+            }
+            for t in all_terms
+        ]
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── POST /api/trans/books ─────────────────────────────────────────────────────
 # T2.1: create book metadata only (no file upload).
 

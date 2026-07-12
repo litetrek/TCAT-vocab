@@ -404,6 +404,7 @@
     .term-known:hover { background: rgba(201,168,76,0.32); }
     .term-known.term-has-known { background: rgba(70,130,180,0.12); border-bottom: 1.5px solid rgba(70,130,180,0.7); }
     .term-known.term-has-known:hover { background: rgba(70,130,180,0.22); }
+    #trans-review-body .term-known { cursor: pointer; }
     #ext-candidate-panel { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 500; pointer-events: none; }
     .ext-term-modal { position: fixed; top: 80px; right: 24px; width: 500px; max-width: calc(100vw - 48px); max-height: 80vh; overflow-y: auto; background: white; border: 1px solid var(--border); border-radius: 4px; padding: 1.5rem 1.75rem; box-shadow: 0 8px 32px rgba(26,18,8,0.22); pointer-events: all; }
     .ext-candidate-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.9rem; gap: 1rem; cursor: move; user-select: none; }
@@ -1052,6 +1053,7 @@
 
 <!-- ── TERM CANDIDATE MODAL (direct body child so position:fixed is viewport-relative) -->
 <div id="ext-candidate-panel" style="display:none;"></div>
+<div id="trd-candidate-panel" style="display:none;"></div>
 
 <script>
   // ── STATE ────────────────────────────────────────────────────────────────
@@ -3294,17 +3296,24 @@
 
   // ── Draft review workspace ────────────────────────────────────────────────
 
-  let _trdChapterId = null;
-  let _trdDrafts    = {};      // paraIdx → draft object
-  let _trdDragging  = null;    // {paraIdx, groupIdx, sentIdx}
-  let _trdSaveTimers = {};     // debounce per paragraph
+  let _trdChapterId      = null;
+  let _trdDrafts         = {};      // paraIdx → draft object
+  let _trdDragging       = null;    // {paraIdx, groupIdx, sentIdx}
+  let _trdSaveTimers     = {};      // debounce per paragraph
+  let trdKnownTerms      = [];
+  let _trdCurrentTerm    = '';
+  let _trdCurrentIsNew   = false;
+  let _trdGeneratedFields = null;
+  let _trdPanelPos       = null;
 
   async function transOpenReview(chapterId, chapterTitle) {
     _trdChapterId = chapterId;
     _trdDrafts    = {};
+    trdKnownTerms = [];
     document.getElementById('trans-review-title').innerHTML =
       `<span style="font-size:1.1rem;font-style:normal;">${escHtml(_transCurrentBookTitle)}</span> — ${escHtml(chapterTitle || 'Chapter')} — Review Drafts`;
     transShowReviewView();
+    await trdFetchKnownTerms();
     await trdLoad();
   }
 
@@ -3343,6 +3352,52 @@
     const confirmed = paraIndices.filter(i => (_trdDrafts[i] || {}).status === 'confirmed').length;
     const prog = document.getElementById('trans-review-progress');
     if (prog) prog.textContent = total ? `${confirmed} / ${total} 段落已確認` : '';
+  }
+
+  async function trdFetchKnownTerms() {
+    try {
+      const r = await fetch('/api/trans/known-terms');
+      if (r.ok) trdKnownTerms = await r.json();
+    } catch(e) {}
+  }
+
+  function trdHighlightKnownTerms(text) {
+    if (!trdKnownTerms.length || !text) return escHtml(text);
+    const candidates = trdKnownTerms
+      .filter(t => t.chinese && text.includes(t.chinese))
+      .sort((a, b) => b.chinese.length - a.chinese.length);
+    if (!candidates.length) return escHtml(text);
+    const len     = text.length;
+    const claimed = new Uint8Array(len);
+    const segs    = [];
+    for (const term of candidates) {
+      const ch = term.chinese;
+      let pos  = 0;
+      while (pos < len) {
+        const idx = text.indexOf(ch, pos);
+        if (idx === -1) break;
+        let overlap = false;
+        for (let i = idx; i < idx + ch.length; i++) {
+          if (claimed[i]) { overlap = true; break; }
+        }
+        if (!overlap) {
+          const tip = term.trans_known || term.trans1 || '';
+          segs.push({ start: idx, end: idx + ch.length, termId: term.id, ch, tip, hasKnown: !!term.trans_known });
+          for (let i = idx; i < idx + ch.length; i++) claimed[i] = 1;
+        }
+        pos = idx + 1;
+      }
+    }
+    if (!segs.length) return escHtml(text);
+    segs.sort((a, b) => a.start - b.start);
+    let html = '', cursor = 0;
+    for (const s of segs) {
+      if (cursor < s.start) html += escHtml(text.slice(cursor, s.start));
+      html += `<span class="term-known${s.hasKnown ? ' term-has-known' : ''}" data-term-id="${s.termId}" title="${escHtml(s.tip)}" onclick="trdHandleTermClick(event,'${escHtml(String(s.termId))}')">${escHtml(s.ch)}</span>`;
+      cursor = s.end;
+    }
+    if (cursor < len) html += escHtml(text.slice(cursor));
+    return html;
   }
 
   function trdParaCardHtml(paraIdx) {
@@ -3389,14 +3444,15 @@
     const sents = (group.sentences || []);
     const sentsHtml = sents.map((s, si) => {
       const longFlag = s.is_long_sentence ? ' <span class="trd-long-flag">長</span>' : '';
+      const hl = trdHighlightKnownTerms(s.text);
       if (isConfirmed) {
-        return `<div class="trd-sent"><span class="trd-sent-text">${escHtml(s.text)}</span>${longFlag}</div>`;
+        return `<div class="trd-sent"><span class="trd-sent-text">${hl}</span>${longFlag}</div>`;
       }
       return `<div class="trd-sent" draggable="true"
           ondragstart="trdDragStart(event,${paraIdx},${groupIdx},${si})"
           ondragend="trdDragEnd(event)">
         <span class="trd-sent-handle">⠿</span>
-        <span class="trd-sent-text">${escHtml(s.text)}</span>${longFlag}
+        <span class="trd-sent-text">${hl}</span>${longFlag}
       </div>`;
     }).join('');
     const dropAttrs = isConfirmed ? '' :
@@ -3567,6 +3623,214 @@
       showToast('確認失敗：' + err.message);
     }
   }
+
+  // ── TRD CANDIDATE PANEL ─────────────────────────────────────────────────
+
+  function trdHandleTermClick(event, termId) {
+    event.stopPropagation();
+    const term = trdKnownTerms.find(t => String(t.id) === String(termId));
+    if (term) trdShowCandidatePanel(term.chinese);
+  }
+
+  function trdHandleSelection() {
+    const panel = document.getElementById('trd-candidate-panel');
+    if (panel && panel.style.display !== 'none') return;
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) return;
+    const text = sel.toString().trim();
+    if (!text) return;
+    const body = document.getElementById('trans-review-body');
+    if (!body) return;
+    const range = sel.getRangeAt(0);
+    if (!body.contains(range.commonAncestorContainer)) return;
+    trdShowCandidatePanel(text);
+  }
+
+  function trdShowCandidatePanel(selectedText) {
+    _trdCurrentTerm     = selectedText;
+    _trdGeneratedFields = null;
+    const match = trdKnownTerms.find(t => t.chinese === selectedText);
+    _trdCurrentIsNew = !match;
+
+    let inner = `<div class="ext-term-modal" id="trd-modal-inner">`;
+    inner += `<div class="ext-candidate-header" id="trd-modal-handle">`;
+    inner += `<span class="ext-candidate-zh">${escHtml(selectedText)}</span>`;
+    inner += `<button class="ext-candidate-clear" onclick="trdClearSelection()" title="Close">✕</button>`;
+    inner += `</div>`;
+
+    if (match) {
+      inner += `<div class="ext-candidate-badge ext-candidate-known">Already in database</div>`;
+      const refFields = [
+        ['Translation 1', match.trans1],
+        ['Translation 2', match.trans2],
+        ['Translation 3', match.trans3],
+        ['Pinyin',        match.pinyin],
+        ['Pali',          match.pali],
+        ['Sanskrit',      match.sanskrit],
+        ['Known Trans.',  match.trans_known],
+      ].filter(([, v]) => v);
+      if (refFields.length) {
+        inner += `<div class="ext-candidate-fields" style="margin-top:0.9rem;">`;
+        for (const [label, value] of refFields)
+          inner += `<span class="ext-cfield-label">${escHtml(label)}</span><span class="ext-cfield-value">${escHtml(value)}</span>`;
+        inner += `</div>`;
+      }
+    } else {
+      inner += `<div class="ext-candidate-badge ext-candidate-new">New term — not yet in database</div>`;
+      inner += `<div class="ext-find-row" style="margin-top:0.65rem;">`;
+      inner += `<button class="btn-ext-find" id="trd-gen-btn" onclick="trdGenerateTranslations()">✨ Generate 3 AI Translations</button>`;
+      inner += `<span class="ext-find-msg" id="trd-gen-msg"></span>`;
+      inner += `</div>`;
+      inner += `<div id="trd-gen-fields"></div>`;
+      inner += `<div class="ext-save-row">`;
+      inner += `<button class="btn btn-primary" id="trd-save-btn" onclick="trdSaveTerm()">Add to Database</button>`;
+      inner += `<span class="ext-save-msg" id="trd-save-msg"></span>`;
+      inner += `</div>`;
+    }
+    inner += `</div>`;
+
+    const panel = document.getElementById('trd-candidate-panel');
+    if (!panel) return;
+    panel.innerHTML = inner;
+    panel.style.display = 'block';
+    const modal = document.getElementById('trd-modal-inner');
+    if (modal && _trdPanelPos) {
+      modal.style.left  = _trdPanelPos.x + 'px';
+      modal.style.top   = _trdPanelPos.y + 'px';
+      modal.style.right = 'auto';
+    }
+    const handle = document.getElementById('trd-modal-handle');
+    if (modal && handle) _trdMakeDraggable(modal, handle);
+    if (_trdCurrentIsNew) setTimeout(() => trdGenerateTranslations(), 50);
+  }
+
+  function trdHideCandidatePanel() {
+    _trdCurrentTerm     = '';
+    _trdCurrentIsNew    = false;
+    _trdGeneratedFields = null;
+    const panel = document.getElementById('trd-candidate-panel');
+    if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
+  }
+
+  function trdClearSelection() {
+    if (window.getSelection) window.getSelection().removeAllRanges();
+    trdHideCandidatePanel();
+  }
+
+  function _trdMakeDraggable(modal, handle) {
+    let startX, startY, startL, startT;
+    handle.addEventListener('mousedown', e => {
+      const rect = modal.getBoundingClientRect();
+      startX = e.clientX; startY = e.clientY;
+      startL = rect.left;  startT = rect.top;
+      modal.style.left  = startL + 'px';
+      modal.style.top   = startT + 'px';
+      modal.style.right = 'auto';
+      function onMove(e) {
+        const x = startL + e.clientX - startX;
+        const y = startT + e.clientY - startY;
+        modal.style.left = x + 'px';
+        modal.style.top  = y + 'px';
+        _trdPanelPos = {x, y};
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  }
+
+  async function trdGenerateTranslations() {
+    const btn = document.getElementById('trd-gen-btn');
+    const msg = document.getElementById('trd-gen-msg');
+    if (!btn) return;
+    btn.disabled = true; btn.textContent = 'Generating…';
+    if (msg) msg.textContent = '';
+    try {
+      const res = await fetch('/api/extract/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chinese_term: _trdCurrentTerm }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        if (msg) msg.textContent = 'Generation failed — try again.';
+      } else {
+        _trdGeneratedFields = {
+          trans1: data.trans1 || '', trans2: data.trans2 || '', trans3: data.trans3 || '',
+          pinyin: data.pinyin || '', pali: data.pali || '', sanskrit: data.sanskrit || '',
+        };
+        const genArea = document.getElementById('trd-gen-fields');
+        if (genArea) {
+          const rows = [
+            ['Translation 1', data.trans1], ['Translation 2', data.trans2],
+            ['Translation 3', data.trans3], ['Pinyin', data.pinyin],
+            ['Pali', data.pali], ['Sanskrit', data.sanskrit],
+          ].filter(([, v]) => v);
+          if (rows.length) {
+            let html = `<div class="ext-candidate-fields" style="margin-top:0.85rem;">`;
+            for (const [label, value] of rows)
+              html += `<span class="ext-cfield-label">${escHtml(label)}</span><span class="ext-cfield-value">${escHtml(value)}</span>`;
+            html += `</div>`;
+            genArea.innerHTML = html;
+          }
+        }
+      }
+    } catch(e) {
+      if (msg) msg.textContent = 'Generation failed — try again.';
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '✨ Generate 3 AI Translations'; }
+    }
+  }
+
+  async function trdSaveTerm() {
+    const btn = document.getElementById('trd-save-btn');
+    const msg = document.getElementById('trd-save-msg');
+    if (!btn) return;
+    btn.disabled = true; btn.textContent = 'Saving…';
+    if (msg) { msg.textContent = ''; msg.style.color = ''; }
+    const gen = _trdGeneratedFields || {};
+    try {
+      const res = await fetch('/api/extract/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chinese_term: _trdCurrentTerm,
+          translation1: gen.trans1   || '',
+          translation2: gen.trans2   || '',
+          translation3: gen.trans3   || '',
+          pinyin:       gen.pinyin   || '',
+          pali:         gen.pali     || '',
+          sanskrit:     gen.sanskrit || '',
+        }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        if (msg) { msg.textContent = data.error; msg.style.color = 'var(--red-soft)'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Add to Database'; }
+      } else {
+        if (msg) { msg.textContent = '✓ Added to database'; msg.style.color = 'var(--text-soft)'; }
+        setTimeout(async () => {
+          trdClearSelection();
+          try {
+            const r = await fetch('/api/trans/known-terms');
+            if (r.ok) {
+              trdKnownTerms = await r.json();
+              trdRenderAll();
+            }
+          } catch(e) {}
+        }, 900);
+      }
+    } catch(e) {
+      if (msg) { msg.textContent = 'Network error — please try again.'; msg.style.color = 'var(--red-soft)'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Add to Database'; }
+    }
+  }
+
+  document.getElementById('trans-review-body').addEventListener('mouseup', trdHandleSelection);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') trdClearSelection(); });
 
   {% endif %}
 </script>
