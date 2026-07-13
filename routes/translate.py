@@ -46,6 +46,20 @@ def _match_constraint_terms(chinese_text, limit=15):
     return hits[:limit]
 
 
+def _get_active_style_rules():
+    """Return active style_guide rules for prompt injection; returns [] on error."""
+    try:
+        result = (
+            supabase.table("style_guide")
+            .select("category,rule_text,example_before,example_after")
+            .eq("active", True)
+            .execute()
+        )
+        return result.data or []
+    except Exception:
+        return []
+
+
 def _get_context(chapter_id, unit_id):
     """Return (prev_chinese, next_chinese) — adjacent confirmed units in the same chapter."""
     try:
@@ -495,6 +509,7 @@ def api_translate_unit(unit_id):
 
     term_hits          = _match_constraint_terms(chinese_text)
     ctx_before, ctx_after = _get_context(unit["chapter_id"], unit_id)
+    active_rules       = _get_active_style_rules()
 
     ai_result = translate_unit(
         chinese_text,
@@ -502,6 +517,7 @@ def api_translate_unit(unit_id):
         context_before=ctx_before,
         context_after=ctx_after,
         is_long_sentence=bool(unit.get("is_long_sentence")),
+        style_rules=active_rules,
     )
 
     is_first_draft = not (unit.get("english_draft") or "").strip()
@@ -535,6 +551,90 @@ def api_translate_unit(unit_id):
     )
 
     return jsonify(upd.data[0])
+
+
+# ── T4.1 — Style Guide ──────────────────────────────────────────────────────
+
+VALID_SG_CATEGORIES = {"honorifics", "proper_nouns", "sentence_splitting", "tone", "other"}
+
+
+@translate_bp.route("/api/trans/styleguide", methods=["GET"])
+@_require_translation
+def api_list_styleguide():
+    try:
+        result = (
+            supabase.table("style_guide")
+            .select("*")
+            .order("category")
+            .order("created_at")
+            .execute()
+        )
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(result.data)
+
+
+@translate_bp.route("/api/trans/styleguide", methods=["POST"])
+@_require_translation
+def api_create_styleguide():
+    if not is_leader():
+        return jsonify({"error": "Leader role or higher required"}), 403
+    data = request.get_json() or {}
+    category = (data.get("category") or "").strip()
+    rule_text = (data.get("rule_text") or "").strip()
+    if not category:
+        return jsonify({"error": "category is required"}), 400
+    if category not in VALID_SG_CATEGORIES:
+        return jsonify({"error": f"category must be one of: {', '.join(sorted(VALID_SG_CATEGORIES))}"}), 400
+    if not rule_text:
+        return jsonify({"error": "rule_text is required"}), 400
+    try:
+        did = supabase.rpc("next_display_id", {
+            "p_prefix": "S", "p_seq_name": "seq_style_guide_display"
+        }).execute().data
+        result = supabase.table("style_guide").insert({
+            "display_id":      did,
+            "category":        category,
+            "rule_text":       rule_text,
+            "example_before":  data.get("example_before") or None,
+            "example_after":   data.get("example_after") or None,
+            "active":          True,
+            "created_by":      session.get("user_email", ""),
+        }).execute()
+        return jsonify(result.data[0]), 201
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+
+
+@translate_bp.route("/api/trans/styleguide/<int:rule_id>", methods=["PATCH"])
+@_require_translation
+def api_patch_styleguide(rule_id):
+    if not is_leader():
+        return jsonify({"error": "Leader role or higher required"}), 403
+    data = request.get_json() or {}
+    updates = {}
+    if "category" in data:
+        cat = (data["category"] or "").strip()
+        if cat not in VALID_SG_CATEGORIES:
+            return jsonify({"error": f"category must be one of: {', '.join(sorted(VALID_SG_CATEGORIES))}"}), 400
+        updates["category"] = cat
+    if "rule_text" in data:
+        updates["rule_text"] = (data["rule_text"] or "").strip()
+    if "example_before" in data:
+        updates["example_before"] = data["example_before"] or None
+    if "example_after" in data:
+        updates["example_after"] = data["example_after"] or None
+    if "active" in data:
+        updates["active"] = bool(data["active"])
+    if not updates:
+        return jsonify({"error": "Nothing to update"}), 400
+    try:
+        result = supabase.table("style_guide").update(updates).eq("id", rule_id).execute()
+        if not result.data:
+            return jsonify({"error": "Rule not found"}), 404
+        return jsonify(result.data[0])
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
 
 
 # ── PATCH /api/trans/units/<id> ───────────────────────────────────────────────

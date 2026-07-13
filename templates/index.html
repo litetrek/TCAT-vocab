@@ -595,6 +595,20 @@
     .trans-status-revised      { color: #a04010; border-color: rgba(224,120,48,0.4); background: rgba(224,120,48,0.09); }
     .trans-status-approved     { color: #1a6b35; border-color: rgba(58,156,92,0.4); background: rgba(58,156,92,0.09); }
 
+    /* ── STYLE GUIDE (T4.1) ─────────────────────────────────────────────── */
+    .sg-category-group { margin-bottom: 1.75rem; }
+    .sg-category-heading { font-family: 'Cormorant Garamond', serif; font-size: 1rem; font-style: italic; font-weight: 600; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.65rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--border); }
+    .sg-rule-card { background: white; border: 1px solid var(--border); border-radius: 4px; padding: 0.85rem 1.1rem; margin-bottom: 0.6rem; box-shadow: var(--shadow); display: flex; align-items: flex-start; gap: 1rem; }
+    .sg-rule-card.sg-inactive { opacity: 0.5; }
+    .sg-rule-body { flex: 1; }
+    .sg-rule-text { font-family: 'Noto Serif TC', serif; font-size: 0.95rem; color: var(--ink); line-height: 1.55; }
+    .sg-rule-example { font-size: 0.78rem; color: var(--text-soft); margin-top: 0.3rem; font-style: italic; }
+    .sg-rule-actions { display: flex; gap: 0.4rem; flex-shrink: 0; align-items: center; }
+    .sg-badge { font-size: 0.62rem; padding: 0.1rem 0.4rem; border-radius: 2px; border: 1px solid; white-space: nowrap; }
+    .sg-badge-active   { color: #1a6b35; border-color: rgba(58,156,92,0.4); background: rgba(58,156,92,0.09); }
+    .sg-badge-inactive { color: #8a6a4a; border-color: rgba(138,106,74,0.3); background: rgba(138,106,74,0.07); }
+    .sg-empty { color: var(--text-soft); font-style: italic; font-size: 0.9rem; padding: 1.5rem 0; text-align: center; }
+
     @media (max-width: 768px) {
       #translation-view { min-height: calc(100vh - 96px); }
       .trans-container { padding: 1rem; }
@@ -908,7 +922,12 @@
     <div id="trans-picker">
       <div class="main-toolbar" style="margin-bottom:1.5rem;">
         <h1 class="main-title">Translation <span>Books</span></h1>
-        <button class="btn btn-secondary" onclick="transLoadBooks()">↻ Refresh</button>
+        <div style="display:flex;gap:0.5rem;align-items:center;">
+          {% if is_leader %}
+          <button class="btn btn-secondary" onclick="transShowStyleGuide()">☰ Style Guide</button>
+          {% endif %}
+          <button class="btn btn-secondary" onclick="transLoadBooks()">↻ Refresh</button>
+        </div>
       </div>
 
       <!-- Create book form (metadata only — chapters uploaded separately) -->
@@ -990,6 +1009,59 @@
       </div>
     </div><!-- #trans-unit-view -->
 
+    <!-- ── STYLE GUIDE SUB-VIEW (T4.1) ─────────────────────────────────── -->
+    <div id="trans-styleguide-view" style="display:none;">
+      <div class="main-toolbar" style="margin-bottom:1.5rem;">
+        <div style="display:flex;align-items:center;gap:1rem;">
+          <button class="btn-back" onclick="transShowPicker()">← Books</button>
+          <h1 class="main-title">Style <span>Guide</span></h1>
+        </div>
+      </div>
+
+      {% if is_leader %}
+      <!-- New rule form — leader only -->
+      <div class="trans-upload-section" style="margin-bottom:2rem;">
+        <div class="trans-upload-title">Add New Rule</div>
+        <div style="display:grid;grid-template-columns:1fr 2fr;gap:0.75rem;margin-bottom:0.75rem;">
+          <div>
+            <label style="font-size:0.8rem;font-weight:600;display:block;margin-bottom:0.3rem;">Category *</label>
+            <select id="sg-new-cat" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:3px;font-size:0.9rem;">
+              <option value="">— choose —</option>
+              <option value="honorifics">honorifics</option>
+              <option value="proper_nouns">proper_nouns</option>
+              <option value="sentence_splitting">sentence_splitting</option>
+              <option value="tone">tone</option>
+              <option value="other">other</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:0.8rem;font-weight:600;display:block;margin-bottom:0.3rem;">Rule *</label>
+            <input type="text" id="sg-new-rule" placeholder="e.g. Avoid using first-person…" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:3px;font-size:0.9rem;box-sizing:border-box;">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:0.85rem;">
+          <div>
+            <label style="font-size:0.8rem;display:block;margin-bottom:0.3rem;">Example Before (optional)</label>
+            <input type="text" id="sg-new-before" placeholder="original phrasing" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:3px;font-size:0.9rem;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:0.8rem;display:block;margin-bottom:0.3rem;">Example After (optional)</label>
+            <input type="text" id="sg-new-after" placeholder="preferred phrasing" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:3px;font-size:0.9rem;box-sizing:border-box;">
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem;">
+          <button class="btn btn-primary" onclick="sgAddRule()">+ Add Rule</button>
+          <span id="sg-add-msg" style="font-size:0.82rem;"></span>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Rule list -->
+      <div id="sg-rule-list">
+        <div class="loading">☸ Loading rules…</div>
+      </div>
+    </div><!-- #trans-styleguide-view -->
+
   </div>
 </div><!-- #translation-view -->
 {% endif %}
@@ -1058,6 +1130,7 @@
 <script>
   // ── STATE ────────────────────────────────────────────────────────────────
   const isAdmin           = {{ 'true' if is_admin else 'false' }};
+  const isLeader          = {{ 'true' if is_leader else 'false' }};
   const userRole          = '{{ user_role }}';
   const superAdmin        = '{{ super_admin }}';
   const currentUserEmail  = '{{ user }}';
@@ -2996,7 +3069,7 @@
   const _CAN_APPROVE   = ['leader','admin'].includes(userRole);
 
   function _transHideAll() {
-    ['trans-picker','trans-chapter-view','trans-review-view','trans-unit-view']
+    ['trans-picker','trans-chapter-view','trans-review-view','trans-unit-view','trans-styleguide-view']
       .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
   }
 
@@ -3019,6 +3092,113 @@
   function transShowReviewView() {
     _transHideAll();
     document.getElementById('trans-review-view').style.display = '';
+  }
+
+  // ── T4.1 — Style Guide ───────────────────────────────────────────────────
+
+  function transShowStyleGuide() {
+    _transHideAll();
+    document.getElementById('trans-styleguide-view').style.display = '';
+    sgLoadRules();
+  }
+
+  async function sgLoadRules() {
+    const list = document.getElementById('sg-rule-list');
+    list.innerHTML = '<div class="loading">☸ Loading rules…</div>';
+    try {
+      const res = await fetch('/api/trans/styleguide');
+      if (!res.ok) throw new Error(await res.text());
+      const rules = await res.json();
+      sgRenderRules(rules);
+    } catch (e) {
+      list.innerHTML = `<div class="sg-empty">Error loading rules: ${escHtml(String(e))}</div>`;
+    }
+  }
+
+  function sgRenderRules(rules) {
+    const list = document.getElementById('sg-rule-list');
+    if (!rules.length) {
+      list.innerHTML = '<div class="sg-empty">No style rules yet.</div>';
+      return;
+    }
+    const byCategory = {};
+    for (const r of rules) {
+      const cat = r.category || 'other';
+      if (!byCategory[cat]) byCategory[cat] = [];
+      byCategory[cat].push(r);
+    }
+    const catOrder = ['honorifics','proper_nouns','sentence_splitting','tone','other'];
+    const sortedCats = [...new Set([...catOrder, ...Object.keys(byCategory)])].filter(c => byCategory[c]);
+    let html = '';
+    for (const cat of sortedCats) {
+      const catRules = byCategory[cat];
+      html += `<div class="sg-category-group"><div class="sg-category-heading">${escHtml(cat)}</div>`;
+      for (const r of catRules) {
+        const inactive = !r.active;
+        const badge = r.active
+          ? `<span class="sg-badge sg-badge-active">active</span>`
+          : `<span class="sg-badge sg-badge-inactive">inactive</span>`;
+        const example = (r.example_before && r.example_after)
+          ? `<div class="sg-rule-example">"${escHtml(r.example_before)}" → "${escHtml(r.example_after)}"</div>`
+          : '';
+        const toggleBtn = isLeader
+          ? (r.active
+              ? `<button class="btn btn-secondary" style="font-size:0.75rem;padding:0.2rem 0.6rem;" onclick="sgToggleActive(${r.id},false)">Disable</button>`
+              : `<button class="btn btn-secondary" style="font-size:0.75rem;padding:0.2rem 0.6rem;" onclick="sgToggleActive(${r.id},true)">Enable</button>`)
+          : '';
+        html += `<div class="sg-rule-card${inactive?' sg-inactive':''}">
+          <div class="sg-rule-body">
+            <div class="sg-rule-text">${escHtml(r.rule_text)}</div>
+            ${example}
+          </div>
+          <div class="sg-rule-actions">${badge}${toggleBtn}</div>
+        </div>`;
+      }
+      html += '</div>';
+    }
+    list.innerHTML = html;
+  }
+
+  async function sgAddRule() {
+    const cat    = document.getElementById('sg-new-cat').value;
+    const rule   = document.getElementById('sg-new-rule').value.trim();
+    const before = document.getElementById('sg-new-before').value.trim();
+    const after  = document.getElementById('sg-new-after').value.trim();
+    const msg    = document.getElementById('sg-add-msg');
+    msg.textContent = '';
+    msg.style.color = '';
+    if (!cat) { msg.textContent = 'Please select a category.'; msg.style.color='#c00'; return; }
+    if (!rule) { msg.textContent = 'Rule text is required.'; msg.style.color='#c00'; return; }
+    try {
+      const res = await fetch('/api/trans/styleguide', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ category: cat, rule_text: rule, example_before: before || null, example_after: after || null }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error || res.statusText); }
+      document.getElementById('sg-new-cat').value    = '';
+      document.getElementById('sg-new-rule').value   = '';
+      document.getElementById('sg-new-before').value = '';
+      document.getElementById('sg-new-after').value  = '';
+      msg.textContent = 'Rule added.'; msg.style.color = '#1a6b35';
+      await sgLoadRules();
+    } catch (e) {
+      msg.textContent = String(e); msg.style.color = '#c00';
+    }
+  }
+
+  async function sgToggleActive(id, newActive) {
+    try {
+      const res = await fetch(`/api/trans/styleguide/${id}`, {
+        method: 'PATCH',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ active: newActive }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error || res.statusText); }
+      await sgLoadRules();
+    } catch (e) {
+      alert('Error: ' + e);
+    }
   }
 
   // ── Book list ────────────────────────────────────────────────────────────

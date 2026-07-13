@@ -5,7 +5,7 @@ import os
 
 from config import BASE_DIR, SUPER_ADMIN_EMAIL
 from repositories.members_repo import lookup_member
-from auth import is_logged_in, is_admin, can_access_translation_module
+from auth import is_logged_in, is_admin, is_leader, can_access_translation_module
 from routes.terms     import terms_bp
 from routes.members   import members_bp
 from routes.sources   import sources_bp
@@ -49,6 +49,7 @@ def home():
                            user=session["user_email"],
                            user_name=session.get("user_name", ""),
                            is_admin=is_admin(),
+                           is_leader=is_leader(),
                            user_role=role,
                            can_access_translation=can_access_translation_module(role),
                            super_admin=SUPER_ADMIN_EMAIL)
