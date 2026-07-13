@@ -6,6 +6,10 @@
 >
 > v2 關鍵決策：Supabase 為唯一資料庫；Google Sheets 完全退役；
 > 所有資料修改僅透過 T-CAT 介面，團隊成員不直接存取資料庫。
+>
+> **進度同步（2026-07-12，依 PROGRESS.md）**：T0～T3 已完成（T3 為 MVP），
+> T2.1（句群拆分審閱工作區）已完成並補入路線圖。詳見第七部分「實際實作對照」
+> 與第十部分路線圖表格的狀態欄。
 
 ---
 
@@ -200,6 +204,29 @@ LIMIT 5;
 **批次翻譯**：CGI 無背景任務，整段/整章批次翻譯由**前端逐句驅動**
 （每句一個請求 + 進度條），嚴禁單一請求內迴圈呼叫 AI（必逾時）。
 
+### 實際實作對照（依 PROGRESS.md 2026-07-12，取代上表 T2/T2.1/T3 部分）
+
+實作過程中發現整章一次匯入＋AI逐句翻譯會導致 CGI 逾時，改為「匯入只做純演算法分句、AI 分組與翻譯由前端逐段/逐句觸發」的兩段式流程，並新增 T2.1 草稿審閱層。實際端點：
+
+| 端點 | 方法 | 權限 | 對應設計 |
+|---|---|---|---|
+| `/api/trans/books` | POST（JSON，僅 title） | member+ | 原設計含檔案上傳一次建全書；改為先建書（純 metadata），章節另外上傳 |
+| `/api/trans/books/<id>/chapters` | POST（檔案上傳） | admin | 新增：上傳 .txt → 分段+分句（純演算法，無 AI）→ 建 `trans_unit_drafts` |
+| `/api/trans/books` | GET | login | 同設計，改呼叫 `list_trans_books()` RPC |
+| `/api/trans/books/<id>/chapters` | GET | login | 新增：章節列表 |
+| `/api/trans/chapters/<id>/drafts` | GET | login | 新增（T2.1）：段落草稿列表 |
+| `/api/trans/chapters/<id>/paragraphs/<idx>/group-preview` | POST | member+ | 新增（T2.1）：單段 AI 主題分組 |
+| `/api/trans/chapters/<id>/paragraphs/<idx>/draft` | PATCH | member+ | 新增（T2.1）：人工調整拖曳分組，自動存檔 |
+| `/api/trans/chapters/<id>/paragraphs/<idx>/confirm` | POST | member+ | 新增（T2.1）：確認寫入 `trans_units`（刪舊插新，可重跑） |
+| `/api/trans/chapters/<id>/units` | GET | login | 同設計 |
+| `/api/trans/units/<id>/translate` | POST | member+ | 對應設計「觸發 AI 翻譯」；首次寫 `english_draft`+`english_final`，重譯只覆蓋 `english_final` |
+| `/api/trans/units/<id>` | PATCH（body 含 `approve`） | member+／approve 需 leader+ | 合併設計中「保存修訂」與「批准定稿」為單一端點，以 `approve` 布林區分 |
+| `/api/trans/known-terms` | GET | login | 新增：術語高亮＋候選詞 modal 用（沿用 Extraction 模組機制） |
+
+**尚未實作**（列於設計但實際未建，非遺漏，屬 T4/T5 範圍）：`/api/trans/chapters/<id>/claim`（章節認領）、
+`/api/trans/units/<id>/split`、`/api/trans/units/merge`、`/api/trans/styleguide` CRUD、pgvector 範例檢索、
+三欄式工作區（左章節樹／中卡片／右參考面板）與 diff 高亮。目前 UI 為「段落卡片 + 逐句列表」的簡化版工作區。
+
 ---
 
 ## 第八部分：UI — Translation 頂層 Tab
@@ -246,15 +273,18 @@ LIMIT 5;
 
 ## 第十部分：整體路線圖
 
-| 階段 | 內容 | 驗收標準 |
-|---|---|---|
-| **T0 資料遷移** | Sheets → Supabase（見第二部分五個子階段） | 全功能回歸通過；備份排程運轉 |
-| **T1 翻譯資料層** | 五張新表 + `segmenter.py` | 引號保護測試案例通過 |
-| **T2 匯入+瀏覽** | 上傳書籍 + Picker 書單 + 唯讀句列表 | 整本書可上傳、逐章瀏覽 |
-| **T3 AI 預譯** | `translate_unit()`（系統指令+術語約束）+ 編輯保存 | 譯文含正確術語；修訂入庫 |
-| **T4 閉環 v1** | style_guide 管理 + prompt 注入 + embedding 寫入與檢索 | 新增規則後重譯可觀察生效；相似範例正確注入 |
-| **T5 協作** | 認領、批准流、批註、diff 高亮 | 兩人同時作業不衝突 |
-| **T6 品質追蹤** | 「人工修改幅度」趨勢儀表板（按模型分組） | 可視化修改幅度隨時間變化 |
+| 階段 | 狀態（2026-07-12） | 內容 | 驗收標準 |
+|---|---|---|---|
+| **T0 資料遷移** | ✅ 完成 | Sheets → Supabase（見第二部分五個子階段） | 全功能回歸通過；備份排程運轉 |
+| **T1 翻譯資料層** | ✅ 完成 | 五張新表 + `segmenter.py` | 引號保護測試案例通過（15 pytest 全過） |
+| **T2 匯入+瀏覽** | ✅ 完成 | 上傳書籍 + Picker 書單 + 唯讀句列表；admin-only 存取旗標 | 整本書可上傳、逐章瀏覽 |
+| **T2.1 草稿審閱**（新增階段，原路線圖未列） | ✅ 完成 | `sentence_map` 欄位＋`trans_unit_drafts` 表；分句→AI 主題分組→拖曳人工調整→自動存檔→確認寫入 `trans_units` | E2E SQL 流程驗證通過 |
+| **T3 AI 預譯** | ✅ 完成（MVP） | `translate_unit()`（系統指令+術語約束）+ 編輯保存/批准端點 | 譯文含正確術語；修訂入庫；**尚未做本機端對端即時測試**（見 Next Steps） |
+| **T4.1 Style Guide** | ✅ 完成 | `style_guide` CRUD（leader+ 寫入）+ prompt 注入 `translate_unit()` + 管理畫面 | 端點權限測試通過；**尚未實際新增規則做端對端測試** |
+| **T4.2 雙供應商 Embedding + RAG** | ✅ 完成 | migration 010：`embedding_voyage`/`embedding_openai` 雙欄位 + 兩支 `find_similar_revisions_*` RPC；`embeddings.py`；相似度門檻 0.5；比較腳本 `compare_embedding_providers.py` | migration 驗收測試通過、RPC 已於 Supabase 驗證存在；**`trans_revisions` 尚無任何一筆有 embedding 資料**，RAG 注入與比較腳本都還沒跑過真實資料 |
+| **T4.3 工作區與 diff** | ⏳ 規劃中 | 三欄式工作區（章節樹／卡片／參考面板）、diff 高亮（english_draft vs english_final） | 待 T4.1/T4.2 完成即時測試後排入 |
+| **T5 協作** | ⏳ 規劃中 | 認領、批准流、批註 | 兩人同時作業不衝突 |
+| **T6 品質追蹤** | ⏳ 規劃中 | 「人工修改幅度」趨勢儀表板（按模型分組） | 可視化修改幅度隨時間變化 |
 
 > 相比 v1 路線圖：原 T6「SQLite 向量副本」作廢——pgvector 讓 RAG 提前到 T4
 > 一步到位，品質追蹤升為 T6 主體。
@@ -405,9 +435,17 @@ create table trans_revisions (
     check (revision_type in ('terminology','tone','grammar','split','other')),
   note text,
   revised_by text, revised_at timestamptz default now(),
-  embedding vector(1536)
+  -- T4.2（migration 010）：單一 embedding 欄位改為雙供應商並行，取代下面這行原設計：
+  -- embedding vector(1536)
+  embedding_voyage vector(1024),    -- Voyage AI voyage-3
+  embedding_openai vector(1536)     -- OpenAI text-embedding-3-small
 );
 create index idx_revisions_unit on trans_revisions (unit_id);
+
+-- find_similar_revisions_voyage(query_embedding vector(1024), match_limit int)
+-- find_similar_revisions_openai(query_embedding vector(1536), match_limit int)
+-- 兩支 RPC 各自對應欄位做 cosine 距離 ORDER BY <=> ... LIMIT，供 RAG 檢索使用
+-- （PostgREST/supabase-py 無法直接表達 <=> 運算子，故用 RPC 包裝）
 
 create table style_guide (
   id bigint generated always as identity primary key,

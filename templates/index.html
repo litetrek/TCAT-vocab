@@ -1022,6 +1022,12 @@
       <!-- New rule form — leader only -->
       <div class="trans-upload-section" style="margin-bottom:2rem;">
         <div class="trans-upload-title">Add New Rule</div>
+        <div style="margin-bottom:0.9rem;">
+          <label style="font-size:0.8rem;font-weight:600;display:block;margin-bottom:0.3rem;">Start from a preset (optional)</label>
+          <select id="sg-preset-select" onchange="sgApplyPreset()" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:3px;font-size:0.9rem;">
+            <option value="">— choose a preset to fill the form below —</option>
+          </select>
+        </div>
         <div style="display:grid;grid-template-columns:1fr 2fr;gap:0.75rem;margin-bottom:0.75rem;">
           <div>
             <label style="font-size:0.8rem;font-weight:600;display:block;margin-bottom:0.3rem;">Category *</label>
@@ -3096,6 +3102,33 @@
 
   // ── T4.1 — Style Guide ───────────────────────────────────────────────────
 
+  // Preset rules — starting points for the "Add New Rule" form. Editable list;
+  // add/remove entries here to change what shows up in the preset dropdown.
+  const SG_PRESETS = [
+    { label: 'Avoid first-person "I"', category: 'tone',
+      rule: '避免使用第一人稱「我」，改用被動語態或改寫句式',
+      before: '我認為這是正確的', after: 'This is considered correct' },
+    { label: 'Avoid casual/colloquial wording', category: 'tone',
+      rule: '避免過度口語化用詞（如 stuff、kind of、basically），維持莊重但平易近人的語域',
+      before: '', after: '' },
+    { label: 'Buddhas/masters: avoid generic "he"', category: 'honorifics',
+      rule: '提及佛菩薩、祖師大德時避免使用「他」，改用其尊稱或重複其名號',
+      before: '他說法四十九年', after: 'The Buddha taught for forty-nine years' },
+    { label: 'Proper nouns: romanization on first mention', category: 'proper_nouns',
+      rule: '人名、地名、書名等專有名詞第一次出現時，英文後方以括號附上羅馬拼音或梵巴文原文',
+      before: '玄奘法師', after: 'Master Xuanzang (Xuánzàng)' },
+    { label: 'Prefer existing Final/Known translations', category: 'proper_nouns',
+      rule: '術語庫中已有 Final 或 Known Translation 的詞彙一律優先採用，不自創新譯',
+      before: '', after: '' },
+    { label: 'Split long sentences (45+ chars)', category: 'sentence_splitting',
+      rule: '中文長句（超過45字或3個以上逗號頓號）翻譯時應拆成2-3個較短的英文句子，避免單句過長難讀',
+      before: '', after: '' },
+    { label: 'Numbers/years: use digits', category: 'other',
+      rule: '數字與年代一律使用阿拉伯數字，不用英文拼寫（句首除外）',
+      before: '', after: '' },
+  ];
+  let sgLoadedRules = [];
+
   function transShowStyleGuide() {
     _transHideAll();
     document.getElementById('trans-styleguide-view').style.display = '';
@@ -3109,10 +3142,41 @@
       const res = await fetch('/api/trans/styleguide');
       if (!res.ok) throw new Error(await res.text());
       const rules = await res.json();
+      sgLoadedRules = rules;
       sgRenderRules(rules);
+      sgPopulatePresets();
     } catch (e) {
       list.innerHTML = `<div class="sg-empty">Error loading rules: ${escHtml(String(e))}</div>`;
     }
+  }
+
+  function sgPopulatePresets() {
+    const sel = document.getElementById('sg-preset-select');
+    if (!sel) return; // member view has no add-form / preset picker
+    const existingTexts = new Set(sgLoadedRules.map(r => r.rule_text));
+    sel.innerHTML = '<option value="">— choose a preset to fill the form below —</option>';
+    SG_PRESETS.forEach((p, i) => {
+      if (existingTexts.has(p.rule)) return; // already added — don't offer it again
+      const opt = document.createElement('option');
+      opt.value = String(i);
+      opt.textContent = `[${p.category}] ${p.label}`;
+      sel.appendChild(opt);
+    });
+  }
+
+  function sgApplyPreset() {
+    const sel = document.getElementById('sg-preset-select');
+    const idx = sel.value;
+    if (idx === '') return;
+    const p = SG_PRESETS[parseInt(idx, 10)];
+    document.getElementById('sg-new-cat').value    = p.category;
+    document.getElementById('sg-new-rule').value   = p.rule;
+    document.getElementById('sg-new-before').value = p.before || '';
+    document.getElementById('sg-new-after').value  = p.after  || '';
+    sel.value = '';
+    const msg = document.getElementById('sg-add-msg');
+    msg.textContent = 'Preset loaded below — edit if you like, then Add Rule.';
+    msg.style.color = '#666';
   }
 
   function sgRenderRules(rules) {

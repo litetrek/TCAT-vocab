@@ -63,15 +63,21 @@ buddhist-vocab/
 │   ├── 004_entity_subject_classification.sql  # entity_type / subject_field columns on terms
 │   ├── 005_t1_translation_module.sql  # T1: five translation-module tables (idempotent IF NOT EXISTS)
 │   ├── 006_t2_import_book_rpc.sql    # T2: import_trans_book + list_trans_books RPC functions
-│   └── 007_t2_1_sentence_map.sql     # T2.1: sentence_map column + trans_unit_drafts table
+│   ├── 007_t2_1_sentence_map.sql     # T2.1: sentence_map column + trans_unit_drafts table
+│   ├── 008_login_log.sql             # login_log table — records every successful login
+│   ├── 009_ext_documents_source_id.sql  # ext_documents.source_id column
+│   └── 010_dual_embeddings.sql       # T4.2: trans_revisions embedding_voyage/embedding_openai + find_similar_revisions_* RPCs
 ├── scripts/
 │   ├── run_migration.py        # Applies 001_initial_schema.sql via DATABASE_URL / psycopg2
 │   ├── run_migration_005.py    # T1: applies 005 + runs acceptance tests (insert/unique/fractional/cleanup)
 │   ├── run_migration_006.py    # T2: applies 006 + runs 4 acceptance tests (import/list/section_type/cleanup)
 │   ├── run_migration_007.py    # T2.1: applies 007 + 5 acceptance tests + T2 test data cleanup
+│   ├── run_migration_010.py    # T4.2: applies 010 + acceptance tests (dual embedding columns, both RPCs)
 │   ├── migrate_from_sheets.py  # T0-2: one-shot Sheets → Postgres migration
 │   ├── migrate_extraction_only.py  # T0-4: re-migrate extraction data only
-│   └── backfill_classification.py  # Backfill entity_type/subject_field for unclassified terms
+│   ├── backfill_classification.py  # Backfill entity_type/subject_field for unclassified terms
+│   └── compare_embedding_providers.py  # T4.2: side-by-side Voyage vs OpenAI retrieval quality comparison
+├── embeddings.py                # T4.2: get_voyage_embedding / get_openai_embedding / get_embeddings — best-effort, never raises
 ├── test_segmenter.py           # pytest tests for segmenter.py (15 cases, all passing)
 ├── static/
 │   ├── Tcat-logo.png           # Primary logo (yellow-gold T with sparkle and swoosh)
@@ -128,12 +134,13 @@ each display_id to eliminate the race condition from the old Sheets "scan for ma
 | `ext_paragraphs` | — | FK → ext_documents(id); UNIQUE (document_id, paragraph_index) |
 | `trans_books` | B000001 | FK → sources(id); status: active/archived |
 | `trans_chapters` | C000001 | FK → trans_books(id); section_type + status check constraints |
-| `trans_units` | U000001 | unit_order numeric (fractional indexing); `sentence_map jsonb` (original sentence list, added T2.1); embedding-ready |
+| `trans_units` | U000001 | unit_order numeric (fractional indexing); `sentence_map jsonb` (original sentence list, added T2.1) |
 | `trans_unit_drafts` | — | `(chapter_id, paragraph_index)` unique; `draft_groups jsonb`; status: pending/ai_suggested/human_adjusted/confirmed |
-| `trans_revisions` | R000001 | embedding vector(1536) for pgvector RAG |
-| `style_guide` | S000001 | active boolean; source_revision_ids bigint[] |
+| `trans_revisions` | R000001 | `embedding_voyage vector(1024)` + `embedding_openai vector(1536)` (T4.2 — replaced the original single `embedding vector(1536)` column) |
+| `style_guide` | S000001 | active boolean; source_revision_ids bigint[]; CRUD live since T4.1 |
+| `login_log` | — | email/name/role/logged_in_at; records every successful login |
 
-pgvector extension enabled for `trans_revisions.embedding`.
+pgvector extension enabled. `find_similar_revisions_voyage` / `find_similar_revisions_openai` RPC functions (migration 010) do the `<=>` cosine-distance ORDER BY query — PostgREST/supabase-py can't express that operator directly.
 
 ---
 
@@ -649,7 +656,7 @@ Bugs and UX issues found during first live test of the review workspace:
 
 ### T3 — AI Translation Drafting (2026-07-11)
 
-**Scope**: `translate_unit()` AI drafting (system instruction + terminology constraints), plus save/approve endpoints that write revisions to `trans_revisions`. Per the design guide roadmap, RAG example retrieval (pgvector) and style-guide prompt injection are **T4**, not T3, and were not built here. No migration was needed — `trans_units` (`english_draft`/`english_final`/`split_map`/`status`/`ai_model`/`translated_by`/`reviewed_by`/`approved_by`) and `trans_revisions` already existed from T0-1/T1.
+**Scope**: `translate_unit()` AI drafting (system instruction + terminology constraints), plus save/approve endpoints that write revisions to `trans_revisions`. Per the design guide roadmap, RAG example retrieval (pgvector) and style-guide prompt injection are **T4** (now done — see below), not T3. No migration was needed — `trans_units` (`english_draft`/`english_final`/`split_map`/`status`/`ai_model`/`translated_by`/`reviewed_by`/`approved_by`) and `trans_revisions` already existed from T0-1/T1.
 
 #### ai.py — `translate_unit()`
 - New function: `translate_unit(chinese_text, term_constraints=None, context_before="", context_after="", is_long_sentence=False) -> {"english": str, "split_map": list|None}`
@@ -676,10 +683,68 @@ Bugs and UX issues found during first live test of the review workspace:
 - `trans-unit-row` restructured from a single-line read-only row into a card: id + status badge, Chinese text, an editable English textarea (member+), and action buttons
 - New JS: `transTranslateUnit()` (calls the translate endpoint), `transSaveUnit(unitId, approve)` (calls the PATCH endpoint), `_transUnitRowHtml()` / `_transReplaceUnitRow()` (render/patch a single row in place)
 - Button visibility gated client-side by `userRole`: Translate/Save require member+ (`_CAN_TRANSLATE`), Approve requires leader+ (`_CAN_APPROVE`) — mirrors the server-side checks, which remain the actual authority
-- **Deferred to T4/T5** (per the design doc's own roadmap, not an oversight): the three-column review workspace (chapter tree / sentence cards / reference panel), diff highlighting between `english_draft` and `english_final`, chapter claiming, and style-guide + pgvector example injection
+- **Deferred to T4/T5** (per the design doc's own roadmap, not an oversight): the three-column review workspace (chapter tree / sentence cards / reference panel), diff highlighting between `english_draft` and `english_final`, chapter claiming — style-guide + pgvector example injection landed in T4.1/T4.2 below
 
 #### Not yet verified
 - No live end-to-end test run yet (no local server / Supabase round-trip performed this session) — see Next Steps
+
+---
+
+### T4.1 — Style Guide CRUD + Prompt Injection (2026-07-12)
+
+**Scope**: CRUD for `style_guide` (already existed as a table since T1) plus injecting active rules into `translate_unit()`'s prompt. No migration needed.
+
+#### `routes/translate.py`
+- `_get_active_style_rules()` — fetches `style_guide` rows `where active=true`; returns `[]` on any error (never blocks translation)
+- `GET /api/trans/styleguide` — member+; returns all rules (active and inactive) ordered by `category, created_at`, so the management screen can show the full picture
+- `POST /api/trans/styleguide` — leader+ only (403 otherwise); validates `category` against the 5 allowed values and requires `rule_text`; `display_id` via `next_display_id` RPC (`S` prefix, `seq_style_guide_display`)
+- `PATCH /api/trans/styleguide/<id>` — leader+ only; partial update of any of `category`/`rule_text`/`example_before`/`example_after`/`active`; deactivation only (`active=false`), no hard delete, matching the design doc's "disable, don't delete" rule
+- `api_translate_unit()` now calls `_get_active_style_rules()` and passes the result into `translate_unit(..., style_rules=...)`
+
+#### `ai.py` — `translate_unit()`
+- New optional param `style_rules: list = None`; when non-empty, assembles a "Style guide — house rules to follow" block inserted before the terminology-constraints section, matching the design doc's prompt-assembly order
+
+#### `templates/index.html`
+- New "風格指南" (Style Guide) entry point from the Translation Picker view, visible to leader+
+- Rule list grouped by category, visible read-only to all translation-module users; add-rule form and active/inactive toggle restricted to leader+ (both client-side hidden and server-side enforced)
+- **Preset picker** (added 2026-07-13, post-launch): `SG_PRESETS` — a hardcoded JS array of 7 starter rules across all 5 categories (tone, honorifics, proper_nouns, sentence_splitting, other). A dropdown above the Add New Rule form fills the category/rule/example fields on selection (does not auto-submit — leader can edit before adding). `sgPopulatePresets()` filters out any preset whose `rule` text exact-matches an already-added rule, re-run after every `sgLoadRules()` so the list stays current
+
+#### Not yet verified
+- No rule has been created live yet (`style_guide` table is still empty in Supabase) — see Next Steps for live-test plan
+- Preset picker not yet committed/deployed (edited directly in this session — needs `git add`/`commit`/`push` to reach the live site)
+
+---
+
+### T4.2 — Dual-Provider Embeddings + pgvector RAG Retrieval (2026-07-12)
+
+**Scope**: Anthropic has no native embeddings endpoint, so this wires up **two** providers in parallel — Voyage AI and OpenAI — rather than committing to one, so retrieval quality can be compared before choosing. Superseded the original design doc's single `trans_revisions.embedding vector(1536)` column.
+
+#### Migration 010 — `010_dual_embeddings.sql`
+- Dropped the unused `trans_revisions.embedding` column
+- Added `embedding_voyage vector(1024)` (Voyage `voyage-3`) and `embedding_openai vector(1536)` (OpenAI `text-embedding-3-small`)
+- Added RPC functions `find_similar_revisions_voyage(query_embedding, match_limit)` and `find_similar_revisions_openai(query_embedding, match_limit)` — cosine-similarity `ORDER BY ... <=> ...` queries (PostgREST/supabase-py can't express `<=>` directly, hence the RPC wrapper)
+- No index built yet (corpus far below the threshold where ivfflat/hnsw would matter, per design doc guidance)
+- Applied to Supabase (`TCAT-vocab`); columns and both RPC functions verified live via direct SQL
+
+#### `embeddings.py` (new file)
+- `get_voyage_embedding(text)` / `get_openai_embedding(text)` — each returns `None` (never raises) if the text is empty, the corresponding API key env var is unset, the package isn't importable, or the API call fails
+- `get_embeddings(text)` — calls both, returns `{"voyage": ..., "openai": ...}`
+- `requirements.txt`: added `voyageai`, `openai` (both used defensively via `try/except ImportError`)
+- `.env.example`: added `VOYAGE_API_KEY`, `OPENAI_API_KEY` (both optional), `EMBEDDING_PROVIDER` (default `voyage` — selects which column drives live RAG retrieval at translate time; writes always attempt both regardless of this setting)
+
+#### `routes/translate.py`
+- `PATCH /api/trans/units/<id>`: after an approved-and-changed save writes its `trans_revisions` row, best-effort calls `embeddings.get_embeddings(chinese_text)` and updates `embedding_voyage`/`embedding_openai` on that row — wrapped so failure never fails the parent request
+- `_get_similar_examples(chinese_text, match_limit=5, threshold=0.5)` — reads `EMBEDDING_PROVIDER`, embeds via the matching provider, calls the matching RPC, filters out results below `similarity < 0.5` (cold-start guard from the design doc), returns `[]` on any failure or if nothing clears the threshold
+- `api_translate_unit()` now also calls `_get_similar_examples()` and passes results into `translate_unit(..., similar_examples=...)`
+
+#### `ai.py` — `translate_unit()`
+- New optional param `similar_examples: list = None`; when non-empty, assembles a few-shot "Similar past translations (for tone/style reference only...)" block, inserted after the style-guide block and before terminology constraints
+
+#### `scripts/compare_embedding_providers.py` (new)
+- Manual A/B tool: for a set of test Chinese sentences, embeds each via both providers and prints the top-5 `find_similar_revisions_*` results for each side by side, so retrieval quality can be judged by eye before deciding whether to keep both providers or drop one
+
+#### Not yet verified
+- `trans_revisions` has zero rows with embeddings so far (no approved-and-changed edit has been made live yet) — RAG injection, the write-on-approve hook, and the comparison script all still need a real run once at least one `VOYAGE_API_KEY`/`OPENAI_API_KEY` is set in `.env`
 
 ---
 
@@ -788,17 +853,25 @@ Commits: `0d9010e` (highlighting + modal + edit term), `42feaf9` (status badge +
 | **T2** | **Done** | Access gate (admin-only routed via env flag), import pipeline, read-only Picker + chapter + sentence browse UI |
 | **T2.1** | **Done** | Sentence-map column, trans_unit_drafts table, chapter upload → segmentation → drafts, AI topic grouping per paragraph, drag-and-drop review workspace, debounced auto-save, confirm → trans_units |
 | **T3** | **Done (MVP)** | `translate_unit()` AI drafting + terminology constraints; save/approve endpoints writing `trans_revisions`; minimal per-unit textarea + button UI |
-| **T4** | Planned | Three-column review workspace polish, diff highlighting (english_draft vs english_final), style guide management + prompt injection, pgvector RAG example retrieval |
+| **T4.1** | **Done** | Style guide CRUD (`/api/trans/styleguide`), leader-only management UI, prompt injection into `translate_unit()` |
+| **T4.2** | **Done** | Dual-provider embeddings (Voyage + OpenAI, migration 010), `find_similar_revisions_*` RPCs, RAG example injection with cold-start similarity threshold, `scripts/compare_embedding_providers.py` |
+| **T4.3** | Planned | Three-column review workspace polish, diff highlighting (english_draft vs english_final) |
 | **T5** | Planned | Chapter claiming, collaborative approval flow, annotations |
 
 ---
 
 ## Next Steps
 
+- **T4.1/T4.2 live testing** (nothing has touched these live yet — `style_guide` and embedding columns are still empty in Supabase):
+  - Set at least one of `VOYAGE_API_KEY` / `OPENAI_API_KEY` in `.env`
+  - Add a style guide rule as leader → run AI Translate on a unit → confirm the rule's language shows up in behavior (AI compliance isn't 100%, may need a few tries)
+  - Edit + Approve a unit (changed text) → confirm a `trans_revisions` row is written with `embedding_voyage`/`embedding_openai` populated for whichever key(s) are set
+  - Once 2-3 revisions have embeddings, run `python scripts/compare_embedding_providers.py` and eyeball Voyage vs OpenAI retrieval quality
+  - Translate a new unit with a semantically similar confirmed one already in the corpus → confirm RAG examples get injected (and confirm nothing breaks when similarity is too low / no examples exist)
 - **T3 live testing**: Start Flask server locally and test: open a confirmed chapter → AI Translate a unit → verify terminology constraints/context are applied → edit + Save → edit + Approve (leader) → verify a `trans_revisions` row was written
 - **T2.1 data cleanup**: T2 test data (1 book, 35 chapters, 131 units) still in DB — run `python scripts/run_migration_007.py` with `DATABASE_URL` set, or execute `DELETE FROM trans_unit_drafts; DELETE FROM trans_units; DELETE FROM trans_chapters; DELETE FROM trans_books;` via Supabase SQL editor to clear before production use
 - **T2.1 live testing**: Start Flask server locally and test: create book → upload chapter → open review view → run AI grouping → drag-drop → confirm → verify trans_units content
-- **T4**: Three-column review workspace, diff highlighting, style_guide CRUD + prompt injection, pgvector RAG example retrieval
+- **T4.3**: Three-column review workspace, diff highlighting — worth prompting for once T4.1/T4.2 are confirmed working live
 - **Run backfill**: `python scripts/backfill_classification.py --dry-run --limit 20` (spot-check), then full run
 - **T0 manual cleanup** (no code changes needed):
   - Export 7 Sheets worksheets as CSV → `backup/sheets_final_export_20260709/` (local only, do not commit)
