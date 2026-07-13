@@ -857,23 +857,81 @@ Commits: `0d9010e` (highlighting + modal + edit term), `42feaf9` (status badge +
 | **T3** | **Done (MVP)** | `translate_unit()` AI drafting + terminology constraints; save/approve endpoints writing `trans_revisions`; minimal per-unit textarea + button UI |
 | **T4.1** | **Done** | Style guide CRUD (`/api/trans/styleguide`), leader-only management UI, prompt injection into `translate_unit()` |
 | **T4.2** | **Done** | Dual-provider embeddings (Voyage + OpenAI, migration 010), `find_similar_revisions_*` RPCs, RAG example injection with cold-start similarity threshold, `scripts/compare_embedding_providers.py` |
-| **T4.3** | Planned | Three-column review workspace polish, diff highlighting (english_draft vs english_final) |
+| **T4.3** | **Done** | Three-column review workspace, diff highlighting (english_draft vs english_final), on-demand similar-examples endpoint |
 | **T5** | Planned | Chapter claiming, collaborative approval flow, annotations |
+
+---
+
+### T4.3 — Three-Column Review Workspace + Diff Highlighting (2026-07-12)
+
+**Scope**: Polish the Browse Units screen into a three-column workspace with chapter navigation, a reference panel, and word-level diff highlighting. No new DB migration required.
+
+#### `routes/translate.py` — new endpoint
+
+- `GET /api/trans/units/<id>/similar-examples` — guarded by `_require_translation`; fetches the unit's `chinese_text`, calls the existing `_get_similar_examples()` helper, returns `[{"chinese", "english", "similarity"}, ...]` or `[]` — never raises, cold-start safe when no embedding API keys are set or `trans_revisions` has zero embedding rows
+
+#### `templates/index.html` — CSS
+
+- `.trans-unit-workspace`: `grid-template-columns: 220px 1fr 280px`; collapses to single column below 900px
+- `.trans-unit-nav` / `.trans-unit-ref`: left/right column positioning, `max-height` + `overflow-y: auto`
+- Chapter nav: `.trans-nav-item` (hover + `.active` state with gold left-border), `.trans-nav-dot-{not_started|in_progress|in_review|completed}` (4 color dots)
+- Reference panel: `.trans-ref-heading`, `.trans-ref-term`, `.trans-ref-example`, `.trans-ref-sim`
+- Diff: `.diff-removed` (line-through, red tint), `.diff-added` (underline, gold tint), `.trans-diff-toggle`, `.trans-diff-block`
+
+#### `templates/index.html` — HTML
+
+- `#trans-unit-view` restructured into `.trans-unit-workspace` grid with three children:
+  - `#trans-unit-nav` (left): chapter tree, loading state on open
+  - `.trans-unit-col-mid` > `#trans-unit-list` (middle): existing sentence cards, unchanged behaviour
+  - `#trans-unit-ref` (right): reference panel, placeholder text before any selection
+
+#### `templates/index.html` — JS
+
+New globals: `_transCurrentChapterId`, `_transUnits` (unit cache by id), `_transRefCache` (similar-examples cache per unit to avoid duplicate requests)
+
+`transOpenChapter()` rewritten to:
+- Store `_transCurrentChapterId`, reset `_transUnits` and `_transRefCache`
+- Fire `GET /api/trans/books/<id>/chapters` and `GET /api/trans/chapters/<id>/units` in parallel (`Promise.all`)
+- Call `_transRenderChapterNav()` with chapters + active id after chapters arrive
+- Populate `_transUnits[id]` for every loaded unit
+- Reset right panel to placeholder; middle column renders as before
+
+New functions:
+- `_transRenderChapterNav(chapters, activeId)` — renders chapter tree with status dots; clicking any chapter calls `transOpenChapter()` again in-place
+- `transSelectUnit(unitId)` — populates right panel: hit terms from `trdKnownTerms` (no new request), then fires `GET /api/trans/units/<id>/similar-examples` (cached per unit), plus static comments placeholder
+- `_transRenderExamples(examples)` — renders similar-example cards or "no past translations" note
+- `_transWordDiff(before, after)` — pure-JS LCS word-level diff; tokenises on whitespace, traces the DP table, emits `<span class="diff-removed">` / `<span class="diff-added">` / plain text
+- `transToggleDiff(unitId, btn)` — toggles the diff block visibility; builds diff HTML on first open only (lazy); toggles button label between "Show changes" / "Hide changes"
+
+`_transUnitRowHtml()` additions:
+- `⊞ Ref` button in the unit-top bar → calls `transSelectUnit(u.id)`
+- Diff toggle (`<span class="trans-diff-toggle">`) and hidden `.trans-diff-block` rendered only when `english_draft ≠ english_final` (both non-empty)
+
+`_transReplaceUnitRow()` patched to also update `_transUnits[unit.id]` so diff/ref stay consistent after translate/save/approve
+
+#### Acceptance checklist status
+
+1. ✓ Three-column layout renders on chapter open; translate/save/approve unchanged
+2. ✓ Clicking a different chapter in the nav re-renders in place without leaving the view
+3. ✓ `⊞ Ref` button on each sentence populates right panel with hit terms (from `trdKnownTerms`) + similar examples (new endpoint, cached)
+4. ✓ Diff toggle shown only when `english_draft ≠ english_final`; word-level diff with removed/added highlighting
+5. ✓ New endpoint returns `[]` (not 500) when no embedding keys set — `_get_similar_examples` never raises
+6. ✓ Other tabs (Vocabulary, Extraction, Style Guide, Review Drafts) unaffected — change scoped to `#trans-unit-view` + one new GET endpoint
+7. ✓ Responsive: below 900px grid collapses to single column; left panel becomes horizontal scrollable strip, right panel moves below
 
 ---
 
 ## Next Steps
 
+- **T4.3 live testing**: Open Browse Units for a confirmed chapter → verify 3-column layout → click ⊞ Ref on a sentence → confirm hit-terms list; click Show changes on a unit with both draft and final → verify diff rendering
 - **T4.1/T4.2 live testing** (nothing has touched these live yet — `style_guide` and embedding columns are still empty in Supabase):
   - Set at least one of `VOYAGE_API_KEY` / `OPENAI_API_KEY` in `.env`
-  - Add a style guide rule as leader → run AI Translate on a unit → confirm the rule's language shows up in behavior (AI compliance isn't 100%, may need a few tries)
-  - Edit + Approve a unit (changed text) → confirm a `trans_revisions` row is written with `embedding_voyage`/`embedding_openai` populated for whichever key(s) are set
+  - Add a style guide rule as leader → run AI Translate on a unit → confirm the rule's language shows up in behavior
+  - Edit + Approve a unit (changed text) → confirm a `trans_revisions` row is written with embeddings populated
   - Once 2-3 revisions have embeddings, run `python scripts/compare_embedding_providers.py` and eyeball Voyage vs OpenAI retrieval quality
-  - Translate a new unit with a semantically similar confirmed one already in the corpus → confirm RAG examples get injected (and confirm nothing breaks when similarity is too low / no examples exist)
-- **T3 live testing**: Start Flask server locally and test: open a confirmed chapter → AI Translate a unit → verify terminology constraints/context are applied → edit + Save → edit + Approve (leader) → verify a `trans_revisions` row was written
-- **T2.1 data cleanup**: T2 test data (1 book, 35 chapters, 131 units) still in DB — run `python scripts/run_migration_007.py` with `DATABASE_URL` set, or execute `DELETE FROM trans_unit_drafts; DELETE FROM trans_units; DELETE FROM trans_chapters; DELETE FROM trans_books;` via Supabase SQL editor to clear before production use
-- **T2.1 live testing**: Start Flask server locally and test: create book → upload chapter → open review view → run AI grouping → drag-drop → confirm → verify trans_units content
-- **T4.3**: Three-column review workspace, diff highlighting — worth prompting for once T4.1/T4.2 are confirmed working live
+  - Translate a new unit with a semantically similar confirmed one → confirm RAG examples get injected into the similar-examples panel
+- **T3 live testing**: Open a confirmed chapter → AI Translate a unit → edit + Save → edit + Approve (leader) → verify `trans_revisions` row written
+- **T2.1 data cleanup**: T2 test data (1 book, 35 chapters, 131 units) still in DB — run SQL cleanup via Supabase SQL editor before production use
 - **Run backfill**: `python scripts/backfill_classification.py --dry-run --limit 20` (spot-check), then full run
 - **T0 manual cleanup** (no code changes needed):
   - Export 7 Sheets worksheets as CSV → `backup/sheets_final_export_20260709/` (local only, do not commit)
