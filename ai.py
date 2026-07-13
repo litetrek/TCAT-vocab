@@ -193,7 +193,8 @@ def group_sentences_by_topic(sentences: list) -> list:
 def translate_unit(chinese_text: str, term_constraints: list = None,
                     context_before: str = "", context_after: str = "",
                     is_long_sentence: bool = False,
-                    style_rules: list = None) -> dict:
+                    style_rules: list = None,
+                    similar_examples: list = None) -> dict:
     """Draft an English translation for one trans_unit via Claude (T3).
 
     term_constraints: [{"chinese": str, "english": str}, ...] — terms hit in
@@ -230,6 +231,21 @@ def translate_unit(chinese_text: str, term_constraints: list = None,
                 lines.append(line)
             if lines:
                 style_hint = "\nStyle guide — house rules to follow:\n" + "\n".join(lines)
+
+        example_hint = ""
+        if similar_examples:
+            lines = []
+            for ex in similar_examples:
+                zh = ex.get("chinese", "")
+                en = ex.get("english", "")
+                if zh and en:
+                    lines.append(f"中文: {zh} → English: {en}")
+            if lines:
+                example_hint = (
+                    "\nSimilar past translations (for tone/style reference only"
+                    " — do not copy verbatim unless the source text is identical):\n"
+                    + "\n".join(lines)
+                )
 
         term_hint = ""
         if term_constraints:
@@ -268,7 +284,7 @@ def translate_unit(chinese_text: str, term_constraints: list = None,
                     "You are an expert translator of Chinese Buddhist texts into English, "
                     "writing for a scholarly but accessible general readership. Translate "
                     "faithfully; prefer natural, readable English over a literal word-for-word "
-                    f"rendering.{style_hint}{term_hint}{context_hint}{split_hint}\n\n"
+                    f"rendering.{style_hint}{example_hint}{term_hint}{context_hint}{split_hint}\n\n"
                     f"Chinese sentence to translate: {chinese_text}\n\n"
                     "Reply ONLY with a JSON object, no other text or markdown fences:\n"
                     "{\"english\": \"the English translation\", \"split_map\": null or "

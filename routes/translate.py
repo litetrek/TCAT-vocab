@@ -6,6 +6,7 @@ from auth import is_logged_in, can_access_translation_module, can_edit_existing,
 from db import supabase
 from segmenter import decode, split_paragraphs, detect_section_type, segment_paragraph
 from ai import group_sentences_by_topic, translate_unit
+from embeddings import get_embeddings, get_voyage_embedding, get_openai_embedding
 from repositories import terms_repo
 from repositories.audit_repo import write_audit
 
@@ -56,6 +57,38 @@ def _get_active_style_rules():
             .execute()
         )
         return result.data or []
+    except Exception:
+        return []
+
+
+def _get_similar_examples(chinese_text: str, match_limit: int = 5, threshold: float = 0.5):
+    """RAG: embed chinese_text, query trans_revisions for similar past translations.
+    Returns list of {"chinese", "english", "similarity"} or [] on any failure/no key.
+    """
+    import os
+    try:
+        provider = os.getenv("EMBEDDING_PROVIDER", "voyage").strip().lower()
+        if provider == "openai":
+            query_vec = get_openai_embedding(chinese_text)
+            rpc_name  = "find_similar_revisions_openai"
+        else:
+            query_vec = get_voyage_embedding(chinese_text)
+            rpc_name  = "find_similar_revisions_voyage"
+
+        if query_vec is None:
+            return []
+
+        result = supabase.rpc(rpc_name, {
+            "query_embedding": query_vec,
+            "match_limit": match_limit,
+        }).execute()
+
+        rows = result.data or []
+        filtered = [
+            {"chinese": r["chinese_text"], "english": r["english_after"], "similarity": r["similarity"]}
+            for r in rows if (r.get("similarity") or 0) >= threshold
+        ]
+        return filtered
     except Exception:
         return []
 
@@ -510,6 +543,7 @@ def api_translate_unit(unit_id):
     term_hits          = _match_constraint_terms(chinese_text)
     ctx_before, ctx_after = _get_context(unit["chapter_id"], unit_id)
     active_rules       = _get_active_style_rules()
+    similar_examples   = _get_similar_examples(chinese_text)
 
     ai_result = translate_unit(
         chinese_text,
@@ -518,6 +552,7 @@ def api_translate_unit(unit_id):
         context_after=ctx_after,
         is_long_sentence=bool(unit.get("is_long_sentence")),
         style_rules=active_rules,
+        similar_examples=similar_examples,
     )
 
     is_first_draft = not (unit.get("english_draft") or "").strip()
@@ -690,7 +725,7 @@ def api_patch_unit(unit_id):
             r_did = supabase.rpc("next_display_id", {
                 "p_prefix": "R", "p_seq_name": "seq_trans_revisions_display"
             }).execute().data
-            supabase.table("trans_revisions").insert({
+            rev_result = supabase.table("trans_revisions").insert({
                 "display_id":     r_did,
                 "unit_id":        unit_id,
                 "chinese_text":   unit.get("chinese_text") or "",
@@ -702,6 +737,21 @@ def api_patch_unit(unit_id):
             }).execute()
         except Exception as exc:
             return jsonify({"error": f"Database error writing revision: {exc}"}), 500
+
+        # Best-effort: write embeddings — must not fail the overall request
+        try:
+            rev_id = rev_result.data[0]["id"] if rev_result.data else None
+            if rev_id:
+                embeds = get_embeddings(unit.get("chinese_text") or "")
+                emb_updates = {}
+                if embeds.get("voyage") is not None:
+                    emb_updates["embedding_voyage"] = embeds["voyage"]
+                if embeds.get("openai") is not None:
+                    emb_updates["embedding_openai"] = embeds["openai"]
+                if emb_updates:
+                    supabase.table("trans_revisions").update(emb_updates).eq("id", rev_id).execute()
+        except Exception:
+            pass
 
     try:
         upd = supabase.table("trans_units").update(updates).eq("id", unit_id).execute()
