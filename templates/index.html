@@ -650,75 +650,6 @@
       .trd-para-actions { margin-left: 0; }
       .trd-ch-actions { margin-left: 0; flex-wrap: wrap; }
     }
-
-    /* ── T4.3 — Three-column browse workspace ───────────────────────────── */
-    .trans-unit-workspace {
-      display: grid;
-      grid-template-columns: 220px 1fr 280px;
-      gap: 0;
-      align-items: start;
-    }
-    .trans-unit-nav {
-      border-right: 1px solid var(--border);
-      padding-right: 0.85rem;
-      margin-right: 0.85rem;
-      max-height: calc(100vh - 200px);
-      overflow-y: auto;
-    }
-    .trans-unit-col-mid { min-width: 0; }
-    .trans-unit-ref {
-      border-left: 1px solid var(--border);
-      padding-left: 0.85rem;
-      margin-left: 0.85rem;
-      max-height: calc(100vh - 200px);
-      overflow-y: auto;
-    }
-    /* Chapter nav tree */
-    .trans-nav-heading { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-soft); font-weight: 600; margin-bottom: 0.55rem; }
-    .trans-nav-item {
-      display: flex; align-items: center; gap: 0.45rem;
-      padding: 0.35rem 0.45rem; border-radius: 3px; cursor: pointer;
-      font-size: 0.8rem; color: var(--ink); border-left: 3px solid transparent;
-      transition: background 0.12s; margin-bottom: 0.1rem;
-    }
-    .trans-nav-item:hover { background: rgba(201,168,76,0.07); }
-    .trans-nav-item.active { font-weight: 700; border-left-color: var(--gold); background: rgba(201,168,76,0.09); }
-    .trans-nav-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .trans-nav-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
-    .trans-nav-dot-not_started { background: rgba(107,90,58,0.28); }
-    .trans-nav-dot-in_progress { background: #c9a84c; }
-    .trans-nav-dot-in_review   { background: #4a90d9; }
-    .trans-nav-dot-completed   { background: #3a9c5c; }
-    /* Reference panel */
-    .trans-ref-heading { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-soft); font-weight: 600; margin-bottom: 0.5rem; margin-top: 1rem; }
-    .trans-ref-heading:first-child { margin-top: 0; }
-    .trans-ref-placeholder { color: var(--text-soft); font-style: italic; font-size: 0.82rem; padding: 0.5rem 0; }
-    .trans-ref-term { padding: 0.28rem 0; border-bottom: 1px solid rgba(26,18,8,0.06); }
-    .trans-ref-term-zh { font-family: 'Noto Serif TC', serif; color: var(--ink); font-size: 0.85rem; }
-    .trans-ref-term-en { color: var(--text-soft); font-size: 0.74rem; }
-    .trans-ref-example { background: rgba(245,240,232,0.5); border: 1px solid var(--border); border-radius: 3px; padding: 0.5rem 0.6rem; margin-bottom: 0.45rem; }
-    .trans-ref-example-zh { font-family: 'Noto Serif TC', serif; color: var(--ink); font-size: 0.82rem; line-height: 1.55; margin-bottom: 0.22rem; }
-    .trans-ref-example-en { color: var(--text-soft); font-size: 0.78rem; line-height: 1.4; }
-    .trans-ref-sim { font-size: 0.66rem; color: rgba(107,90,58,0.5); margin-top: 0.15rem; }
-    /* Diff toggle & block */
-    .trans-diff-toggle { font-size: 0.71rem; color: #4a7aaa; cursor: pointer; display: inline-block; user-select: none; margin-top: 0.3rem; }
-    .trans-diff-toggle:hover { text-decoration: underline; }
-    .trans-diff-block { font-size: 0.88rem; line-height: 1.75; padding: 0.5rem 0.65rem; background: rgba(245,240,232,0.5); border: 1px solid var(--border); border-radius: 3px; margin-top: 0.4rem; margin-bottom: 0.4rem; word-break: break-word; }
-    .diff-removed { text-decoration: line-through; color: rgba(170,45,25,0.75); background: rgba(170,45,25,0.07); padding: 0 1px; }
-    .diff-added   { text-decoration: underline; color: #7a5010; background: rgba(201,168,76,0.13); padding: 0 1px; }
-    @media (max-width: 900px) {
-      .trans-unit-workspace { grid-template-columns: 1fr; }
-      .trans-unit-nav {
-        border-right: none; border-bottom: 1px solid var(--border);
-        padding-right: 0; margin-right: 0; padding-bottom: 0.75rem; margin-bottom: 0.75rem;
-        max-height: 180px;
-      }
-      .trans-unit-ref {
-        border-left: none; border-top: 1px solid var(--border);
-        padding-left: 0; margin-left: 0; padding-top: 0.75rem; margin-top: 0.75rem;
-        max-height: none;
-      }
-    }
   </style>
 </head>
 <body>
@@ -1066,30 +997,16 @@
       </div>
     </div><!-- #trans-review-view -->
 
-    <!-- ── UNIT LIST SUB-VIEW (T4.3: 3-column workspace) ───────────────── -->
+    <!-- ── UNIT LIST SUB-VIEW ────────────────────────────────────────────── -->
     <div id="trans-unit-view" style="display:none;">
-      <div class="main-toolbar" style="margin-bottom:1rem;">
+      <div class="main-toolbar" style="margin-bottom:1.5rem;">
         <div style="display:flex;align-items:center;gap:1rem;">
           <button class="btn-back" onclick="transShowChapterList()">← Chapters</button>
           <h1 class="main-title" id="trans-unit-title">Units</h1>
         </div>
       </div>
-      <div class="trans-unit-workspace">
-        <!-- Left: chapter nav tree -->
-        <div class="trans-unit-nav" id="trans-unit-nav">
-          <div class="trans-nav-heading">Chapters</div>
-          <div style="font-size:0.8rem;color:var(--text-soft);">☸ Loading…</div>
-        </div>
-        <!-- Middle: sentence cards -->
-        <div class="trans-unit-col-mid">
-          <div id="trans-unit-list" class="trans-unit-list">
-            <div class="loading">☸ Loading sentences…</div>
-          </div>
-        </div>
-        <!-- Right: reference panel -->
-        <div class="trans-unit-ref" id="trans-unit-ref">
-          <div class="trans-ref-placeholder">Click a sentence to see references</div>
-        </div>
+      <div id="trans-unit-list" class="trans-unit-list">
+        <div class="loading">☸ Loading sentences…</div>
       </div>
     </div><!-- #trans-unit-view -->
 
@@ -3151,11 +3068,8 @@
 
   {% if can_access_translation %}
   // ── TRANSLATION MODULE ───────────────────────────────────────────────────
-  let _transCurrentBookId      = null;
-  let _transCurrentBookTitle   = '';
-  let _transCurrentChapterId   = null;
-  let _transUnits              = {};   // unitId → unit object, populated on chapter open
-  let _transRefCache           = {};   // unitId → similar-examples array (debounce/cache)
+  let _transCurrentBookId    = null;
+  let _transCurrentBookTitle = '';
 
   const _STATUS_LABEL = {
     untranslated: 'Untranslated',
@@ -3656,27 +3570,16 @@
   // ── Unit browse (read-only) ───────────────────────────────────────────────
 
   async function transOpenChapter(chapterId, chapterTitle) {
-    _transCurrentChapterId = chapterId;
-    _transUnits     = {};
-    _transRefCache  = {};
     document.getElementById('trans-unit-title').innerHTML =
       `<span style="font-size:1.1rem;font-style:normal;">${escHtml(_transCurrentBookTitle)}</span> — ${escHtml(chapterTitle || 'Chapter')}`;
-    document.getElementById('trans-unit-list').innerHTML = '<div class="loading">☸ Loading sentences…</div>';
-    document.getElementById('trans-unit-ref').innerHTML  = '<div class="trans-ref-placeholder">Click a sentence to see references</div>';
-    document.getElementById('trans-unit-nav').innerHTML  =
-      '<div class="trans-nav-heading">Chapters</div><div style="font-size:0.8rem;color:var(--text-soft);">☸ Loading…</div>';
+    const list = document.getElementById('trans-unit-list');
+    list.innerHTML = '<div class="loading">☸ Loading sentences…</div>';
     transShowUnitList();
     await trdFetchKnownTerms();
     try {
-      const [chapR, unitR] = await Promise.all([
-        fetch(`/api/trans/books/${_transCurrentBookId}/chapters`),
-        fetch(`/api/trans/chapters/${chapterId}/units`),
-      ]);
-      if (chapR.ok) _transRenderChapterNav(await chapR.json(), chapterId);
-      if (!unitR.ok) throw new Error(await unitR.text());
-      const units = await unitR.json();
-      for (const u of units) _transUnits[u.id] = u;
-      const list = document.getElementById('trans-unit-list');
+      const r = await fetch(`/api/trans/chapters/${chapterId}/units`);
+      if (!r.ok) throw new Error(await r.text());
+      const units = await r.json();
       if (!units.length) {
         list.innerHTML = '<div class="empty-state"><h3>No confirmed sentences yet</h3><p>Use "Review Drafts" to confirm paragraphs first.</p></div>';
         return;
@@ -3689,7 +3592,7 @@
         return `${paraBreak}${_transUnitRowHtml(u)}`;
       }).join('');
     } catch(e) {
-      document.getElementById('trans-unit-list').innerHTML = `<div class="ext-error-banner">Error: ${escHtml(e.message)}</div>`;
+      list.innerHTML = `<div class="ext-error-banner">Error: ${escHtml(e.message)}</div>`;
     }
   }
 
@@ -3698,21 +3601,13 @@
     const statusCls = 'trans-status trans-status-' + (u.status || 'untranslated');
     const englishText = u.english_final || u.english_draft || '';
     const translateLabel = (u.english_draft || '').trim() ? 'Re-translate' : 'AI Translate';
-    const hasDiff = (u.english_draft || '').trim() && (u.english_final || '').trim()
-                    && u.english_draft.trim() !== u.english_final.trim();
-    const diffSection = hasDiff
-      ? `<div><span class="trans-diff-toggle" onclick="transToggleDiff(${u.id},this)">Show changes</span>
-         <div class="trans-diff-block" id="trans-diff-${u.id}" style="display:none;"></div></div>`
-      : '';
     return `<div class="trans-unit-row${cls}" data-unit-id="${u.id}">
       <div class="trans-unit-top">
         <span class="trans-unit-id">${escHtml(u.display_id || '')}</span>
         <span class="trans-unit-status"><span class="${statusCls}">${_STATUS_LABEL[u.status] || u.status}</span></span>
-        <button class="btn btn-sm" onclick="transSelectUnit(${u.id});event.stopPropagation();" style="margin-left:auto;font-size:0.68rem;padding:0.1rem 0.4rem;opacity:0.55;" title="View references for this sentence">⊞ Ref</button>
       </div>
       <div class="trans-unit-text">${trdHighlightKnownTerms(u.chinese_text || '')}</div>
       ${_CAN_TRANSLATE ? `<textarea class="trans-unit-en-input" id="trans-en-${u.id}" rows="2" placeholder="No translation yet — click AI Translate.">${escHtml(englishText)}</textarea>` : (englishText ? `<div class="trans-unit-text" style="color:var(--text-soft);">${escHtml(englishText)}</div>` : '')}
-      ${diffSection}
       ${_CAN_TRANSLATE ? `<div class="trans-unit-actions">
         <button class="btn btn-sm btn-secondary trans-unit-translate-btn" onclick="transTranslateUnit(${u.id})">${translateLabel}</button>
         <button class="btn btn-sm btn-secondary" onclick="transSaveUnit(${u.id}, false)">Save</button>
@@ -3754,136 +3649,9 @@
   }
 
   function _transReplaceUnitRow(unit) {
-    _transUnits[unit.id] = unit;
     const row = document.querySelector(`.trans-unit-row[data-unit-id="${unit.id}"]`);
     if (!row) return;
     row.outerHTML = _transUnitRowHtml(unit);
-  }
-
-  // ── T4.3: Chapter nav tree ────────────────────────────────────────────────
-
-  function _transRenderChapterNav(chapters, activeId) {
-    const nav = document.getElementById('trans-unit-nav');
-    if (!nav) return;
-    if (!chapters || !chapters.length) {
-      nav.innerHTML = '<div class="trans-nav-heading">Chapters</div><div style="font-size:0.8rem;color:var(--text-soft);font-style:italic;">No chapters</div>';
-      return;
-    }
-    const dotCls = s => 'trans-nav-dot trans-nav-dot-' + ({'not_started':'not_started','in_progress':'in_progress','in_review':'in_review','completed':'completed'}[s] || 'not_started');
-    nav.innerHTML = '<div class="trans-nav-heading">Chapters</div>' + chapters.map(ch => {
-      const isActive = ch.id === activeId;
-      const label = escHtml(ch.title || ('Chapter ' + (ch.chapter_index + 1)));
-      return `<div class="trans-nav-item${isActive ? ' active' : ''}" data-chap-id="${ch.id}" data-chap-title="${escHtml(ch.title || '')}" onclick="transOpenChapter(${ch.id},this.dataset.chapTitle)">
-        <span class="${dotCls(ch.status)}"></span>
-        <span class="trans-nav-label" title="${label}">${label}</span>
-      </div>`;
-    }).join('');
-  }
-
-  // ── T4.3: Reference panel ─────────────────────────────────────────────────
-
-  async function transSelectUnit(unitId) {
-    const u = _transUnits[unitId];
-    if (!u) return;
-    const panel = document.getElementById('trans-unit-ref');
-    if (!panel) return;
-
-    // Hit terms from already-loaded trdKnownTerms
-    const chinese = u.chinese_text || '';
-    const hits = trdKnownTerms
-      .filter(t => t.chinese && chinese.includes(t.chinese))
-      .sort((a, b) => b.chinese.length - a.chinese.length);
-
-    let termsHtml = hits.length
-      ? hits.map(t => `<div class="trans-ref-term">
-          <span class="trans-ref-term-zh">${escHtml(t.chinese)}</span>
-          ${(t.trans_known || t.trans1) ? `<br><span class="trans-ref-term-en">${escHtml(t.trans_known || t.trans1)}</span>` : ''}
-        </div>`).join('')
-      : '<div style="font-size:0.8rem;color:var(--text-soft);font-style:italic;">No known terms in this sentence</div>';
-
-    panel.innerHTML =
-      `<div class="trans-ref-heading">Hit Terms</div>${termsHtml}` +
-      `<div class="trans-ref-heading">Similar Past Translations</div>` +
-      `<div id="trans-ref-examples"><span style="font-size:0.8rem;color:var(--text-soft);">☸ Loading…</span></div>` +
-      `<div class="trans-ref-heading">Comments</div>` +
-      `<div style="font-size:0.8rem;color:var(--text-soft);font-style:italic;">Comments — coming in a later stage</div>`;
-
-    // Fetch similar examples — use cache to avoid redundant requests
-    if (_transRefCache[unitId] !== undefined) {
-      _transRenderExamples(_transRefCache[unitId]);
-    } else {
-      try {
-        const r = await fetch(`/api/trans/units/${unitId}/similar-examples`);
-        const examples = r.ok ? await r.json() : [];
-        _transRefCache[unitId] = examples;
-        _transRenderExamples(examples);
-      } catch(e) {
-        _transRefCache[unitId] = [];
-        _transRenderExamples([]);
-      }
-    }
-  }
-
-  function _transRenderExamples(examples) {
-    const el = document.getElementById('trans-ref-examples');
-    if (!el) return;
-    if (!examples.length) {
-      el.innerHTML = '<span style="font-size:0.8rem;color:var(--text-soft);font-style:italic;">No similar past translations yet</span>';
-      return;
-    }
-    el.innerHTML = examples.map(ex => {
-      const pct = Math.round((ex.similarity || 0) * 100);
-      return `<div class="trans-ref-example">
-        <div class="trans-ref-example-zh">${escHtml(ex.chinese || '')}</div>
-        <div class="trans-ref-example-en">${escHtml(ex.english || '')}</div>
-        <div class="trans-ref-sim">${pct}% similar</div>
-      </div>`;
-    }).join('');
-  }
-
-  // ── T4.3: Word-level diff highlighting ────────────────────────────────────
-
-  function _transWordDiff(before, after) {
-    const bw = before.split(/\s+/).filter(Boolean);
-    const aw = after.split(/\s+/).filter(Boolean);
-    const m = bw.length, n = aw.length;
-    // LCS DP (backward fill)
-    const dp = Array.from({length: m + 1}, () => new Array(n + 1).fill(0));
-    for (let i = m - 1; i >= 0; i--)
-      for (let j = n - 1; j >= 0; j--)
-        dp[i][j] = bw[i] === aw[j] ? dp[i+1][j+1] + 1 : Math.max(dp[i+1][j], dp[i][j+1]);
-    // Trace
-    const parts = [];
-    let i = 0, j = 0;
-    while (i < m || j < n) {
-      if (i < m && j < n && bw[i] === aw[j]) {
-        parts.push({t: 'same', w: bw[i]}); i++; j++;
-      } else if (j < n && (i >= m || dp[i][j + 1] >= dp[i + 1][j])) {
-        parts.push({t: 'add', w: aw[j]}); j++;
-      } else {
-        parts.push({t: 'del', w: bw[i]}); i++;
-      }
-    }
-    return parts.map(p =>
-      p.t === 'same' ? escHtml(p.w) :
-      p.t === 'del'  ? `<span class="diff-removed">${escHtml(p.w)}</span>` :
-                       `<span class="diff-added">${escHtml(p.w)}</span>`
-    ).join(' ');
-  }
-
-  function transToggleDiff(unitId, btn) {
-    const block = document.getElementById(`trans-diff-${unitId}`);
-    if (!block) return;
-    const u = _transUnits[unitId];
-    if (!u) return;
-    if (block.style.display === 'none') {
-      block.innerHTML = _transWordDiff((u.english_draft || '').trim(), (u.english_final || '').trim());
-      block.style.display = '';
-      btn.textContent = 'Hide changes';
-    } else {
-      block.style.display = 'none';
-      btn.textContent = 'Show changes';
-    }
   }
 
   // ── Create book (metadata only) ───────────────────────────────────────────

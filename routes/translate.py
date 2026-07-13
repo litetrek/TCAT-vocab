@@ -588,26 +588,6 @@ def api_translate_unit(unit_id):
     return jsonify(upd.data[0])
 
 
-# ── T4.3 — On-demand similar examples ────────────────────────────────────────
-
-@translate_bp.route("/api/trans/units/<int:unit_id>/similar-examples", methods=["GET"])
-@_require_translation
-def api_unit_similar_examples(unit_id):
-    """Return similar past translations for a unit's Chinese text.
-    Returns [] on any failure (cold-start safe — no VOYAGE/OPENAI key required).
-    """
-    try:
-        result = supabase.table("trans_units").select("chinese_text").eq("id", unit_id).execute()
-        if not result.data:
-            return jsonify({"error": "Unit not found"}), 404
-        chinese_text = result.data[0].get("chinese_text") or ""
-    except Exception as exc:
-        return jsonify({"error": f"Database error: {exc}"}), 500
-
-    examples = _get_similar_examples(chinese_text)
-    return jsonify(examples)
-
-
 # ── T4.1 — Style Guide ──────────────────────────────────────────────────────
 
 VALID_SG_CATEGORIES = {"honorifics", "proper_nouns", "sentence_splitting", "tone", "other"}
