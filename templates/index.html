@@ -405,6 +405,7 @@
     .term-known.term-has-known { background: rgba(70,130,180,0.12); border-bottom: 1.5px solid rgba(70,130,180,0.7); }
     .term-known.term-has-known:hover { background: rgba(70,130,180,0.22); }
     #trans-review-body .term-known { cursor: pointer; }
+    #ext-text-zh .term-known { cursor: pointer; }
     #ext-candidate-panel { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 500; pointer-events: none; }
     .ext-term-modal { position: fixed; top: 80px; right: 24px; width: 500px; max-width: calc(100vw - 48px); max-height: 80vh; overflow-y: auto; background: white; border: 1px solid var(--border); border-radius: 4px; padding: 1.5rem 1.75rem; box-shadow: 0 8px 32px rgba(26,18,8,0.22); pointer-events: all; }
     .ext-candidate-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.9rem; gap: 1rem; cursor: move; user-select: none; }
@@ -2634,7 +2635,7 @@
     let html = '', cursor = 0;
     for (const s of segs) {
       if (cursor < s.start) html += escHtml(text.slice(cursor, s.start));
-      html += `<span class="term-known${s.hasKnown ? ' term-has-known' : ''}" data-term-id="${escHtml(s.termId)}" title="${escHtml(s.tip)}">${escHtml(s.ch)}</span>`;
+      html += `<span class="term-known${s.hasKnown ? ' term-has-known' : ''}" data-term-id="${escHtml(s.termId)}" title="${escHtml(s.tip)}" onclick="extHandleTermClick(event,'${escHtml(String(s.termId))}')">${escHtml(s.ch)}</span>`;
       cursor = s.end;
     }
     if (cursor < len) html += escHtml(text.slice(cursor));
@@ -2687,6 +2688,14 @@
   }
 
   // ── EXTRACTION: CANDIDATE PANEL ─────────────────────────────────────────
+
+  function extHandleTermClick(event, termId) {
+    event.stopPropagation();
+    const term = extKnownTerms.find(t => String(t.id) === String(termId));
+    if (!term) return;
+    window.getSelection().removeAllRanges();
+    extShowCandidatePanel(term.chinese);
+  }
 
   function extHandleSelection() {
     const sel = window.getSelection();
