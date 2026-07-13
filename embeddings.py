@@ -13,7 +13,7 @@ except ImportError:
     _OPENAI_AVAILABLE = False
 
 
-def get_voyage_embedding(text: str) -> list | None:
+def get_voyage_embedding(text: str):
     """Return a 1024-dim embedding via Voyage AI voyage-3, or None on any failure/missing key."""
     if not text or not text.strip():
         return None
@@ -30,7 +30,7 @@ def get_voyage_embedding(text: str) -> list | None:
         return None
 
 
-def get_openai_embedding(text: str) -> list | None:
+def get_openai_embedding(text: str):
     """Return a 1536-dim embedding via OpenAI text-embedding-3-small, or None on any failure/missing key."""
     if not text or not text.strip():
         return None

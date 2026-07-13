@@ -604,9 +604,9 @@ def api_list_styleguide():
             .order("created_at")
             .execute()
         )
+        return jsonify(result.data)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
-    return jsonify(result.data)
 
 
 @translate_bp.route("/api/trans/styleguide", methods=["POST"])
