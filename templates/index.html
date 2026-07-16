@@ -700,7 +700,7 @@
       <div class="sidebar-section-title">Overview</div>
       <div class="stats-grid">
         <div class="stat-box"><div class="stat-num" id="stat-total">—</div><div class="stat-label">Total</div></div>
-        <div class="stat-box"><div class="stat-num" id="stat-final">—</div><div class="stat-label">Suggested</div></div>
+        <div class="stat-box"><div class="stat-num" id="stat-final">—</div><div class="stat-label">Reviewed</div></div>
       </div>
     </div>
 
@@ -716,7 +716,7 @@
       <div class="filter-group">
         <button class="filter-btn active" onclick="setFilter('all',this)">All Terms <span class="count" id="cnt-all">0</span></button>
         <button class="filter-btn" onclick="setFilter('pending',this)">Pending <span class="count" id="cnt-pending">0</span></button>
-        <button class="filter-btn" onclick="setFilter('suggested',this)">Suggested <span class="count" id="cnt-finalized">0</span></button>
+        <button class="filter-btn" onclick="setFilter('reviewed',this)">Reviewed <span class="count" id="cnt-finalized">0</span></button>
       </div>
     </div>
 
@@ -1325,7 +1325,7 @@
   function updateStats() {
     const base      = currentSource ? allTerms.filter(t => t.source === currentSource) : allTerms;
     const total     = base.length;
-    const finalized = base.filter(t => t.status === 'suggested').length;
+    const finalized = base.filter(t => t.status === 'reviewed').length;
     const pending   = total - finalized;
     document.getElementById('stat-total').textContent    = total;
     document.getElementById('stat-final').textContent    = finalized;
@@ -1404,8 +1404,8 @@
     }
     if (currentSubjectField) terms = terms.filter(t => t.subject_field === currentSubjectField);
 
-    if (currentFilter === 'pending')   terms = terms.filter(t => t.status !== 'suggested');
-    if (currentFilter === 'suggested') terms = terms.filter(t => t.status === 'suggested');
+    if (currentFilter === 'pending')   terms = terms.filter(t => t.status !== 'reviewed');
+    if (currentFilter === 'reviewed')  terms = terms.filter(t => t.status === 'reviewed');
 
     if (q) {
       const words = q.split(/\s+/).filter(Boolean);
@@ -1518,10 +1518,10 @@
 
   function vocabCard(t) {
     const firstText   = t.trans_first ? (getTermText(t, t.trans_first) || t.trans_first) : '';
-    const statusBadge = t.status === 'suggested'
-      ? '<span class="tag tag-final">✓ Suggested</span>'
+    const statusBadge = t.status === 'reviewed'
+      ? '<span class="tag tag-final">✓ Reviewed</span>'
       : '<span class="tag tag-pending">Pending</span>';
-    const cardClass = t.status === 'suggested' ? 'vocab-card card-finalized' : 'vocab-card';
+    const cardClass = t.status === 'reviewed' ? 'vocab-card card-finalized' : 'vocab-card';
     return `
       <div class="${cardClass}" onclick="openEditView('${t.id}')">
         <div class="vc-head">
@@ -1544,10 +1544,10 @@
     const secondText = t.trans_second ? (getTermText(t, t.trans_second) || t.trans_second) : '';
     const src        = sourceName(t.source);
     const dateStr    = t.timestamp ? t.timestamp.slice(0,10) : '';
-    const statusBadge = t.status === 'suggested'
-      ? '<span class="tag tag-final">✓ Suggested</span>'
+    const statusBadge = t.status === 'reviewed'
+      ? '<span class="tag tag-final">✓ Reviewed</span>'
       : '<span class="tag tag-pending">Pending</span>';
-    const row = t.status === 'suggested' ? 'row-finalized' : '';
+    const row = t.status === 'reviewed' ? 'row-finalized' : '';
     return `
       <tr class="${row}" onclick="openEditView('${t.id}')">
         <td><span class="cell-zh">${t.chinese}</span><span class="cell-id">${t.id}</span></td>
@@ -1599,8 +1599,8 @@
     updated:          'Updated',
     voted:            'Voted',
     vote_updated:     'Vote Changed',
-    finalized_first:  'Suggested 1st',
-    finalized_second: 'Suggested 2nd',
+    finalized_first:  'Reviewed 1st',
+    finalized_second: 'Reviewed 2nd',
     reset_final:      'Reset Suggestions',
     ai_translated:    'AI Translated',
   };
@@ -1650,7 +1650,7 @@
   }
 
   function buildEditView(t) {
-    const isLeaderOrAdmin = isAdmin || userRole === 'leader';
+    const isLeaderOrAdmin = userRole === 'leader';
     const firstKey  = t.final || '';
     const secondKey = findKeyByText(t, t.trans_second) || '';
     const hasFirst  = !!(t.trans_first);
@@ -1662,15 +1662,15 @@
       ? `<select class="source-select" data-term-id="${t.id}" data-field="source" onchange="autoSaveMeta(this)"><option value="">— Source —</option>${srcOpts}</select>`
       : `<select class="source-select" disabled><option value="">— Source —</option>${srcOpts}</select>`;
 
-    const statusBadge = t.status === 'suggested'
-      ? '<span class="tag tag-final">✓ Suggested</span>'
+    const statusBadge = t.status === 'reviewed'
+      ? '<span class="tag tag-final">✓ Reviewed</span>'
       : '<span class="tag tag-pending">Pending</span>';
 
     function transPanel(field, label, displayLabel, extraClass) {
       const text        = t[field] || '';
       const isFirst     = firstKey  === label;
       const isSecond    = secondKey === label;
-      const isFinalized = t.status === 'suggested';
+      const isFinalized = t.status === 'reviewed';
       const safeOrig    = text.replace(/"/g,'&quot;');
       const bold        = isFirst || isSecond;
       const textEl = (!canEdit || isFinalized)
@@ -1706,8 +1706,8 @@
       </div>`;
 
     let apText = '';
-    if (t.status === 'suggested' && t.trans_first) {
-      apText = `<span style="color:var(--gold);font-weight:600;">✓ Suggested</span> &nbsp;—&nbsp; Suggest 1: <strong>${t.trans_first}</strong>${t.trans_second ? ` &nbsp;·&nbsp; Suggest 2: <strong>${t.trans_second}</strong>` : ''}`;
+    if (t.status === 'reviewed' && t.trans_first) {
+      apText = `<span style="color:var(--gold);font-weight:600;">✓ Reviewed</span> &nbsp;—&nbsp; Suggest 1: <strong>${t.trans_first}</strong>${t.trans_second ? ` &nbsp;·&nbsp; Suggest 2: <strong>${t.trans_second}</strong>` : ''}`;
     } else if (t.trans_second) {
       apText = `2nd choice: <span>${PICK_LABELS[t.trans_second] || t.trans_second}</span>`;
     }
@@ -1839,7 +1839,7 @@
         if (which === 'first') {
           term.final      = label;
           term.trans_first = data.text;
-          term.status     = 'suggested';
+          term.status     = 'reviewed';
         } else {
           term.trans_second = data.text;
         }
@@ -4070,12 +4070,12 @@
 
     if (match) {
       _trdCurrentMatch = match;
-      const isFinalized = match.status === 'suggested';
+      const isFinalized = match.status === 'reviewed';
       const finalLabel  = { TranslationKnown:'Known Trans.', Translation1:'Translation 1', Translation2:'Translation 2', Translation3:'Translation 3' }[match.final] || '';
       inner += `<div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">`;
       inner += `<div class="ext-candidate-badge ext-candidate-known" style="margin:0;">Already in database</div>`;
       if (isFinalized) {
-        inner += `<div class="ext-candidate-badge" style="margin:0;background:var(--green-soft,#e8f5e9);color:var(--green-dark,#2e7d32);border-color:var(--green-dark,#2e7d32);">Suggested${finalLabel ? ' — ' + finalLabel : ''}</div>`;
+        inner += `<div class="ext-candidate-badge" style="margin:0;background:var(--green-soft,#e8f5e9);color:var(--green-dark,#2e7d32);border-color:var(--green-dark,#2e7d32);">Reviewed${finalLabel ? ' — ' + finalLabel : ''}</div>`;
       } else {
         inner += `<div class="ext-candidate-badge" style="margin:0;background:#fff8e1;color:#a67c00;border-color:#e6c84b;">Pending</div>`;
       }
@@ -4288,10 +4288,10 @@
       });
       const data = await r.json();
       if (data.error) { alert(data.error); return; }
-      _trdCurrentMatch.status = 'suggested';
+      _trdCurrentMatch.status = 'reviewed';
       _trdCurrentMatch.final  = voteKey;
       const idx = trdKnownTerms.findIndex(t => String(t.id) === String(match.id));
-      if (idx !== -1) { trdKnownTerms[idx].status = 'suggested'; trdKnownTerms[idx].final = voteKey; }
+      if (idx !== -1) { trdKnownTerms[idx].status = 'reviewed'; trdKnownTerms[idx].final = voteKey; }
       trdShowCandidatePanel(_trdCurrentTerm);
     } catch(e) {
       alert('Error: ' + e.message);
