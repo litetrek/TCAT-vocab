@@ -1650,7 +1650,7 @@
   }
 
   function buildEditView(t) {
-    const isLeaderOrAdmin = userRole === 'leader';
+    const isLeaderOrAdmin = isAdmin || userRole === 'leader';
     const firstKey  = t.final || '';
     const secondKey = findKeyByText(t, t.trans_second) || '';
     const hasFirst  = !!(t.trans_first);
