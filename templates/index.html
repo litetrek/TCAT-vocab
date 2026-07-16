@@ -700,7 +700,7 @@
       <div class="sidebar-section-title">Overview</div>
       <div class="stats-grid">
         <div class="stat-box"><div class="stat-num" id="stat-total">—</div><div class="stat-label">Total</div></div>
-        <div class="stat-box"><div class="stat-num" id="stat-final">—</div><div class="stat-label">Finalized</div></div>
+        <div class="stat-box"><div class="stat-num" id="stat-final">—</div><div class="stat-label">Suggested</div></div>
       </div>
     </div>
 
@@ -716,7 +716,7 @@
       <div class="filter-group">
         <button class="filter-btn active" onclick="setFilter('all',this)">All Terms <span class="count" id="cnt-all">0</span></button>
         <button class="filter-btn" onclick="setFilter('pending',this)">Pending <span class="count" id="cnt-pending">0</span></button>
-        <button class="filter-btn" onclick="setFilter('finalized',this)">Finalized <span class="count" id="cnt-finalized">0</span></button>
+        <button class="filter-btn" onclick="setFilter('suggested',this)">Suggested <span class="count" id="cnt-finalized">0</span></button>
       </div>
     </div>
 
@@ -1325,7 +1325,7 @@
   function updateStats() {
     const base      = currentSource ? allTerms.filter(t => t.source === currentSource) : allTerms;
     const total     = base.length;
-    const finalized = base.filter(t => t.status === 'finalized').length;
+    const finalized = base.filter(t => t.status === 'suggested').length;
     const pending   = total - finalized;
     document.getElementById('stat-total').textContent    = total;
     document.getElementById('stat-final').textContent    = finalized;
@@ -1404,8 +1404,8 @@
     }
     if (currentSubjectField) terms = terms.filter(t => t.subject_field === currentSubjectField);
 
-    if (currentFilter === 'pending')   terms = terms.filter(t => t.status !== 'finalized');
-    if (currentFilter === 'finalized') terms = terms.filter(t => t.status === 'finalized');
+    if (currentFilter === 'pending')   terms = terms.filter(t => t.status !== 'suggested');
+    if (currentFilter === 'suggested') terms = terms.filter(t => t.status === 'suggested');
 
     if (q) {
       const words = q.split(/\s+/).filter(Boolean);
@@ -1518,10 +1518,10 @@
 
   function vocabCard(t) {
     const firstText   = t.trans_first ? (getTermText(t, t.trans_first) || t.trans_first) : '';
-    const statusBadge = t.status === 'finalized'
-      ? '<span class="tag tag-final">✓ Final</span>'
+    const statusBadge = t.status === 'suggested'
+      ? '<span class="tag tag-final">✓ Suggested</span>'
       : '<span class="tag tag-pending">Pending</span>';
-    const cardClass = t.status === 'finalized' ? 'vocab-card card-finalized' : 'vocab-card';
+    const cardClass = t.status === 'suggested' ? 'vocab-card card-finalized' : 'vocab-card';
     return `
       <div class="${cardClass}" onclick="openEditView('${t.id}')">
         <div class="vc-head">
@@ -1544,10 +1544,10 @@
     const secondText = t.trans_second ? (getTermText(t, t.trans_second) || t.trans_second) : '';
     const src        = sourceName(t.source);
     const dateStr    = t.timestamp ? t.timestamp.slice(0,10) : '';
-    const statusBadge = t.status === 'finalized'
-      ? '<span class="tag tag-final">✓ Final</span>'
+    const statusBadge = t.status === 'suggested'
+      ? '<span class="tag tag-final">✓ Suggested</span>'
       : '<span class="tag tag-pending">Pending</span>';
-    const row = t.status === 'finalized' ? 'row-finalized' : '';
+    const row = t.status === 'suggested' ? 'row-finalized' : '';
     return `
       <tr class="${row}" onclick="openEditView('${t.id}')">
         <td><span class="cell-zh">${t.chinese}</span><span class="cell-id">${t.id}</span></td>
@@ -1599,9 +1599,9 @@
     updated:          'Updated',
     voted:            'Voted',
     vote_updated:     'Vote Changed',
-    finalized_first:  'Finalized 1st',
-    finalized_second: 'Finalized 2nd',
-    reset_final:      'Reset Final',
+    finalized_first:  'Suggested 1st',
+    finalized_second: 'Suggested 2nd',
+    reset_final:      'Reset Suggestions',
     ai_translated:    'AI Translated',
   };
 
@@ -1662,30 +1662,30 @@
       ? `<select class="source-select" data-term-id="${t.id}" data-field="source" onchange="autoSaveMeta(this)"><option value="">— Source —</option>${srcOpts}</select>`
       : `<select class="source-select" disabled><option value="">— Source —</option>${srcOpts}</select>`;
 
-    const statusBadge = t.status === 'finalized'
-      ? '<span class="tag tag-final">✓ Finalized</span>'
+    const statusBadge = t.status === 'suggested'
+      ? '<span class="tag tag-final">✓ Suggested</span>'
       : '<span class="tag tag-pending">Pending</span>';
 
     function transPanel(field, label, displayLabel, extraClass) {
       const text        = t[field] || '';
       const isFirst     = firstKey  === label;
       const isSecond    = secondKey === label;
-      const isFinalized = t.status === 'finalized';
+      const isFinalized = t.status === 'suggested';
       const safeOrig    = text.replace(/"/g,'&quot;');
       const bold        = isFirst || isSecond;
       const textEl = (!canEdit || isFinalized)
         ? `<div class="tp-text"${bold ? ' style="font-weight:600;"' : ''}>${text || '<span class="placeholder">—</span>'}</div>`
         : `<textarea class="tp-textarea" data-term-id="${t.id}" data-field="${field}" data-orig="${safeOrig}" onblur="autoSaveField(this)" oninput="autoResizeTextarea(this)" placeholder="Enter translation…">${text}</textarea>`;
       const finalEl = isLeaderOrAdmin && !isFinalized && text
-        ? `<button class="admin-pick-btn${isFirst?' selected':''}" onclick="setFinal('${t.id}','${label}','first',this)" title="Set as Final translation">Set Final</button>`
+        ? `<button class="admin-pick-btn${isFirst?' selected':''}" onclick="setFinal('${t.id}','${label}','first',this)" title="Set as Suggestion 1">Suggest 1</button>`
         : '';
       return `
         <div class="${extraClass}${isFirst||isSecond?' is-final':''}">
           <div class="tp-label">
             ${displayLabel}
             ${rankBadge(label, t.trans_first, t.trans_second)}
-            ${isFirst  ? '<span class="final-badge-1st">Final · 1st</span>' : ''}
-            ${isSecond ? '<span class="final-badge-2nd">Final · 2nd</span>' : ''}
+            ${isFirst  ? '<span class="final-badge-1st">Suggest 1</span>' : ''}
+            ${isSecond ? '<span class="final-badge-2nd">Suggest 2</span>' : ''}
           </div>
           <div class="tp-body">${textEl}${finalEl}</div>
         </div>`;
@@ -1706,8 +1706,8 @@
       </div>`;
 
     let apText = '';
-    if (t.status === 'finalized' && t.trans_first) {
-      apText = `<span style="color:var(--gold);font-weight:600;">✓ Finalized</span> &nbsp;—&nbsp; 1st: <strong>${t.trans_first}</strong>${t.trans_second ? ` &nbsp;·&nbsp; 2nd: <strong>${t.trans_second}</strong>` : ''}`;
+    if (t.status === 'suggested' && t.trans_first) {
+      apText = `<span style="color:var(--gold);font-weight:600;">✓ Suggested</span> &nbsp;—&nbsp; Suggest 1: <strong>${t.trans_first}</strong>${t.trans_second ? ` &nbsp;·&nbsp; Suggest 2: <strong>${t.trans_second}</strong>` : ''}`;
     } else if (t.trans_second) {
       apText = `2nd choice: <span>${PICK_LABELS[t.trans_second] || t.trans_second}</span>`;
     }
@@ -1720,11 +1720,11 @@
       : '';
     const adminReset = isLeaderOrAdmin && (t.trans_first || t.trans_second) ? `
       <div style="display:flex;justify-content:flex-end;padding:0.35rem 0.75rem 0.5rem;">
-        <button class="btn btn-secondary btn-sm" onclick="resetFinal('${t.id}')" style="color:var(--red-soft);border-color:rgba(139,32,32,0.25);" title="Clear finalization and revert to Pending">↺ Final Reset</button>
+        <button class="btn btn-secondary btn-sm" onclick="resetFinal('${t.id}')" style="color:var(--red-soft);border-color:rgba(139,32,32,0.25);" title="Clear suggestions and revert to Pending">↺ Reset Suggestions</button>
       </div>` : '';
     const adminFinalSecond = isLeaderOrAdmin ? `
       <div class="admin-row" id="final-second-row-${t.id}"${hasFirst ? '' : ' style="display:none"'}>
-        <span class="admin-label">✦ Set Final (Second):</span>
+        <span class="admin-label">✦ Suggest 2:</span>
         ${finalOpts.map(([lbl,txt]) =>
           `<button class="admin-pick-btn${secondKey===lbl?' selected':''}" onclick="setFinal('${t.id}','${lbl}','second',this)">${txt}</button>`
         ).join('')}
@@ -1839,7 +1839,7 @@
         if (which === 'first') {
           term.final      = label;
           term.trans_first = data.text;
-          term.status     = 'finalized';
+          term.status     = 'suggested';
         } else {
           term.trans_second = data.text;
         }
@@ -1847,13 +1847,13 @@
         updateStats();
         if (editingTermId === termId) refreshEditView();
       }
-      showToast(which === 'first' ? '✓ First choice finalized!' : '✓ Second choice saved!');
+      showToast(which === 'first' ? '✓ Suggest 1 saved!' : '✓ Suggest 2 saved!');
     } catch(e) { showToast('⚠ Error setting final'); }
   }
 
   // ── RESET FINALIZATION ───────────────────────────────────────────────────
   async function resetFinal(termId) {
-    if (!confirm('Reset finalization? This will clear First and Second choices and set status back to Pending.')) return;
+    if (!confirm('Reset suggestions? This will clear Suggest 1 and Suggest 2 choices and set status back to Pending.')) return;
     try {
       const res  = await fetch(`/api/terms/${termId}/final/reset`, {method:'POST', headers:{'Content-Type':'application/json'}});
       const data = await res.json();
@@ -4070,12 +4070,12 @@
 
     if (match) {
       _trdCurrentMatch = match;
-      const isFinalized = match.status === 'finalized';
+      const isFinalized = match.status === 'suggested';
       const finalLabel  = { TranslationKnown:'Known Trans.', Translation1:'Translation 1', Translation2:'Translation 2', Translation3:'Translation 3' }[match.final] || '';
       inner += `<div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">`;
       inner += `<div class="ext-candidate-badge ext-candidate-known" style="margin:0;">Already in database</div>`;
       if (isFinalized) {
-        inner += `<div class="ext-candidate-badge" style="margin:0;background:var(--green-soft,#e8f5e9);color:var(--green-dark,#2e7d32);border-color:var(--green-dark,#2e7d32);">Finalized${finalLabel ? ' — ' + finalLabel : ''}</div>`;
+        inner += `<div class="ext-candidate-badge" style="margin:0;background:var(--green-soft,#e8f5e9);color:var(--green-dark,#2e7d32);border-color:var(--green-dark,#2e7d32);">Suggested${finalLabel ? ' — ' + finalLabel : ''}</div>`;
       } else {
         inner += `<div class="ext-candidate-badge" style="margin:0;background:#fff8e1;color:#a67c00;border-color:#e6c84b;">Pending</div>`;
       }
@@ -4288,10 +4288,10 @@
       });
       const data = await r.json();
       if (data.error) { alert(data.error); return; }
-      _trdCurrentMatch.status = 'finalized';
+      _trdCurrentMatch.status = 'suggested';
       _trdCurrentMatch.final  = voteKey;
       const idx = trdKnownTerms.findIndex(t => String(t.id) === String(match.id));
-      if (idx !== -1) { trdKnownTerms[idx].status = 'finalized'; trdKnownTerms[idx].final = voteKey; }
+      if (idx !== -1) { trdKnownTerms[idx].status = 'suggested'; trdKnownTerms[idx].final = voteKey; }
       trdShowCandidatePanel(_trdCurrentTerm);
     } catch(e) {
       alert('Error: ' + e.message);

@@ -259,7 +259,7 @@ def set_final(term_id, vote_key, which, modifier, now_str):
     if which == "first":
         updates["translation_first"] = text
         updates["final"]             = vote_key
-        updates["status"]            = "finalized"
+        updates["status"]            = "suggested"
     else:
         updates["translation_second"] = text
 
