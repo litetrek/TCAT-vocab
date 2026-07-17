@@ -294,6 +294,19 @@ def reset_final(term_id, modifier, now_str):
     return old_first, old_second, chinese
 
 
+def mark_reviewed(term_id, modifier, now_str):
+    result = supabase.table("terms").select("chinese").eq("display_id", term_id).execute()
+    if not result.data:
+        return None
+    chinese = result.data[0].get("chinese") or ""
+    supabase.table("terms").update({
+        "status":           "reviewed",
+        "last_modified_by": modifier,
+        "last_modified_at": _to_pg(now_str),
+    }).eq("display_id", term_id).execute()
+    return chinese
+
+
 def update_classification(term_id, entity_type, subject_field, source, classified_by, now_ts):
     """Write entity_type / subject_field and classification metadata.
     Skips terms where classification_source is already 'manual', unless called explicitly.

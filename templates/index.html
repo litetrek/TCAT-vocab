@@ -1602,6 +1602,7 @@
     finalized_first:  'Reviewed 1st',
     finalized_second: 'Reviewed 2nd',
     reset_final:      'Reset Suggestions',
+    reviewed:         'Marked Reviewed',
     ai_translated:    'AI Translated',
   };
 
@@ -1723,17 +1724,8 @@
     const aiTranslateBtn = canEdit && hasEmptyOpts
       ? `<button class="btn btn-secondary btn-sm" id="ai-btn-${t.id}" onclick="aiTranslate('${t.id}')">✦ AI Translate</button>`
       : '';
-    const adminReset = isLeaderOrAdmin && (t.trans_first || t.trans_second) ? `
-      <div style="display:flex;justify-content:flex-end;padding:0.35rem 0.75rem 0.5rem;">
-        <button class="btn btn-secondary btn-sm" onclick="resetFinal('${t.id}')" style="color:var(--red-soft);border-color:rgba(139,32,32,0.25);" title="Clear suggestions and revert to Pending">↺ Reset Suggestions</button>
-      </div>` : '';
-    const adminFinalSecond = isLeaderOrAdmin ? `
-      <div class="admin-row" id="final-second-row-${t.id}"${hasFirst ? '' : ' style="display:none"'}>
-        <span class="admin-label">✦ Suggest 2:</span>
-        ${finalOpts.map(([lbl,txt]) =>
-          `<button class="admin-pick-btn${secondKey===lbl?' selected':''}" onclick="setFinal('${t.id}','${lbl}','second',this)">${txt}</button>`
-        ).join('')}
-      </div>` : '';
+    const adminReset = '';
+    const adminFinalSecond = '';
 
     const lmBy  = t.last_modified_by   || '';
     const lmAt  = t.last_modified_time || '';
@@ -1771,7 +1763,12 @@
         ${topRow}
         ${bottomRow}
         <div class="status-bar" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
-          <span>${apText}</span>${aiTranslateBtn}
+          <span>${apText}</span>
+          <div style="display:flex;gap:0.5rem;align-items:center;">
+            ${aiTranslateBtn}
+            ${isLeaderOrAdmin && !isFinalized ? `<button class="btn btn-primary btn-sm" onclick="markReviewed('${t.id}')">✓ Reviewed</button>` : ''}
+            ${isLeaderOrAdmin && isFinalized ? `<button class="btn btn-secondary btn-sm" onclick="resetFinal('${t.id}')" style="color:var(--red-soft);border-color:rgba(139,32,32,0.25);">↺ Reset Suggestions</button>` : ''}
+          </div>
         </div>
       </div>
       <div class="edit-below-box">
@@ -1854,6 +1851,23 @@
       }
       showToast(which === 'first' ? '✓ Suggest 1 saved!' : '✓ Suggest 2 saved!');
     } catch(e) { showToast('⚠ Error setting final'); }
+  }
+
+  // ── MARK REVIEWED ────────────────────────────────────────────────────────
+  async function markReviewed(termId) {
+    try {
+      const res  = await fetch(`/api/terms/${termId}/review`, {method:'POST', headers:{'Content-Type':'application/json'}});
+      const data = await res.json();
+      if (data.error) { showToast('⚠ ' + data.error); return; }
+      const term = allTerms.find(t => t.id === termId);
+      if (term) {
+        term.status = 'reviewed';
+        if (data.last_modified_by) { term.last_modified_by = data.last_modified_by; term.last_modified_time = data.last_modified_time; }
+        updateStats();
+        if (editingTermId === termId) refreshEditView();
+      }
+      showToast('✓ Marked as Reviewed');
+    } catch(e) { showToast('⚠ Error marking as reviewed'); }
   }
 
   // ── RESET FINALIZATION ───────────────────────────────────────────────────
