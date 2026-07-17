@@ -3240,15 +3240,16 @@
 
     } else {
       if (parts[1] === 'term' && parts[2]) {
-        const termId = parseInt(parts[2], 10);
+        const termIdStr = parts[2];
         if (!allTerms.length) await loadTerms();
-        if (!allTerms.find(t => t.id === termId)) {
+        const matchedTerm = allTerms.find(t => String(t.id) === termIdStr);
+        if (!matchedTerm) {
           showToast('⚠ Term not found — returning to Vocabulary');
           _pushHash('#vocabulary');
           return;
         }
         switchTopTab('vocabulary');
-        openEditView(termId);
+        openEditView(matchedTerm.id);
       } else {
         switchTopTab('vocabulary');
         if (!allTerms.length) loadTerms();
