@@ -1436,9 +1436,11 @@
         bv = bv ? new Date(bv).getTime() : 0;
         return sortDir === 'asc' ? av - bv : bv - av;
       }
-      // Strip leading non-alphanumeric characters (e.g. parentheses) before comparing
-      const norm = s => s.toString().replace(/^[^a-zA-Z一-鿿]+/, '');
-      const cmp = norm(av).localeCompare(norm(bv), 'zh');
+      // Normalize for sorting: remove tone marks (ā→a, á→a …), then strip leading punctuation
+      const norm = s => s.toString()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/^[^a-zA-Z一-鿿]+/, '');
+      const cmp = norm(av).localeCompare(norm(bv), 'en');
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return terms;
