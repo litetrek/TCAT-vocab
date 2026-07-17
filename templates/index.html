@@ -1676,9 +1676,14 @@
       const textEl = (!canEdit || isFinalized)
         ? `<div class="tp-text"${bold ? ' style="font-weight:600;"' : ''}>${text || '<span class="placeholder">—</span>'}</div>`
         : `<textarea class="tp-textarea" data-term-id="${t.id}" data-field="${field}" data-orig="${safeOrig}" onblur="autoSaveField(this)" oninput="autoResizeTextarea(this)" placeholder="Enter translation…">${text}</textarea>`;
-      const finalEl = isLeaderOrAdmin && !isFinalized && text
-        ? `<button class="admin-pick-btn${isFirst?' selected':''}" onclick="setFinal('${t.id}','${label}','first',this)" title="Set as Suggestion 1">Suggest 1</button>`
-        : '';
+      let finalEl = '';
+      if (isLeaderOrAdmin && !isFinalized && text) {
+        if (!t.trans_first) {
+          finalEl = `<button class="admin-pick-btn${isFirst?' selected':''}" onclick="setFinal('${t.id}','${label}','first',this)" title="Set as Suggestion 1">Suggest 1</button>`;
+        } else if (!isFirst && !isSecond) {
+          finalEl = `<button class="admin-pick-btn" onclick="setFinal('${t.id}','${label}','second',this)" title="Set as Suggestion 2">Suggest 2</button>`;
+        }
+      }
       return `
         <div class="${extraClass}${isFirst||isSecond?' is-final':''}">
           <div class="tp-label">
@@ -1701,8 +1706,8 @@
     const bottomRow = `
       <div class="trans-grid-3">
         ${transPanel('trans_known',  'TranslationKnown',  'Known Translation', 'trans-panel')}
-        ${transPanel('trans_other1', 'TranslationOther1', 'Suggested 1',       'trans-panel')}
-        ${transPanel('trans_other2', 'TranslationOther2', 'Suggested 2',       'trans-panel')}
+        ${transPanel('trans_other1', 'TranslationOther1', 'Other 1', 'trans-panel')}
+        ${transPanel('trans_other2', 'TranslationOther2', 'Other 2', 'trans-panel')}
       </div>`;
 
     let apText = '';
@@ -1713,7 +1718,7 @@
     }
 
     const finalOpts = [['Translation1','AI Translate 1'],['Translation2','AI Translate 2'],['Translation3','AI Translate 3'],
-                       ['TranslationKnown','Known'],['TranslationOther1','Suggested 1'],['TranslationOther2','Suggested 2']];
+                       ['TranslationKnown','Known'],['TranslationOther1','Other 1'],['TranslationOther2','Other 2']];
     const hasEmptyOpts   = !t.trans1 || !t.trans2 || !t.trans3;
     const aiTranslateBtn = canEdit && hasEmptyOpts
       ? `<button class="btn btn-secondary btn-sm" id="ai-btn-${t.id}" onclick="aiTranslate('${t.id}')">✦ AI Translate</button>`
