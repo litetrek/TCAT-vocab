@@ -1652,6 +1652,7 @@
 
   function buildEditView(t) {
     const isLeaderOrAdmin = isAdmin || userRole === 'leader';
+    const isFinalized     = t.status === 'reviewed';
     const firstKey  = t.final || '';
     const secondKey = findKeyByText(t, t.trans_second) || '';
     const hasFirst  = !!(t.trans_first);
@@ -1671,7 +1672,6 @@
       const text        = t[field] || '';
       const isFirst     = firstKey  === label;
       const isSecond    = secondKey === label;
-      const isFinalized = t.status === 'reviewed';
       const safeOrig    = text.replace(/"/g,'&quot;');
       const bold        = isFirst || isSecond;
       const textEl = (!canEdit || isFinalized)
