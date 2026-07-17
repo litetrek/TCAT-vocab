@@ -683,10 +683,10 @@
 
 <!-- ── TOP TAB BAR ────────────────────────────────────────────────────────── -->
 <div class="top-tab-bar" id="top-tab-bar">
-  <button class="top-tab-btn active" data-tab="vocabulary" onclick="switchTopTab('vocabulary')">Vocabulary</button>
-  <button class="top-tab-btn" data-tab="extraction" onclick="switchTopTab('extraction')">Extraction</button>
+  <button class="top-tab-btn active" data-tab="vocabulary" onclick="location.hash='#vocabulary'">Vocabulary</button>
+  <button class="top-tab-btn" data-tab="extraction" onclick="location.hash='#extraction'">Extraction</button>
   {% if can_access_translation %}
-  <button class="top-tab-btn" data-tab="translation" onclick="switchTopTab('translation')">Translation</button>
+  <button class="top-tab-btn" data-tab="translation" onclick="location.hash='#translation'">Translation</button>
   {% endif %}
 </div>
 
@@ -1583,6 +1583,7 @@
 
   // ── EDIT VIEW ────────────────────────────────────────────────────────────
   function openEditView(termId) {
+    _pushHash('#vocabulary/term/' + termId);
     const term = allTerms.find(t => t.id === termId);
     if (!term) return;
     editingTermId = termId;
@@ -1596,6 +1597,7 @@
   }
 
   function closeEditView() {
+    _pushHash('#vocabulary');
     editingTermId = null;
     document.getElementById('edit-view').style.display = 'none';
     document.getElementById('list-view').style.display = 'block';
@@ -2451,6 +2453,7 @@
   }
 
   function extSwitchDocument() {
+    _pushHash('#extraction');
     extShowPicker();
     extLoadDocumentList();
   }
@@ -2532,6 +2535,7 @@
       extRenderParagraph();
       extLoadDocumentList();
       extShowWorking(extSourceTitle, (document.getElementById('ext-chapter-input').value || '').trim());
+      _pushHash('#extraction/doc/' + extDocumentId + '/para/' + extCurrentIndex);
     } catch(e) {
       extShowError('Failed to upload files. Please try again.');
     } finally {
@@ -2583,6 +2587,7 @@
     extCurrentIndex = newIndex;
     extRenderParagraph();
     extSaveProgress(extCurrentIndex);
+    _replaceHash('#extraction/doc/' + extDocumentId + '/para/' + extCurrentIndex);
   }
 
   function extJumpFrom(inputId) {
@@ -2595,6 +2600,7 @@
     extCurrentIndex = n - 1;
     extRenderParagraph();
     extSaveProgress(extCurrentIndex);
+    _replaceHash('#extraction/doc/' + extDocumentId + '/para/' + extCurrentIndex);
   }
 
   async function extLoadDocumentList() {
@@ -2660,6 +2666,7 @@
       extRenderParagraph();
       const doc = extDocumentsCache[documentId] || {};
       extShowWorking(doc.SourceName || '', doc.Title || '');
+      _pushHash('#extraction/doc/' + extDocumentId + '/para/' + extCurrentIndex);
     } catch(e) {
       showToast('⚠ Failed to resume document');
     }
@@ -3144,6 +3151,113 @@
     _resizeTimer = setTimeout(() => { if (!editingTermId) applyView(); }, 200);
   });
 
+  // ── HASH-BASED ROUTING ──────────────────────────────────────────────────────
+  function _pushHash(h) {
+    if (location.hash !== h) history.pushState(null, '', h);
+  }
+  function _replaceHash(h) {
+    if (location.hash !== h) history.replaceState(null, '', h);
+  }
+
+  async function renderFromHash() {
+    const raw   = location.hash.slice(1);
+    const parts = raw.split('/').filter(Boolean);
+    const top   = parts[0] || 'vocabulary';
+
+    if (top === 'extraction') {
+      if (parts[1] === 'doc' && parts[2]) {
+        const docId     = parts[2];
+        const paraIndex = parts[3] === 'para' && parts[4] !== undefined ? parseInt(parts[4], 10) : 0;
+        switchTopTab('extraction');
+        try {
+          await extLoadDocumentList();
+          const res  = await fetch(`/api/extract/documents/${docId}/paragraphs`);
+          const data = await res.json();
+          if (data.error || !data.paragraphs || !data.paragraphs.length) throw new Error(data.error || 'empty');
+          extDocumentId   = docId;
+          extParagraphs   = data.paragraphs;
+          extCurrentIndex = Math.max(0, Math.min(paraIndex, data.paragraphs.length - 1));
+          extRenderParagraph();
+          const doc = extDocumentsCache[docId] || {};
+          extShowWorking(doc.SourceName || '', doc.Title || '');
+          extFetchKnownTerms();
+        } catch {
+          showToast('⚠ Document not found — returning to Extraction');
+          _pushHash('#extraction');
+          extShowPicker();
+        }
+      } else {
+        switchTopTab('extraction');
+        extShowPicker();
+      }
+
+    } else if (top === 'translation') {
+      if (typeof transShowPicker === 'undefined') { switchTopTab('vocabulary'); return; }
+      const sub = parts[1];
+      if (sub === 'chapters' && parts[2]) {
+        const bookId = parseInt(parts[2], 10);
+        switchTopTab('translation');
+        try {
+          const r     = await fetch('/api/trans/books');
+          const books = await r.json();
+          const book  = books.find(b => b.id === bookId);
+          if (!book) throw new Error('not found');
+          await transOpenBook(book.id, book.title);
+        } catch {
+          showToast('⚠ Book not found — returning to Translation');
+          _pushHash('#translation');
+          transShowPicker();
+        }
+      } else if ((sub === 'units' || sub === 'review') && parts[2] && parts[3]) {
+        const bookId    = parseInt(parts[2], 10);
+        const chapterId = parseInt(parts[3], 10);
+        switchTopTab('translation');
+        try {
+          const r1    = await fetch('/api/trans/books');
+          const books = await r1.json();
+          const book  = books.find(b => b.id === bookId);
+          if (!book) throw new Error('book not found');
+          _transCurrentBookId    = book.id;
+          _transCurrentBookTitle = book.title;
+          const r2       = await fetch(`/api/trans/books/${bookId}/chapters`);
+          const chapters = await r2.json();
+          const ch       = chapters.find(c => c.id === chapterId);
+          if (!ch) throw new Error('chapter not found');
+          if (sub === 'units') await transOpenChapter(chapterId, ch.title || '');
+          else                  await transOpenReview(chapterId, ch.title || '');
+        } catch {
+          showToast('⚠ Chapter not found — returning to Translation');
+          _pushHash('#translation');
+          transShowPicker();
+        }
+      } else if (sub === 'styleguide') {
+        switchTopTab('translation');
+        transShowStyleGuide();
+      } else {
+        switchTopTab('translation');
+        transShowPicker();
+      }
+
+    } else {
+      if (parts[1] === 'term' && parts[2]) {
+        const termId = parseInt(parts[2], 10);
+        if (!allTerms.length) await loadTerms();
+        if (!allTerms.find(t => t.id === termId)) {
+          showToast('⚠ Term not found — returning to Vocabulary');
+          _pushHash('#vocabulary');
+          return;
+        }
+        switchTopTab('vocabulary');
+        openEditView(termId);
+      } else {
+        switchTopTab('vocabulary');
+        if (!allTerms.length) loadTerms();
+      }
+    }
+  }
+
+  window.addEventListener('hashchange', renderFromHash);
+
   loadTerms();
   extLoadDocumentList();
   document.getElementById('ext-text-zh').addEventListener('mouseup', extHandleSelection);
@@ -3173,12 +3287,14 @@
   }
 
   function transShowPicker() {
+    _pushHash('#translation');
     _transHideAll();
     document.getElementById('trans-picker').style.display = '';
     transLoadBooks();
   }
 
   function transShowChapterList() {
+    _pushHash('#translation/chapters/' + _transCurrentBookId);
     _transHideAll();
     document.getElementById('trans-chapter-view').style.display = '';
   }
@@ -3376,6 +3492,7 @@
   let sgLoadedRules = [];
 
   function transShowStyleGuide() {
+    _pushHash('#translation/styleguide');
     _transHideAll();
     document.getElementById('trans-styleguide-view').style.display = '';
     sgLoadRules();
@@ -3554,6 +3671,7 @@
   // ── Chapter list ─────────────────────────────────────────────────────────
 
   async function transOpenBook(bookId, bookTitle) {
+    _pushHash('#translation/chapters/' + bookId);
     _transCurrentBookId    = bookId;
     _transCurrentBookTitle = bookTitle;
     document.getElementById('trans-chapter-title').innerHTML =
@@ -3654,6 +3772,7 @@
   // ── Unit browse (read-only) ───────────────────────────────────────────────
 
   async function transOpenChapter(chapterId, chapterTitle) {
+    _pushHash('#translation/units/' + _transCurrentBookId + '/' + chapterId);
     document.getElementById('trans-unit-title').innerHTML =
       `<span style="font-size:1.1rem;font-style:normal;">${escHtml(_transCurrentBookTitle)}</span> — ${escHtml(chapterTitle || 'Chapter')}`;
     const list = document.getElementById('trans-unit-list');
@@ -3799,6 +3918,7 @@
   let _trdPanelPos        = null;
 
   async function transOpenReview(chapterId, chapterTitle) {
+    _pushHash('#translation/review/' + _transCurrentBookId + '/' + chapterId);
     _trdChapterId = chapterId;
     _trdDrafts    = {};
     trdKnownTerms = [];
@@ -4474,6 +4594,7 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape') trdClearSelection(); });
 
   {% endif %}
+  if (location.hash && location.hash.length > 1) renderFromHash();
 </script>
 </body>
 </html>
