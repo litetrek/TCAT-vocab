@@ -1513,8 +1513,8 @@
           <thead><tr>
             <th class="${thClass('chinese')}" onclick="setSort('chinese')">Term ${sortIcon('chinese')}</th>
             <th class="${thClass('pinyin')}"  onclick="setSort('pinyin')">Pinyin ${sortIcon('pinyin')}</th>
-            <th>First Choice</th>
-            <th>Second Choice</th>
+            <th>${currentFilter === 'reviewed' ? 'First Choice' : 'AI 1'}</th>
+            <th>${currentFilter === 'reviewed' ? 'Second Choice' : 'AI 2'}</th>
             <th>Status</th>
             <th>Source</th>
             <th class="${thClass('timestamp')}" onclick="setSort('timestamp')">Added ${sortIcon('timestamp')}</th>
@@ -1551,8 +1551,13 @@
   }
 
   function tableRow(t) {
-    const firstText  = t.trans_first  ? (getTermText(t, t.trans_first)  || t.trans_first)  : '';
-    const secondText = t.trans_second ? (getTermText(t, t.trans_second) || t.trans_second) : '';
+    const showReviewed = currentFilter === 'reviewed';
+    const firstText  = showReviewed
+      ? (t.trans_first  ? (getTermText(t, t.trans_first)  || t.trans_first)  : '')
+      : (t.trans1 || '');
+    const secondText = showReviewed
+      ? (t.trans_second ? (getTermText(t, t.trans_second) || t.trans_second) : '')
+      : (t.trans2 || '');
     const src        = sourceName(t.source);
     const dateStr    = t.timestamp ? t.timestamp.slice(0,10) : '';
     const statusBadge = t.status === 'reviewed'
