@@ -1287,8 +1287,8 @@
     }
     return null;
   }
-  let sortField   = 'timestamp';
-  let sortDir     = 'desc';
+  let sortField   = 'pinyin';
+  let sortDir     = 'asc';
   let editingTermId = null;
 
   // ── EXTRACTION STATE ─────────────────────────────────────────────────────
@@ -1505,7 +1505,7 @@
       : `<div class="table-wrap"><table class="vocab-table">
           <thead><tr>
             <th class="${thClass('chinese')}" onclick="setSort('chinese')">Term ${sortIcon('chinese')}</th>
-            <th class="${thClass('pinyin')}"  onclick="setSort('pinyin')">Romanization ${sortIcon('pinyin')}</th>
+            <th class="${thClass('pinyin')}"  onclick="setSort('pinyin')">Pinyin ${sortIcon('pinyin')}</th>
             <th>First Choice</th>
             <th>Second Choice</th>
             <th>Status</th>
