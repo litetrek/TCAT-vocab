@@ -1766,7 +1766,7 @@
           <span>${apText}</span>
           <div style="display:flex;gap:0.5rem;align-items:center;">
             ${aiTranslateBtn}
-            ${isLeaderOrAdmin && !isFinalized ? `<button class="btn btn-primary btn-sm" onclick="markReviewed('${t.id}')">✓ Reviewed</button>` : ''}
+            ${isLeaderOrAdmin && !isFinalized ? `<button class="btn btn-primary btn-sm" onclick="markReviewed('${t.id}')">Set Reviewed</button>` : ''}
             ${isLeaderOrAdmin && isFinalized ? `<button class="btn btn-secondary btn-sm" onclick="resetFinal('${t.id}')" style="color:var(--red-soft);border-color:rgba(139,32,32,0.25);">↺ Reset Suggestions</button>` : ''}
           </div>
         </div>
@@ -1940,6 +1940,7 @@
         term[field] = value; ta.dataset.orig = value;
         if (data.romanization_plain !== undefined) term.romanization_plain = data.romanization_plain;
         if (data.last_modified_by) { term.last_modified_by = data.last_modified_by; term.last_modified_time = data.last_modified_time; updateModifiedDisplay(termId); }
+        if (editingTermId === termId) refreshEditView();
       }
       showToast('✓ Saved');
     } catch(e) { showToast('⚠ Failed to save'); ta.value = orig; }
