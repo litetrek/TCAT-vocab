@@ -199,6 +199,7 @@
     .admin-pick-btn { font-family: 'EB Garamond', serif; font-size: 0.8rem; padding: 0.22rem 0.6rem; border-radius: 2px; border: 1px solid rgba(139,32,32,0.3); background: transparent; color: var(--red-soft); cursor: pointer; transition: all 0.2s; }
     .admin-pick-btn:hover { background: var(--red); color: white; border-color: var(--red); }
     .admin-pick-btn.selected { background: var(--red); color: white; border-color: var(--red); }
+    .tag-status-pending { background: rgba(180,120,0,0.08); color: #7a5010; border: 1px solid rgba(180,120,0,0.35); font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 3px; font-family: inherit; letter-spacing: 0.06em; }
     .btn-trash-field { font-size: 0.8rem; padding: 0.22rem 0.45rem; border-radius: 2px; border: 1px solid rgba(139,32,32,0.2); background: transparent; color: rgba(139,32,32,0.45); cursor: pointer; transition: all 0.2s; line-height: 1; }
     .btn-trash-field:hover { background: var(--red); color: white; border-color: var(--red); }
 
@@ -717,6 +718,7 @@
       <div class="sidebar-section-title">Filter</div>
       <div class="filter-group">
         <button class="filter-btn active" onclick="setFilter('all',this)">All Terms <span class="count" id="cnt-all">0</span></button>
+        <button class="filter-btn" onclick="setFilter('new',this)">New <span class="count" id="cnt-new">0</span></button>
         <button class="filter-btn" onclick="setFilter('pending',this)">Pending <span class="count" id="cnt-pending">0</span></button>
         <button class="filter-btn" onclick="setFilter('reviewed',this)">Reviewed <span class="count" id="cnt-finalized">0</span></button>
       </div>
@@ -1327,13 +1329,15 @@
   function updateStats() {
     const base      = currentSource ? allTerms.filter(t => t.source === currentSource) : allTerms;
     const total     = base.length;
-    const finalized = base.filter(t => t.status === 'reviewed').length;
-    const pending   = total - finalized;
+    const reviewed  = base.filter(t => t.status === 'reviewed').length;
+    const pending   = base.filter(t => t.status === 'pending').length;
+    const newCount  = base.filter(t => t.status === 'new' || (!t.status || t.status === '')).length;
     document.getElementById('stat-total').textContent    = total;
-    document.getElementById('stat-final').textContent    = finalized;
+    document.getElementById('stat-final').textContent    = reviewed;
     document.getElementById('cnt-all').textContent       = total;
+    document.getElementById('cnt-new').textContent       = newCount;
     document.getElementById('cnt-pending').textContent   = pending;
-    document.getElementById('cnt-finalized').textContent = finalized;
+    document.getElementById('cnt-finalized').textContent = reviewed;
   }
 
   // ── FILTER / SORT / SEARCH ───────────────────────────────────────────────
@@ -1406,8 +1410,9 @@
     }
     if (currentSubjectField) terms = terms.filter(t => t.subject_field === currentSubjectField);
 
-    if (currentFilter === 'pending')   terms = terms.filter(t => t.status !== 'reviewed');
-    if (currentFilter === 'reviewed')  terms = terms.filter(t => t.status === 'reviewed');
+    if (currentFilter === 'new')      terms = terms.filter(t => t.status === 'new' || !t.status);
+    if (currentFilter === 'pending')  terms = terms.filter(t => t.status === 'pending');
+    if (currentFilter === 'reviewed') terms = terms.filter(t => t.status === 'reviewed');
 
     if (q) {
       const words = q.split(/\s+/).filter(Boolean);
@@ -1522,7 +1527,9 @@
     const firstText   = t.trans_first ? (getTermText(t, t.trans_first) || t.trans_first) : '';
     const statusBadge = t.status === 'reviewed'
       ? '<span class="tag tag-final">✓ Reviewed</span>'
-      : '<span class="tag tag-pending">Pending</span>';
+      : t.status === 'pending'
+        ? '<span class="tag tag-status-pending">Pending</span>'
+        : '<span class="tag tag-pending">New</span>';
     const cardClass = t.status === 'reviewed' ? 'vocab-card card-finalized' : 'vocab-card';
     return `
       <div class="${cardClass}" onclick="openEditView('${t.id}')">
@@ -1548,7 +1555,9 @@
     const dateStr    = t.timestamp ? t.timestamp.slice(0,10) : '';
     const statusBadge = t.status === 'reviewed'
       ? '<span class="tag tag-final">✓ Reviewed</span>'
-      : '<span class="tag tag-pending">Pending</span>';
+      : t.status === 'pending'
+        ? '<span class="tag tag-status-pending">Pending</span>'
+        : '<span class="tag tag-pending">New</span>';
     const row = t.status === 'reviewed' ? 'row-finalized' : '';
     return `
       <tr class="${row}" onclick="openEditView('${t.id}')">
@@ -1605,6 +1614,7 @@
     finalized_second: 'Reviewed 2nd',
     reset_final:      'Reset Suggestions',
     reviewed:         'Marked Reviewed',
+    marked_pending:   'Marked Pending',
     ai_translated:    'AI Translated',
   };
 
@@ -1668,7 +1678,9 @@
 
     const statusBadge = t.status === 'reviewed'
       ? '<span class="tag tag-final">✓ Reviewed</span>'
-      : '<span class="tag tag-pending">Pending</span>';
+      : t.status === 'pending'
+        ? '<span class="tag tag-status-pending">Pending</span>'
+        : '<span class="tag tag-pending">New</span>';
 
     function transPanel(field, label, displayLabel, extraClass) {
       const text        = t[field] || '';
@@ -1773,6 +1785,7 @@
           <div style="display:flex;gap:0.5rem;align-items:center;">
             ${aiTranslateBtn}
             ${isLeaderOrAdmin && !isFinalized ? `<button class="btn btn-primary btn-sm" onclick="markReviewed('${t.id}')">Set Reviewed</button>` : ''}
+            ${isLeaderOrAdmin && t.status !== 'pending' ? `<button class="btn btn-secondary btn-sm" onclick="markPending('${t.id}')">Make Pending</button>` : ''}
             ${isLeaderOrAdmin && isFinalized ? `<button class="btn btn-secondary btn-sm" onclick="resetFinal('${t.id}')" style="color:var(--red-soft);border-color:rgba(139,32,32,0.25);">↺ Reset Suggestions</button>` : ''}
           </div>
         </div>
@@ -1876,6 +1889,23 @@
     } catch(e) { showToast('⚠ Failed to clear'); }
   }
 
+  // ── MARK PENDING ─────────────────────────────────────────────────────────
+  async function markPending(termId) {
+    try {
+      const res  = await fetch(`/api/terms/${termId}/pending`, {method:'POST', headers:{'Content-Type':'application/json'}});
+      const data = await res.json();
+      if (data.error) { showToast('⚠ ' + data.error); return; }
+      const term = allTerms.find(t => t.id === termId);
+      if (term) {
+        term.status = 'pending';
+        if (data.last_modified_by) { term.last_modified_by = data.last_modified_by; term.last_modified_time = data.last_modified_time; }
+        updateStats();
+        if (editingTermId === termId) refreshEditView();
+      }
+      showToast('✓ Marked as Pending');
+    } catch(e) { showToast('⚠ Error marking as pending'); }
+  }
+
   // ── MARK REVIEWED ────────────────────────────────────────────────────────
   async function markReviewed(termId) {
     try {
@@ -1902,7 +1932,7 @@
       if (data.error) { showToast('⚠ ' + data.error); return; }
       const term = allTerms.find(t => t.id === termId);
       if (term) {
-        term.final = ''; term.trans_first = ''; term.trans_second = ''; term.status = 'pending';
+        term.final = ''; term.trans_first = ''; term.trans_second = ''; term.status = 'new';
         if (data.last_modified_by) { term.last_modified_by = data.last_modified_by; term.last_modified_time = data.last_modified_time; }
         updateStats(); if (editingTermId === termId) refreshEditView();
       }

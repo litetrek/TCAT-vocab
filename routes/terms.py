@@ -254,6 +254,25 @@ def api_reset_final(term_id):
         return jsonify({"error": str(e)}), 500
 
 
+@terms_bp.route("/api/terms/<term_id>/pending", methods=["POST"])
+def api_mark_pending(term_id):
+    if not is_logged_in():
+        return jsonify({"error": "Unauthorized"}), 401
+    if not is_leader():
+        return jsonify({"error": "Leader or admin only"}), 403
+    try:
+        now_str  = datetime.now().strftime("%Y-%m-%d %H:%M")
+        modifier = session["user_email"]
+        chinese  = terms_repo.mark_pending(term_id, modifier, now_str)
+        if chinese is None:
+            return jsonify({"error": "Term not found"}), 404
+        write_audit(term_id, chinese, modifier, session.get("user_name", ""),
+                    "marked_pending", details="Marked as Pending")
+        return jsonify({"status": "pending", "last_modified_by": modifier, "last_modified_time": now_str})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @terms_bp.route("/api/terms/<term_id>/review", methods=["POST"])
 def api_mark_reviewed(term_id):
     if not is_logged_in():

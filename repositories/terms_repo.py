@@ -99,7 +99,7 @@ def _row_to_response(row):
         "trans_other2":  _v(row, "translation_other2"),
         "timestamp":          _fmt_ts(_v(row, "added_at")),
         "final":              _v(row, "final"),
-        "status":             _v(row, "status") or "pending",
+        "status":             _v(row, "status") or "new",
         "added_by":           _v(row, "added_by"),
         "last_modified_by":   _v(row, "last_modified_by"),
         "last_modified_time": _fmt_ts(_v(row, "last_modified_at")),
@@ -198,7 +198,7 @@ def create_term(data):
         if col in _ALLOWED_INSERT_COLS:
             mapped[col] = _to_pg(v)
     if not mapped.get("status"):
-        mapped["status"] = "pending"
+        mapped["status"] = "new"
 
     supabase.table("terms").insert(mapped).execute()
     return display_id
@@ -287,11 +287,24 @@ def reset_final(term_id, modifier, now_str):
         "translation_first":  None,
         "translation_second": None,
         "final":              None,
-        "status":             "pending",
+        "status":             "new",
         "last_modified_by":   modifier,
         "last_modified_at":   _to_pg(now_str),
     }).eq("display_id", term_id).execute()
     return old_first, old_second, chinese
+
+
+def mark_pending(term_id, modifier, now_str):
+    result = supabase.table("terms").select("chinese").eq("display_id", term_id).execute()
+    if not result.data:
+        return None
+    chinese = result.data[0].get("chinese") or ""
+    supabase.table("terms").update({
+        "status":           "pending",
+        "last_modified_by": modifier,
+        "last_modified_at": _to_pg(now_str),
+    }).eq("display_id", term_id).execute()
+    return chinese
 
 
 def mark_reviewed(term_id, modifier, now_str):
