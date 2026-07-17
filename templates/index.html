@@ -1678,10 +1678,10 @@
         ? `<div class="tp-text"${bold ? ' style="font-weight:600;"' : ''}>${text || '<span class="placeholder">—</span>'}</div>`
         : `<textarea class="tp-textarea" data-term-id="${t.id}" data-field="${field}" data-orig="${safeOrig}" onblur="autoSaveField(this)" oninput="autoResizeTextarea(this)" placeholder="Enter translation…">${text}</textarea>`;
       let finalEl = '';
-      if (isLeaderOrAdmin && !isFinalized && text) {
-        if (!t.trans_first) {
+      if (isLeaderOrAdmin && text) {
+        if (!isFinalized && !t.trans_first) {
           finalEl = `<button class="admin-pick-btn${isFirst?' selected':''}" onclick="setFinal('${t.id}','${label}','first',this)" title="Set as Suggestion 1">Suggest 1</button>`;
-        } else if (!isFirst && !isSecond) {
+        } else if (t.trans_first && !isFirst && !isSecond) {
           finalEl = `<button class="admin-pick-btn" onclick="setFinal('${t.id}','${label}','second',this)" title="Set as Suggestion 2">Suggest 2</button>`;
         }
       }
