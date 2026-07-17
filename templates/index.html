@@ -199,6 +199,8 @@
     .admin-pick-btn { font-family: 'EB Garamond', serif; font-size: 0.8rem; padding: 0.22rem 0.6rem; border-radius: 2px; border: 1px solid rgba(139,32,32,0.3); background: transparent; color: var(--red-soft); cursor: pointer; transition: all 0.2s; }
     .admin-pick-btn:hover { background: var(--red); color: white; border-color: var(--red); }
     .admin-pick-btn.selected { background: var(--red); color: white; border-color: var(--red); }
+    .btn-trash-field { font-size: 0.8rem; padding: 0.22rem 0.45rem; border-radius: 2px; border: 1px solid rgba(139,32,32,0.2); background: transparent; color: rgba(139,32,32,0.45); cursor: pointer; transition: all 0.2s; line-height: 1; }
+    .btn-trash-field:hover { background: var(--red); color: white; border-color: var(--red); }
 
     /* inline direct editing */
     .lock-icon { font-size: 0.68rem; color: rgba(107,90,58,0.4); cursor: default; }
@@ -1685,6 +1687,10 @@
           finalEl = `<button class="admin-pick-btn" onclick="setFinal('${t.id}','${label}','second',this)" title="Set as Suggestion 2">Suggest 2</button>`;
         }
       }
+      const canTrash = text && !isFirst && !isSecond && (isFinalized ? isLeaderOrAdmin : canEdit);
+      const trashEl  = canTrash
+        ? `<button class="btn-trash-field" onclick="clearField('${t.id}','${field}',this)" title="Clear this translation">🗑</button>`
+        : '';
       return `
         <div class="${extraClass}${isFirst||isSecond?' is-final':''}">
           <div class="tp-label">
@@ -1693,7 +1699,7 @@
             ${isFirst  ? '<span class="final-badge-1st">Suggest 1</span>' : ''}
             ${isSecond ? '<span class="final-badge-2nd">Suggest 2</span>' : ''}
           </div>
-          <div class="tp-body">${textEl}${finalEl}</div>
+          <div class="tp-body">${textEl}${finalEl}${trashEl}</div>
         </div>`;
     }
 
@@ -1851,6 +1857,23 @@
       }
       showToast(which === 'first' ? '✓ Suggest 1 saved!' : '✓ Suggest 2 saved!');
     } catch(e) { showToast('⚠ Error setting final'); }
+  }
+
+  // ── CLEAR TRANSLATION FIELD ──────────────────────────────────────────────
+  async function clearField(termId, field, btn) {
+    if (!confirm('Clear this translation? It will be erased permanently.')) return;
+    try {
+      const res  = await fetch(`/api/terms/${termId}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({field, value: ''}) });
+      const data = await res.json();
+      if (data.error) { showToast('⚠ ' + data.error); return; }
+      const term = allTerms.find(t => t.id === termId);
+      if (term) {
+        term[field] = '';
+        if (data.last_modified_by) { term.last_modified_by = data.last_modified_by; term.last_modified_time = data.last_modified_time; }
+        if (editingTermId === termId) refreshEditView();
+      }
+      showToast('✓ Translation cleared');
+    } catch(e) { showToast('⚠ Failed to clear'); }
   }
 
   // ── MARK REVIEWED ────────────────────────────────────────────────────────
