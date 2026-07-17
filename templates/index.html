@@ -1806,10 +1806,10 @@
             <div class="notes-display${t.notes ? '' : ' empty'}" id="notes-display-${t.id}">${escHtml(t.notes) || 'No notes yet.'}</div>
           </div>
           ${canEdit ? `<div class="meta-field full">
-            <label>Attach Note</label>
+            <label>Additional Note</label>
             <textarea class="meta-textarea" id="attach-note-${t.id}" rows="2" placeholder="Add a new note…" oninput="autoResizeTextarea(this)"></textarea>
             <div style="display:flex;align-items:center;gap:0.75rem;margin-top:0.35rem;">
-              <button class="btn-save-note" onclick="attachNote('${t.id}', this)">Save to Note</button>
+              <button class="btn-save-note" onclick="attachNote('${t.id}', this)">Add to Note</button>
               <span class="attach-note-msg" id="attach-note-msg-${t.id}"></span>
             </div>
           </div>` : ''}
