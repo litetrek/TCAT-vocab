@@ -1436,7 +1436,9 @@
         bv = bv ? new Date(bv).getTime() : 0;
         return sortDir === 'asc' ? av - bv : bv - av;
       }
-      const cmp = av.toString().localeCompare(bv.toString(), 'zh');
+      // Strip leading non-alphanumeric characters (e.g. parentheses) before comparing
+      const norm = s => s.toString().replace(/^[^a-zA-Z一-鿿]+/, '');
+      const cmp = norm(av).localeCompare(norm(bv), 'zh');
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return terms;
