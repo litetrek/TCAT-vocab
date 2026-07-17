@@ -131,7 +131,7 @@
     .tag-admin   { color: var(--red); border-color: rgba(139,32,32,0.3); background: rgba(139,32,32,0.06); }
 
     /* ── VOCAB TABLE ────────────────────────────────────────────────────── */
-    .table-wrap { background: white; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; box-shadow: var(--shadow); }
+    .table-wrap { background: white; border: 1px solid var(--border); border-radius: 4px; overflow-x: auto; overflow-y: hidden; box-shadow: var(--shadow); }
     .vocab-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
     .vocab-table thead { position: sticky; top: 0; z-index: 5; }
     .vocab-table th { background: var(--ink); color: rgba(201,168,76,0.72); font-family: 'Cormorant Garamond', serif; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.14em; padding: 0.7rem 0.9rem; text-align: left; white-space: nowrap; }
@@ -1219,12 +1219,12 @@
     document.addEventListener('DOMContentLoaded', function() {
       const {layout, sidebar, handle} = els();
 
-      // restore saved width
-      const savedW = localStorage.getItem(WKEY);
-      if (savedW) layout.style.gridTemplateColumns = savedW + 'px 1fr';
-
-      // restore collapsed state
-      if (localStorage.getItem(HKEY) === '1') applyCollapsed(true, false);
+      // Only restore sidebar width/collapse on desktop — mobile uses CSS media query
+      if (!isMobile()) {
+        const savedW = localStorage.getItem(WKEY);
+        if (savedW) layout.style.gridTemplateColumns = savedW + 'px 1fr';
+        if (localStorage.getItem(HKEY) === '1') applyCollapsed(true, false);
+      }
 
       // drag-to-resize
       let dragging = false, startX = 0, startW = 0;
@@ -3130,6 +3130,8 @@
   let _resizeTimer;
   window.addEventListener('resize', () => {
     clearTimeout(_resizeTimer);
+    // When entering mobile, clear any JS-set inline grid style so the CSS media query wins
+    if (isMobile()) document.getElementById('vocab-view').style.gridTemplateColumns = '';
     _resizeTimer = setTimeout(() => { if (!editingTermId) applyView(); }, 200);
   });
 
