@@ -1,0 +1,29 @@
+# Build artifacts
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Local dev
+.env
+.env.*
+
+# One-time scripts — not needed at runtime
+scripts/
+migrations/
+archive/
+backup/
+import/
+
+# Documents / source material — not served by Flask
+documents/
+
+# Dev notes
+.claude/
+docs/
+*.md
+deploy_note.md
+
+# CGI entry point — replaced by api/index.py on Vercel
+index.cgi

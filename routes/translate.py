@@ -1,4 +1,5 @@
 import json
+import time
 from datetime import datetime, timezone
 from functools import wraps
 from flask import Blueprint, jsonify, request, session
@@ -545,6 +546,7 @@ def api_translate_unit(unit_id):
     active_rules       = _get_active_style_rules()
     similar_examples   = _get_similar_examples(chinese_text)
 
+    _t0 = time.time()
     ai_result = translate_unit(
         chinese_text,
         term_constraints=term_hits,
@@ -553,6 +555,14 @@ def api_translate_unit(unit_id):
         is_long_sentence=bool(unit.get("is_long_sentence")),
         style_rules=active_rules,
         similar_examples=similar_examples,
+    )
+    _elapsed = time.time() - _t0
+    _long_flag = "LONG_SENTENCE" if bool(unit.get("is_long_sentence")) else "normal"
+    print(
+        f"[translate_unit] unit_id={unit_id} {_long_flag} "
+        f"terms={len(term_hits)} examples={len(similar_examples)} "
+        f"elapsed={_elapsed:.2f}s",
+        flush=True,
     )
 
     is_first_draft = not (unit.get("english_draft") or "").strip()
