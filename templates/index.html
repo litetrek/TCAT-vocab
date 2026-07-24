@@ -127,8 +127,12 @@
     .tag-final   { color: #1a6b35; border-color: rgba(26,107,53,0.4);  background: rgba(26,107,53,0.08); }
     .tag-pending { color: #7a5010; border-color: rgba(122,80,16,0.3);  background: rgba(201,168,76,0.1); }
     .tag-id      { color: var(--text-soft); border-color: rgba(107,90,58,0.2); background: transparent; }
-    .tag-leader  { color: #7a5c10; border-color: rgba(201,168,76,0.5); background: rgba(201,168,76,0.18); }
-    .tag-admin   { color: var(--red); border-color: rgba(139,32,32,0.3); background: rgba(139,32,32,0.06); }
+    .tag-leader   { color: #7a5c10; border-color: rgba(201,168,76,0.5); background: rgba(201,168,76,0.18); }
+    .tag-admin    { color: var(--red); border-color: rgba(139,32,32,0.3); background: rgba(139,32,32,0.06); }
+    .tag-inactive { color: #888; border-color: rgba(100,100,100,0.3); background: rgba(100,100,100,0.07); }
+    .row-inactive td { opacity: 0.45; }
+    .btn-danger { font-family: 'EB Garamond', serif; font-size: 0.82rem; padding: 0.28rem 0.65rem; border-radius: 2px; border: 1px solid rgba(139,32,32,0.4); background: transparent; color: var(--red-soft); cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+    .btn-danger:hover { background: var(--red); color: white; border-color: var(--red); }
 
     /* ── VOCAB TABLE ────────────────────────────────────────────────────── */
     .table-wrap { background: white; border: 1px solid var(--border); border-radius: 4px; overflow-x: auto; overflow-y: hidden; box-shadow: var(--shadow); }
@@ -721,6 +725,7 @@
         <button class="filter-btn" onclick="setFilter('new',this)">New <span class="count" id="cnt-new">0</span></button>
         <button class="filter-btn" onclick="setFilter('pending',this)">Pending <span class="count" id="cnt-pending">0</span></button>
         <button class="filter-btn" onclick="setFilter('reviewed',this)">Reviewed <span class="count" id="cnt-finalized">0</span></button>
+        <button class="filter-btn" onclick="setFilter('inactive',this)">Inactive <span class="count" id="cnt-inactive">0</span></button>
       </div>
     </div>
 
@@ -1328,16 +1333,19 @@
 
   function updateStats() {
     const base      = currentSource ? allTerms.filter(t => t.source === currentSource) : allTerms;
-    const total     = base.length;
-    const reviewed  = base.filter(t => t.status === 'reviewed').length;
-    const pending   = base.filter(t => t.status === 'pending').length;
-    const newCount  = base.filter(t => t.status === 'new' || (!t.status || t.status === '')).length;
+    const active    = base.filter(t => t.status !== 'inactive');
+    const total     = active.length;
+    const reviewed  = active.filter(t => t.status === 'reviewed').length;
+    const pending   = active.filter(t => t.status === 'pending').length;
+    const newCount  = active.filter(t => t.status === 'new' || (!t.status || t.status === '')).length;
+    const inactive  = base.filter(t => t.status === 'inactive').length;
     document.getElementById('stat-total').textContent    = total;
     document.getElementById('stat-final').textContent    = reviewed;
     document.getElementById('cnt-all').textContent       = total;
     document.getElementById('cnt-new').textContent       = newCount;
     document.getElementById('cnt-pending').textContent   = pending;
     document.getElementById('cnt-finalized').textContent = reviewed;
+    document.getElementById('cnt-inactive').textContent  = inactive;
   }
 
   // ── FILTER / SORT / SEARCH ───────────────────────────────────────────────
@@ -1410,9 +1418,14 @@
     }
     if (currentSubjectField) terms = terms.filter(t => t.subject_field === currentSubjectField);
 
-    if (currentFilter === 'new')      terms = terms.filter(t => t.status === 'new' || !t.status);
-    if (currentFilter === 'pending')  terms = terms.filter(t => t.status === 'pending');
-    if (currentFilter === 'reviewed') terms = terms.filter(t => t.status === 'reviewed');
+    if (currentFilter === 'inactive') {
+      terms = terms.filter(t => t.status === 'inactive');
+    } else {
+      terms = terms.filter(t => t.status !== 'inactive');
+      if (currentFilter === 'new')      terms = terms.filter(t => t.status === 'new' || !t.status);
+      if (currentFilter === 'pending')  terms = terms.filter(t => t.status === 'pending');
+      if (currentFilter === 'reviewed') terms = terms.filter(t => t.status === 'reviewed');
+    }
 
     if (q) {
       const words = q.split(/\s+/).filter(Boolean);
@@ -1533,7 +1546,9 @@
       ? '<span class="tag tag-final">✓ Reviewed</span>'
       : t.status === 'pending'
         ? '<span class="tag tag-status-pending">Pending</span>'
-        : '<span class="tag tag-pending">New</span>';
+        : t.status === 'inactive'
+          ? '<span class="tag tag-inactive">Inactive</span>'
+          : '<span class="tag tag-pending">New</span>';
     const cardClass = t.status === 'reviewed' ? 'vocab-card card-finalized' : 'vocab-card';
     return `
       <div class="${cardClass}" onclick="openEditView('${t.id}')">
@@ -1566,8 +1581,10 @@
       ? '<span class="tag tag-final">✓ Reviewed</span>'
       : t.status === 'pending'
         ? '<span class="tag tag-status-pending">Pending</span>'
-        : '<span class="tag tag-pending">New</span>';
-    const row = t.status === 'reviewed' ? 'row-finalized' : '';
+        : t.status === 'inactive'
+          ? '<span class="tag tag-inactive">Inactive</span>'
+          : '<span class="tag tag-pending">New</span>';
+    const row = t.status === 'reviewed' ? 'row-finalized' : t.status === 'inactive' ? 'row-inactive' : '';
     return `
       <tr class="${row}" onclick="openEditView('${t.id}')">
         <td><span class="cell-zh">${t.chinese}</span><span class="cell-id">${t.id}</span></td>
@@ -1691,7 +1708,9 @@
       ? '<span class="tag tag-final">✓ Reviewed</span>'
       : t.status === 'pending'
         ? '<span class="tag tag-status-pending">Pending</span>'
-        : '<span class="tag tag-pending">New</span>';
+        : t.status === 'inactive'
+          ? '<span class="tag tag-inactive">Inactive</span>'
+          : '<span class="tag tag-pending">New</span>';
 
     function transPanel(field, label, displayLabel, extraClass) {
       const text        = t[field] || '';
@@ -1793,11 +1812,14 @@
         ${bottomRow}
         <div class="status-bar" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
           <span>${apText}</span>
-          <div style="display:flex;gap:0.5rem;align-items:center;">
+          <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
             ${aiTranslateBtn}
-            ${isLeaderOrAdmin && !isFinalized ? `<button class="btn btn-primary btn-sm" onclick="markReviewed('${t.id}')">Set Reviewed</button>` : ''}
-            ${isLeaderOrAdmin && t.status !== 'pending' ? `<button class="btn btn-secondary btn-sm" onclick="markPending('${t.id}')">Make Pending</button>` : ''}
+            ${isLeaderOrAdmin && !isFinalized && t.status !== 'inactive' ? `<button class="btn btn-primary btn-sm" onclick="markReviewed('${t.id}')">Set Reviewed</button>` : ''}
+            ${isLeaderOrAdmin && t.status !== 'pending' && t.status !== 'inactive' ? `<button class="btn btn-secondary btn-sm" onclick="markPending('${t.id}')">Make Pending</button>` : ''}
             ${isLeaderOrAdmin && isFinalized ? `<button class="btn btn-secondary btn-sm" onclick="resetFinal('${t.id}')" style="color:var(--red-soft);border-color:rgba(139,32,32,0.25);">↺ Reset Suggestions</button>` : ''}
+            ${isLeaderOrAdmin && t.status !== 'inactive' ? `<button class="btn-danger btn-sm" onclick="markInactive('${t.id}')">Make Inactive</button>` : ''}
+            ${isLeaderOrAdmin && t.status === 'inactive' ? `<button class="btn btn-secondary btn-sm" onclick="reactivateTerm('${t.id}')">Restore</button>` : ''}
+            ${isAdmin ? `<button class="btn-danger btn-sm" onclick="deleteTerm('${t.id}')" style="margin-left:0.5rem;">Delete</button>` : ''}
           </div>
         </div>
       </div>
@@ -1949,6 +1971,58 @@
       }
       showToast('↺ Finalization reset');
     } catch(e) { showToast('⚠ Error resetting'); }
+  }
+
+  // ── MARK INACTIVE ────────────────────────────────────────────────────────
+  async function markInactive(termId) {
+    if (!confirm('Mark this term as inactive? It will be hidden from all views except the Inactive filter. You can restore it later.')) return;
+    try {
+      const res  = await fetch(`/api/terms/${termId}/inactive`, {method:'POST', headers:{'Content-Type':'application/json'}});
+      const data = await res.json();
+      if (data.error) { showToast('⚠ ' + data.error); return; }
+      const term = allTerms.find(t => t.id === termId);
+      if (term) {
+        term.status = 'inactive';
+        if (data.last_modified_by) { term.last_modified_by = data.last_modified_by; term.last_modified_time = data.last_modified_time; }
+        updateStats();
+        if (editingTermId === termId) refreshEditView();
+      }
+      showToast('✓ Term marked inactive');
+    } catch(e) { showToast('⚠ Error marking inactive'); }
+  }
+
+  // ── REACTIVATE ───────────────────────────────────────────────────────────
+  async function reactivateTerm(termId) {
+    try {
+      const res  = await fetch(`/api/terms/${termId}/reactivate`, {method:'POST', headers:{'Content-Type':'application/json'}});
+      const data = await res.json();
+      if (data.error) { showToast('⚠ ' + data.error); return; }
+      const term = allTerms.find(t => t.id === termId);
+      if (term) {
+        term.status = 'new';
+        if (data.last_modified_by) { term.last_modified_by = data.last_modified_by; term.last_modified_time = data.last_modified_time; }
+        updateStats();
+        if (editingTermId === termId) refreshEditView();
+      }
+      showToast('✓ Term restored');
+    } catch(e) { showToast('⚠ Error restoring term'); }
+  }
+
+  // ── DELETE TERM ──────────────────────────────────────────────────────────
+  async function deleteTerm(termId) {
+    const term = allTerms.find(t => t.id === termId);
+    const label = term ? `${term.chinese} (${termId})` : termId;
+    if (!confirm(`Permanently delete ${label}? This cannot be undone.`)) return;
+    try {
+      const res  = await fetch(`/api/terms/${termId}`, {method:'DELETE'});
+      const data = await res.json();
+      if (data.error) { showToast('⚠ ' + data.error); return; }
+      allTerms = allTerms.filter(t => t.id !== termId);
+      updateStats();
+      closeEditView();
+      applyView();
+      showToast('✓ Term deleted');
+    } catch(e) { showToast('⚠ Error deleting term'); }
   }
 
   // ── AI TRANSLATE (fill empty options) ────────────────────────────────────

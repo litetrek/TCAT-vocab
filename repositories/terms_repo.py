@@ -383,6 +383,45 @@ def get_translation_constraint_terms():
     return out
 
 
+def deactivate_term(term_id, modifier, now_str):
+    result = supabase.table("terms").select("chinese").eq("display_id", term_id).execute()
+    if not result.data:
+        return None
+    chinese = result.data[0].get("chinese") or ""
+    supabase.table("terms").update({
+        "status":           "inactive",
+        "last_modified_by": modifier,
+        "last_modified_at": _to_pg(now_str),
+    }).eq("display_id", term_id).execute()
+    return chinese
+
+
+def reactivate_term(term_id, modifier, now_str):
+    result = supabase.table("terms").select("chinese").eq("display_id", term_id).execute()
+    if not result.data:
+        return None
+    chinese = result.data[0].get("chinese") or ""
+    supabase.table("terms").update({
+        "status":           "new",
+        "last_modified_by": modifier,
+        "last_modified_at": _to_pg(now_str),
+    }).eq("display_id", term_id).execute()
+    return chinese
+
+
+def delete_term(term_id):
+    """Hard delete a term. Returns (chinese, blocked) where blocked=True if term has finalized translations."""
+    result = supabase.table("terms").select("chinese,translation_first").eq("display_id", term_id).execute()
+    if not result.data:
+        return None, False
+    row = result.data[0]
+    chinese = row.get("chinese") or ""
+    if row.get("translation_first"):
+        return chinese, True
+    supabase.table("terms").delete().eq("display_id", term_id).execute()
+    return chinese, False
+
+
 def update_translations(term_id, translation_updates, modifier, now_str):
     """Save AI-generated translations. translation_updates: {vote_key: text, ...}"""
     _vk_to_db = {

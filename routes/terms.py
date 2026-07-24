@@ -461,6 +461,64 @@ def api_classify_term(term_id):
         return jsonify({"error": str(e)}), 500
 
 
+@terms_bp.route("/api/terms/<term_id>/inactive", methods=["POST"])
+def api_mark_inactive(term_id):
+    if not is_logged_in():
+        return jsonify({"error": "Unauthorized"}), 401
+    if not is_leader():
+        return jsonify({"error": "Leader or admin only"}), 403
+    try:
+        now_str  = datetime.now().strftime("%Y-%m-%d %H:%M")
+        modifier = session["user_email"]
+        chinese  = terms_repo.deactivate_term(term_id, modifier, now_str)
+        if chinese is None:
+            return jsonify({"error": "Term not found"}), 404
+        write_audit(term_id, chinese, modifier, session.get("user_name", ""),
+                    "marked_inactive", details="Marked as Inactive")
+        return jsonify({"status": "inactive", "last_modified_by": modifier, "last_modified_time": now_str})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@terms_bp.route("/api/terms/<term_id>/reactivate", methods=["POST"])
+def api_reactivate_term(term_id):
+    if not is_logged_in():
+        return jsonify({"error": "Unauthorized"}), 401
+    if not is_leader():
+        return jsonify({"error": "Leader or admin only"}), 403
+    try:
+        now_str  = datetime.now().strftime("%Y-%m-%d %H:%M")
+        modifier = session["user_email"]
+        chinese  = terms_repo.reactivate_term(term_id, modifier, now_str)
+        if chinese is None:
+            return jsonify({"error": "Term not found"}), 404
+        write_audit(term_id, chinese, modifier, session.get("user_name", ""),
+                    "reactivated", details="Restored to New status")
+        return jsonify({"status": "new", "last_modified_by": modifier, "last_modified_time": now_str})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@terms_bp.route("/api/terms/<term_id>", methods=["DELETE"])
+def api_delete_term(term_id):
+    if not is_logged_in():
+        return jsonify({"error": "Unauthorized"}), 401
+    if not is_leader():
+        return jsonify({"error": "Leader or admin only"}), 403
+    try:
+        modifier = session["user_email"]
+        chinese, blocked = terms_repo.delete_term(term_id)
+        if chinese is None:
+            return jsonify({"error": "Term not found"}), 404
+        if blocked:
+            return jsonify({"error": "Cannot delete a term that has finalized translations. Reset suggestions first."}), 409
+        write_audit(term_id, chinese, modifier, session.get("user_name", ""),
+                    "deleted", details=f"Term permanently deleted by {modifier}")
+        return jsonify({"status": "deleted"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @terms_bp.route("/api/terms/<term_id>/audit", methods=["GET"])
 def api_get_audit(term_id):
     if not is_logged_in():
