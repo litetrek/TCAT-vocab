@@ -154,6 +154,7 @@ def api_update_term(term_id):
     field = data.get("field")
     value = (data.get("value") or "").strip()
     editable = {
+        "chinese",
         "pinyin", "trans1", "trans2", "trans3", "trans_known",
         "trans_other1", "trans_other2", "source", "context", "category", "notes",
         "source_content_chinese", "source_content_english",
@@ -161,6 +162,10 @@ def api_update_term(term_id):
     }
     if field not in editable:
         return jsonify({"error": "Invalid field"}), 400
+    if field == "chinese" and not is_leader():
+        return jsonify({"error": "Leader or admin only"}), 403
+    if field == "chinese" and not (data.get("value") or "").strip():
+        return jsonify({"error": "Chinese term cannot be empty"}), 400
     try:
         now_str  = datetime.now().strftime("%Y-%m-%d %H:%M")
         modifier = session["user_email"]

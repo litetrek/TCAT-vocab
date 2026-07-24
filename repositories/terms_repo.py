@@ -7,6 +7,7 @@ logger = logging.getLogger(__name__)
 
 # Frontend field key → Postgres column name
 _FIELD_TO_DB = {
+    "chinese":      "chinese",
     "pinyin":       "pinyin",
     "trans1":       "translation1",
     "trans2":       "translation2",
