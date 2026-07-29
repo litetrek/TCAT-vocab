@@ -118,6 +118,8 @@
     .btn-sm { font-size: 0.82rem; padding: 0.28rem 0.65rem; }
     .btn-back { font-family: 'EB Garamond', serif; background: rgba(26,18,8,0.05); border: 1px solid rgba(26,18,8,0.28); color: var(--ink-soft); padding: 0.35rem 0.9rem; border-radius: 3px; cursor: pointer; font-size: 0.9rem; transition: all 0.2s; align-self: flex-start; white-space: nowrap; }
     .btn-back:hover { background: rgba(26,18,8,0.11); border-color: rgba(26,18,8,0.5); color: var(--ink); text-decoration: underline; }
+    .edit-term-nav { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; justify-content: flex-end; }
+    .edit-term-pos { font-size: 0.8rem; color: var(--text-soft); white-space: nowrap; min-width: 3.5rem; text-align: center; }
 
     /* ── TAGS ───────────────────────────────────────────────────────────── */
     .tag { font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 2px; border: 1px solid; letter-spacing: 0.05em; text-transform: uppercase; display: inline-block; }
@@ -149,6 +151,13 @@
     .vocab-table tbody tr:hover td { background: rgba(201,168,76,0.06); }
     .vocab-table tbody tr.row-finalized { border-left: 3px solid var(--gold); }
     .vocab-table tbody tr:last-child td { border-bottom: none; }
+    .vocab-table tbody tr.term-flash td { animation: termFlash 1.8s ease-out; }
+    .vocab-card.term-flash { animation: termFlash 1.8s ease-out; }
+    @keyframes termFlash {
+      0%   { background: rgba(201,168,76,0.32); }
+      35%  { background: rgba(201,168,76,0.22); }
+      100% { background: transparent; }
+    }
     .cell-zh { font-family: 'Noto Serif TC', serif; font-size: 1.15rem; font-weight: 600; color: var(--ink); line-height: 1.2; display: block; }
     .cell-id { font-size: 0.65rem; color: rgba(107,90,58,0.45); display: block; }
     .cell-py { font-size: 0.96rem; color: var(--text-soft); font-style: italic; line-height: 1.45; }
@@ -485,8 +494,10 @@
       /* Edit view: back/source bar first (column-reverse), then term */
       .edit-view { padding: 1rem; }
       .edit-header { flex-direction: column-reverse; gap: 0.75rem; }
-      .edit-header-actions { flex-direction: row; justify-content: space-between; align-items: center; width: 100%; align-self: auto; }
-      .edit-header-source { flex-direction: row; align-items: center; gap: 0.4rem; }
+      .edit-header-actions { flex-direction: column; align-items: stretch; width: 100%; align-self: auto; gap: 0.5rem; }
+      .edit-header-actions .btn-back { align-self: flex-start; }
+      .edit-term-nav { justify-content: space-between; width: 100%; }
+      .edit-header-source { flex-direction: row; align-items: center; gap: 0.4rem; justify-content: flex-start; }
       .py-editable { font-size: 1.3rem; }
       .trans-grid-3 { grid-template-columns: 1fr; }
       .trans-panel { border-right: none; border-bottom: 1px solid rgba(201,168,76,0.15); }
@@ -1577,7 +1588,7 @@
           : '<span class="tag tag-pending">New</span>';
     const cardClass = t.status === 'reviewed' ? 'vocab-card card-finalized' : 'vocab-card';
     return `
-      <div class="${cardClass}" onclick="openEditView('${t.id}')">
+      <div class="${cardClass}" data-term-id="${t.id}" onclick="openEditView('${t.id}')">
         <div class="vc-head">
           <span class="vc-zh">${t.chinese}</span>
           ${statusBadge}
@@ -1613,7 +1624,7 @@
     const row = t.status === 'reviewed' ? 'row-finalized' : t.status === 'inactive' ? 'row-inactive' : '';
     const safeId = t.id;
     return `
-      <tr class="${row}" onclick="openEditView('${safeId}')">
+      <tr class="${row}" data-term-id="${safeId}" onclick="openEditView('${safeId}')">
         <td onmouseenter="showTermTooltip(event,'${safeId}')" onmouseleave="hideTermTooltip()">
           <span class="cell-zh">${t.chinese}</span><span class="cell-id">${t.id}</span>
         </td>
@@ -1631,27 +1642,78 @@
   }
 
   // ── EDIT VIEW ────────────────────────────────────────────────────────────
+  function getAdjacentTerms(termId) {
+    const list  = getFilteredSorted();
+    const index = list.findIndex(t => t.id === termId);
+    return {
+      prev:  index > 0 ? list[index - 1] : null,
+      next:  index >= 0 && index < list.length - 1 ? list[index + 1] : null,
+      index: index,
+      total: list.length,
+    };
+  }
+
+  function navigateEditTerm(dir) {
+    if (!editingTermId) return;
+    const { prev, next } = getAdjacentTerms(editingTermId);
+    const target = dir < 0 ? prev : next;
+    if (target) openEditView(target.id);
+  }
+
+  function scrollEditToTop() {
+    const ev = document.getElementById('edit-view');
+    if (ev) ev.scrollTop = 0;
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }
+
+  function scrollListToTerm(termId) {
+    if (!termId) return;
+    const el = document.querySelector(`[data-term-id="${CSS.escape(String(termId))}"]`);
+    if (!el) return;
+    const stickyOffset = 120; // header + tab bar
+    const y = el.getBoundingClientRect().top + window.scrollY - stickyOffset;
+    window.scrollTo(0, Math.max(0, y));
+    const list = document.getElementById('list-view');
+    if (list) {
+      const listY = el.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop - 24;
+      list.scrollTop = Math.max(0, listY);
+    }
+    el.classList.remove('term-flash');
+    // Force reflow so re-adding the class retriggers the animation
+    void el.offsetWidth;
+    el.classList.add('term-flash');
+    el.addEventListener('animationend', () => el.classList.remove('term-flash'), { once: true });
+  }
+
   function openEditView(termId) {
     _pushHash('#vocabulary/term/' + termId);
     const term = allTerms.find(t => t.id === termId);
     if (!term) return;
     editingTermId = termId;
+    // Keep list pagination aligned with this term's place in the filtered list
+    const { index } = getAdjacentTerms(termId);
+    if (index >= 0) currentPage = Math.floor(index / pageSize) + 1;
     document.getElementById('list-view').style.display = 'none';
     const ev = document.getElementById('edit-view');
     ev.style.display = 'block';
     ev.innerHTML = buildEditView(term);
-    ev.scrollTop = 0;
     ev.querySelectorAll('.tp-textarea, .meta-textarea').forEach(ta => autoResizeTextarea(ta));
     loadAuditLog(termId);
+    scrollEditToTop();
+    requestAnimationFrame(scrollEditToTop);
   }
 
   function closeEditView() {
+    const returnToId = editingTermId;
     _pushHash('#vocabulary');
     editingTermId = null;
     document.getElementById('edit-view').style.display = 'none';
     document.getElementById('list-view').style.display = 'block';
     updateStats();
     applyView();
+    requestAnimationFrame(() => scrollListToTerm(returnToId));
   }
 
   function refreshEditView() {
@@ -1809,6 +1871,10 @@
 
     const lmBy  = t.last_modified_by   || '';
     const lmAt  = t.last_modified_time || '';
+    const adj   = getAdjacentTerms(t.id);
+    const prevDis = adj.prev ? '' : ' disabled';
+    const nextDis = adj.next ? '' : ' disabled';
+    const posLabel = adj.index >= 0 ? `${adj.index + 1} / ${adj.total}` : '—';
     return `
       <div class="edit-header">
         <div class="edit-header-term">
@@ -1837,6 +1903,11 @@
         </div>
         <div class="edit-header-actions">
           <button class="btn-back" onclick="closeEditView()">← Back to list</button>
+          <div class="edit-term-nav">
+            <button class="btn-page" onclick="navigateEditTerm(-1)"${prevDis} title="Previous term in current list">← Previous</button>
+            <span class="edit-term-pos">${posLabel}</span>
+            <button class="btn-page" onclick="navigateEditTerm(1)"${nextDis} title="Next term in current list">Next →</button>
+          </div>
           <div class="edit-header-source">
             <span class="edit-header-source-lbl">Source</span>
             ${srcSelect}
