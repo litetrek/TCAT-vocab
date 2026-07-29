@@ -25,6 +25,32 @@ _FIELD_TO_DB = {
     "subject_field": "subject_field",
 }
 
+# Fields allowed when merging two terms (response keys → DB columns)
+_MERGE_FIELD_TO_DB = {
+    "chinese":                "chinese",
+    "pinyin":                 "pinyin",
+    "pali":                   "pali",
+    "sanskrit":               "sanskrit",
+    "trans1":                 "translation1",
+    "trans2":                 "translation2",
+    "trans3":                 "translation3",
+    "trans_known":            "translation_known",
+    "trans_other1":           "translation_other1",
+    "trans_other2":           "translation_other2",
+    "trans_first":            "translation_first",
+    "trans_second":           "translation_second",
+    "final":                  "final",
+    "status":                 "status",
+    "source":                 "source",
+    "context":                "context",
+    "notes":                  "notes",
+    "category":               "category",
+    "entity_type":            "entity_type",
+    "subject_field":          "subject_field",
+    "source_content_chinese": "source_content_chinese",
+    "source_content_english": "source_content_english",
+}
+
 # Vote key → Postgres column name
 _VOTE_TO_DB = {
     "Translation1":      "translation1",
@@ -149,7 +175,15 @@ def _row_to_sheets_fmt(row):
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def find_by_chinese(chinese_text):
-    result = supabase.table("terms").select("*").eq("chinese", chinese_text).limit(1).execute()
+    """Prefer an active (non-inactive) row so merged duplicates do not win lookups."""
+    result = (
+        supabase.table("terms")
+        .select("*")
+        .eq("chinese", chinese_text)
+        .neq("status", "inactive")
+        .limit(1)
+        .execute()
+    )
     if not result.data:
         return None
     return _row_to_sheets_fmt(result.data[0])
@@ -382,6 +416,59 @@ def get_translation_constraint_terms():
         if english:
             out.append({"chinese": chinese, "english": english})
     return out
+
+
+def merge_terms(keep_id, drop_id, field_values, modifier, now_str):
+    """
+    Apply chosen field values onto keep_id, then mark drop_id inactive.
+    field_values uses frontend response keys (see _MERGE_FIELD_TO_DB).
+    Returns dict with keep response row + chinese strings, or None if either term missing.
+    Raises ValueError for unknown field keys.
+    """
+    if keep_id == drop_id:
+        raise ValueError("keep_id and drop_id must differ")
+
+    keep_res = supabase.table("terms").select("*").eq("display_id", keep_id).limit(1).execute()
+    drop_res = supabase.table("terms").select("*").eq("display_id", drop_id).limit(1).execute()
+    if not keep_res.data or not drop_res.data:
+        return None
+
+    keep_row = keep_res.data[0]
+    drop_row = drop_res.data[0]
+    updates = {}
+    for key, val in (field_values or {}).items():
+        col = _MERGE_FIELD_TO_DB.get(key)
+        if not col:
+            raise ValueError(f"Unknown merge field: {key!r}")
+        updates[col] = _to_pg(val if val is not None else "")
+
+    if "pinyin" in (field_values or {}):
+        updates["romanization_plain"] = strip_tone_marks(field_values.get("pinyin") or "") or None
+
+    if "entity_type" in (field_values or {}) or "subject_field" in (field_values or {}):
+        updates["classification_source"] = "manual"
+        updates["classified_by"] = modifier
+        updates["classified_at"] = _to_pg(now_str)
+
+    updates["last_modified_by"] = modifier
+    updates["last_modified_at"] = _to_pg(now_str)
+
+    supabase.table("terms").update(updates).eq("display_id", keep_id).execute()
+    supabase.table("terms").update({
+        "status":           "inactive",
+        "last_modified_by": modifier,
+        "last_modified_at": _to_pg(now_str),
+    }).eq("display_id", drop_id).execute()
+
+    refreshed = supabase.table("terms").select("*").eq("display_id", keep_id).limit(1).execute()
+    keep_out = _row_to_response(refreshed.data[0] if refreshed.data else {**keep_row, **updates, "display_id": keep_id})
+    return {
+        "keep":         keep_out,
+        "keep_id":      keep_id,
+        "drop_id":      drop_id,
+        "keep_chinese": keep_out.get("chinese") or _v(keep_row, "chinese"),
+        "drop_chinese": _v(drop_row, "chinese"),
+    }
 
 
 def deactivate_term(term_id, modifier, now_str):

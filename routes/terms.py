@@ -466,6 +466,45 @@ def api_classify_term(term_id):
         return jsonify({"error": str(e)}), 500
 
 
+@terms_bp.route("/api/terms/merge", methods=["POST"])
+def api_merge_terms():
+    """Leader/admin: merge two terms — apply chosen fields to keep_id, deactivate drop_id."""
+    if not is_logged_in():
+        return jsonify({"error": "Unauthorized"}), 401
+    if not is_leader():
+        return jsonify({"error": "Leader or admin only"}), 403
+    data = request.json or {}
+    keep_id = (data.get("keep_id") or "").strip()
+    drop_id = (data.get("drop_id") or "").strip()
+    fields  = data.get("fields") or {}
+    if not keep_id or not drop_id:
+        return jsonify({"error": "keep_id and drop_id are required"}), 400
+    if keep_id == drop_id:
+        return jsonify({"error": "Cannot merge a term with itself"}), 400
+    if not isinstance(fields, dict):
+        return jsonify({"error": "fields must be an object"}), 400
+    try:
+        now_str  = datetime.now().strftime("%Y-%m-%d %H:%M")
+        modifier = session["user_email"]
+        result   = terms_repo.merge_terms(keep_id, drop_id, fields, modifier, now_str)
+        if result is None:
+            return jsonify({"error": "One or both terms not found"}), 404
+        summary = ", ".join(fields.keys()) or "(no field overrides)"
+        write_audit(keep_id, result["keep_chinese"], modifier, session.get("user_name", ""),
+                    "merged", details=f"Merged from {drop_id}. Fields: {summary}")
+        write_audit(drop_id, result["drop_chinese"], modifier, session.get("user_name", ""),
+                    "merged_into", details=f"Merged into {keep_id}")
+        return jsonify({
+            "keep":    result["keep"],
+            "drop_id": drop_id,
+            "status":  "merged",
+        })
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @terms_bp.route("/api/terms/<term_id>/inactive", methods=["POST"])
 def api_mark_inactive(term_id):
     if not is_logged_in():

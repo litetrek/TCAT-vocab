@@ -103,6 +103,46 @@
     .main-title { font-family: 'Cormorant Garamond', serif; font-size: 1.6rem; font-style: italic; color: var(--ink); }
     .main-title span { color: var(--red); }
     .toolbar-actions { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+    .merge-bar { display: none; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.85rem; padding: 0.55rem 0.85rem; background: rgba(201,168,76,0.1); border: 1px solid rgba(201,168,76,0.35); border-radius: 3px; font-size: 0.9rem; color: var(--text); }
+    .merge-bar.open { display: flex; }
+    .merge-bar-count { font-style: italic; color: var(--text-soft); }
+    .merge-fab {
+      display: none; position: fixed; right: 1.75rem; bottom: 1.75rem; z-index: 180;
+      font-family: 'EB Garamond', serif; font-size: 1.05rem; font-weight: 600;
+      padding: 0.85rem 1.4rem; border-radius: 999px; cursor: pointer;
+      background: var(--ink); color: var(--gold-light); border: 1px solid rgba(201,168,76,0.55);
+      box-shadow: 0 8px 28px rgba(26,18,8,0.28); transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+    }
+    .merge-fab.visible { display: inline-flex; align-items: center; gap: 0.45rem; animation: mergeFabIn 0.22s ease; }
+    .merge-fab:hover { transform: translateY(-3px) scale(1.03); background: #2a1f0a; box-shadow: 0 12px 32px rgba(26,18,8,0.36); border-color: var(--gold); }
+    .merge-fab:active { transform: translateY(-1px) scale(1.01); }
+    @keyframes mergeFabIn { from { opacity: 0; transform: translateY(12px) scale(0.92); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    .merge-check { width: 1rem; height: 1rem; accent-color: var(--gold); cursor: pointer; }
+    .vocab-table tbody tr.merge-selected td { background: rgba(201,168,76,0.12); }
+    .vocab-card.merge-selected { background: rgba(201,168,76,0.12); }
+    .merge-compare-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 0.88rem; margin-top: 0.75rem; }
+    .merge-compare-table th { text-align: left; font-family: 'Cormorant Garamond', serif; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-soft); padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .merge-compare-table th:nth-child(1),
+    .merge-compare-table td:nth-child(1) { width: 18%; }
+    .merge-compare-table th:nth-child(2),
+    .merge-compare-table td:nth-child(2),
+    .merge-compare-table th:nth-child(3),
+    .merge-compare-table td:nth-child(3) { width: 41%; }
+    .merge-compare-table td { padding: 0.45rem 0.5rem; border-bottom: 1px solid rgba(201,168,76,0.12); vertical-align: top; overflow: hidden; }
+    .merge-compare-table tr.merge-field-same td { opacity: 0.42; color: var(--text-soft); }
+    .merge-compare-table tr.merge-field-diff td {
+      background: rgba(26,18,8,0.06);
+      color: var(--ink);
+      font-weight: 500;
+    }
+    .merge-compare-table tr.merge-field-diff td:first-child { font-weight: 600; }
+    .merge-keep-row { display: flex; gap: 1.25rem; flex-wrap: wrap; margin: 0.75rem 0 0.25rem; }
+    .merge-keep-opt { display: flex; align-items: flex-start; gap: 0.4rem; font-size: 0.92rem; cursor: pointer; flex: 1 1 240px; min-width: 0; }
+    .merge-cell-opt { display: flex; align-items: flex-start; gap: 0.4rem; cursor: pointer; width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
+    .merge-cell-opt input { flex-shrink: 0; margin-top: 0.15rem; }
+    .merge-cell-val { flex: 1; min-width: 0; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; line-height: 1.35; max-height: 10rem; overflow-y: auto; }
+    .merge-cell-empty { color: var(--text-soft); font-style: italic; }
+    .merge-notes-hint { font-size: 0.72rem; text-transform: none; letter-spacing: 0; color: var(--text-soft); font-style: italic; margin-top: 0.2rem; line-height: 1.3; }
     .search-box { background: rgba(255,255,255,0.8); border: 1px solid rgba(26,18,8,0.15); border-radius: 3px; padding: 0.5rem 0.85rem; color: var(--text); font-family: 'EB Garamond', serif; font-size: 0.95rem; width: 280px; }
     .search-box::placeholder { color: var(--text-soft); }
     .search-box:focus { outline: none; border-color: var(--gold); }
@@ -188,6 +228,7 @@
     .edit-header-meta { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-top: 0.4rem; }
     .edit-header-right { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
     .edit-header-actions { display: flex; flex-direction: column; gap: 0.55rem; align-items: flex-end; align-self: flex-start; flex-shrink: 0; }
+    .edit-header-actions .btn-back { align-self: flex-end; }
     .edit-header-source { display: flex; flex-direction: column; gap: 0.2rem; align-items: flex-end; }
     .edit-header-source-lbl { font-size: 0.67rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-soft); }
     .source-select { font-family: 'EB Garamond', serif; font-size: 0.82rem; border: 1px solid rgba(26,18,8,0.18); border-radius: 2px; background: rgba(255,255,255,0.7); color: var(--text-soft); padding: 0.25rem 0.5rem; cursor: pointer; }
@@ -495,7 +536,7 @@
       .edit-view { padding: 1rem; }
       .edit-header { flex-direction: column-reverse; gap: 0.75rem; }
       .edit-header-actions { flex-direction: column; align-items: stretch; width: 100%; align-self: auto; gap: 0.5rem; }
-      .edit-header-actions .btn-back { align-self: flex-start; }
+      .edit-header-actions .btn-back { align-self: flex-end; }
       .edit-term-nav { justify-content: space-between; width: 100%; }
       .edit-header-source { flex-direction: row; align-items: center; gap: 0.4rem; justify-content: flex-start; }
       .py-editable { font-size: 1.3rem; }
@@ -807,8 +848,13 @@
       <div class="toolbar-actions">
         <input class="search-box" id="search-input" type="text" placeholder="Search terms &amp; all translations…" oninput="onSearchInput()">
         <button class="btn btn-secondary" onclick="loadTerms()">↻ Refresh</button>
+        {% if is_leader %}<button class="btn btn-secondary" id="btn-merge-mode" onclick="toggleMergeMode()">Merge duplicates</button>{% endif %}
         {% if user_role != 'viewer' %}<button class="btn btn-primary" onclick="openModal()">+ Add Term</button>{% endif %}
       </div>
+    </div>
+    <div class="merge-bar" id="merge-bar">
+      <span class="merge-bar-count" id="merge-bar-count">0 selected</span>
+      <button class="btn btn-secondary btn-sm" onclick="exitMergeMode()">Cancel</button>
     </div>
     <div id="terms-container"><div class="loading">☸ Loading terminology…</div></div>
   </main>
@@ -817,6 +863,10 @@
   <div class="main edit-view" id="edit-view"></div>
 
 </div><!-- app-layout -->
+
+{% if is_leader %}
+<button type="button" class="merge-fab" id="merge-fab" onclick="openMergeModal()" title="Merge the two selected terms">Merge selected</button>
+{% endif %}
 
 <!-- ── EXTRACTION VIEW ────────────────────────────────────────────────────── -->
 <div id="extraction-view" style="display:none;">
@@ -1108,6 +1158,18 @@
 </div><!-- #translation-view -->
 {% endif %}
 
+<!-- ── MERGE DUPLICATES MODAL ─────────────────────────────────────────────── -->
+<div class="modal-overlay" id="merge-modal" onclick="closeMergeModalOutside(event)">
+  <div class="modal modal-xwide">
+    <div class="modal-title">Merge Duplicate Terms</div>
+    <div id="merge-modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeMergeModal()">Cancel</button>
+      <button class="btn btn-primary" id="btn-merge-confirm" onclick="confirmMerge()">Confirm merge</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── TEAM MODAL ─────────────────────────────────────────────────────────── -->
 <div class="modal-overlay" id="team-modal" onclick="closeTeamModalOutside(event)">
   <div class="modal modal-xwide">
@@ -1323,6 +1385,8 @@
   let sortField   = 'pinyin';
   let sortDir     = 'asc';
   let editingTermId = null;
+  let mergeMode     = false;
+  let mergeSelected = []; // up to 2 display_ids
 
   // ── EXTRACTION STATE ─────────────────────────────────────────────────────
   let extParagraphs    = [];
@@ -1552,6 +1616,7 @@
       ? `<div class="vocab-card-list">${terms.map(vocabCard).join('')}</div>`
       : `<div class="table-wrap"><table class="vocab-table" id="vocab-table-main">
           <colgroup>
+            ${mergeMode ? '<col style="width:36px">' : ''}
             <col id="col-term"   style="width:130px">
             <col id="col-pinyin" style="width:140px">
             <col id="col-ai1"    style="width:175px">
@@ -1562,6 +1627,7 @@
             <col id="col-acts"   style="width:${isAdmin ? '130px' : '75px'}">
           </colgroup>
           <thead><tr>
+            ${mergeMode ? '<th></th>' : ''}
             <th class="${thClass('chinese')}" onclick="setSort('chinese')">Term ${sortIcon('chinese')}<div class="col-resizer" onclick="event.stopPropagation()"></div></th>
             <th class="${thClass('pinyin')}"  onclick="setSort('pinyin')">Pinyin ${sortIcon('pinyin')}<div class="col-resizer" onclick="event.stopPropagation()"></div></th>
             <th>${currentFilter === 'reviewed' ? 'First Choice' : 'AI 1'}<div class="col-resizer" onclick="event.stopPropagation()"></div></th>
@@ -1586,10 +1652,21 @@
         : t.status === 'inactive'
           ? '<span class="tag tag-inactive">Inactive</span>'
           : '<span class="tag tag-pending">New</span>';
-    const cardClass = t.status === 'reviewed' ? 'vocab-card card-finalized' : 'vocab-card';
+    const selected = mergeSelected.includes(t.id);
+    const cardClass = [
+      t.status === 'reviewed' ? 'vocab-card card-finalized' : 'vocab-card',
+      selected ? 'merge-selected' : '',
+    ].filter(Boolean).join(' ');
+    const check = mergeMode
+      ? `<input type="checkbox" class="merge-check" ${selected ? 'checked' : ''} onclick="event.stopPropagation();toggleMergeSelect('${t.id}')" title="Select for merge">`
+      : '';
+    const rowClick = mergeMode
+      ? `toggleMergeSelect('${t.id}')`
+      : `openEditView('${t.id}')`;
     return `
-      <div class="${cardClass}" data-term-id="${t.id}" onclick="openEditView('${t.id}')">
+      <div class="${cardClass}" data-term-id="${t.id}" onclick="${rowClick}">
         <div class="vc-head">
+          ${check}
           <span class="vc-zh">${t.chinese}</span>
           ${statusBadge}
         </div>
@@ -1621,10 +1698,21 @@
         : t.status === 'inactive'
           ? '<span class="tag tag-inactive">Inactive</span>'
           : '<span class="tag tag-pending">New</span>';
-    const row = t.status === 'reviewed' ? 'row-finalized' : t.status === 'inactive' ? 'row-inactive' : '';
+    const selected = mergeSelected.includes(t.id);
+    const row = [
+      t.status === 'reviewed' ? 'row-finalized' : t.status === 'inactive' ? 'row-inactive' : '',
+      selected ? 'merge-selected' : '',
+    ].filter(Boolean).join(' ');
     const safeId = t.id;
+    const rowClick = mergeMode
+      ? `toggleMergeSelect('${safeId}')`
+      : `openEditView('${safeId}')`;
+    const checkCell = mergeMode
+      ? `<td onclick="event.stopPropagation()"><input type="checkbox" class="merge-check" ${selected ? 'checked' : ''} onchange="toggleMergeSelect('${safeId}')"></td>`
+      : '';
     return `
-      <tr class="${row}" data-term-id="${safeId}" onclick="openEditView('${safeId}')">
+      <tr class="${row}" data-term-id="${safeId}" onclick="${rowClick}">
+        ${checkCell}
         <td onmouseenter="showTermTooltip(event,'${safeId}')" onmouseleave="hideTermTooltip()">
           <span class="cell-zh">${t.chinese}</span><span class="cell-id">${t.id}</span>
         </td>
@@ -1738,6 +1826,10 @@
     reviewed:         'Marked Reviewed',
     marked_pending:   'Marked Pending',
     ai_translated:    'AI Translated',
+    merged:           'Merged',
+    merged_into:      'Merged Into',
+    marked_inactive:  'Marked Inactive',
+    reactivated:      'Restored',
   };
 
   async function loadAuditLog(termId) {
@@ -2401,6 +2493,254 @@
     const atEl = document.getElementById(`ev-lm-at-${termId}`);
     if (byEl) byEl.textContent = term.last_modified_by ? displayName(term.last_modified_by) : '—';
     if (atEl) atEl.textContent = term.last_modified_time ? term.last_modified_time.slice(0,10) : '—';
+  }
+
+  // ── MERGE DUPLICATES ─────────────────────────────────────────────────────
+  const MERGE_FIELDS = [
+    { key: 'chinese', label: 'Chinese' },
+    { key: 'pinyin', label: 'Pinyin' },
+    { key: 'pali', label: 'Pali' },
+    { key: 'sanskrit', label: 'Sanskrit' },
+    { key: 'trans1', label: 'AI Translate 1' },
+    { key: 'trans2', label: 'AI Translate 2' },
+    { key: 'trans3', label: 'AI Translate 3' },
+    { key: 'trans_known', label: 'Known Translation' },
+    { key: 'trans_other1', label: 'Other 1' },
+    { key: 'trans_other2', label: 'Other 2' },
+    { key: 'trans_first', label: 'Suggest 1 text' },
+    { key: 'trans_second', label: 'Suggest 2 text' },
+    { key: 'final', label: 'Final key' },
+    { key: 'status', label: 'Status' },
+    { key: 'source', label: 'Source' },
+    { key: 'context', label: 'Context' },
+    { key: 'notes', label: 'Notes' },
+    { key: 'category', label: 'Category' },
+    { key: 'entity_type', label: 'Entity Type' },
+    { key: 'subject_field', label: 'Subject Field' },
+    { key: 'source_content_chinese', label: 'Source Chinese' },
+    { key: 'source_content_english', label: 'Source English' },
+  ];
+
+  function updateMergeBar() {
+    const bar = document.getElementById('merge-bar');
+    const countEl = document.getElementById('merge-bar-count');
+    const modeBtn = document.getElementById('btn-merge-mode');
+    const fab = document.getElementById('merge-fab');
+    if (!bar) return;
+    bar.classList.toggle('open', mergeMode);
+    if (countEl) countEl.textContent = `${mergeSelected.length} selected (pick exactly 2)`;
+    if (modeBtn) modeBtn.textContent = mergeMode ? 'Merging…' : 'Merge duplicates';
+    if (fab) fab.classList.toggle('visible', mergeMode && mergeSelected.length === 2);
+  }
+
+  function toggleMergeMode() {
+    if (!isLeader) return;
+    if (mergeMode) exitMergeMode();
+    else {
+      mergeMode = true;
+      mergeSelected = [];
+      updateMergeBar();
+      applyView();
+    }
+  }
+
+  function exitMergeMode() {
+    mergeMode = false;
+    mergeSelected = [];
+    updateMergeBar();
+    applyView();
+  }
+
+  function toggleMergeSelect(termId) {
+    if (!mergeMode) return;
+    const idx = mergeSelected.indexOf(termId);
+    if (idx >= 0) {
+      mergeSelected.splice(idx, 1);
+    } else if (mergeSelected.length >= 2) {
+      showToast('Select exactly 2 terms — uncheck one first');
+      applyView();
+      return;
+    } else {
+      mergeSelected.push(termId);
+    }
+    updateMergeBar();
+    applyView();
+  }
+
+  function defaultMergeSide(aVal, bVal) {
+    const aEmpty = !(aVal || '').toString().trim();
+    const bEmpty = !(bVal || '').toString().trim();
+    if (aEmpty && !bEmpty) return 'b';
+    if (!aEmpty && bEmpty) return 'a';
+    return 'a';
+  }
+
+  function openMergeModal() {
+    if (mergeSelected.length !== 2) return;
+    const a = allTerms.find(t => t.id === mergeSelected[0]);
+    const b = allTerms.find(t => t.id === mergeSelected[1]);
+    if (!a || !b) {
+      showToast('Selected terms not found — refresh and try again');
+      return;
+    }
+    const displayVal = (key, term) => {
+      let v = term[key] || '';
+      if (key === 'source' && v) v = sourceName(v) || v;
+      return v;
+    };
+    const rows = MERGE_FIELDS.map(f => {
+      const av = a[f.key] || '';
+      const bv = b[f.key] || '';
+      const same = String(av) === String(bv);
+      const side = defaultMergeSide(av, bv);
+      const aShow = displayVal(f.key, a);
+      const bShow = displayVal(f.key, b);
+      const aHtml = aShow
+        ? escHtml(String(aShow))
+        : '<span class="merge-cell-empty">— empty —</span>';
+      const bHtml = bShow
+        ? escHtml(String(bShow))
+        : '<span class="merge-cell-empty">— empty —</span>';
+      // Notes: checkboxes so both sides can be kept and combined
+      if (f.key === 'notes') {
+        const aHas = !!(av || '').toString().trim();
+        const bHas = !!(bv || '').toString().trim();
+        let aChecked = aHas;
+        let bChecked = bHas && !same;
+        if (!aHas && !bHas) { aChecked = true; bChecked = false; }
+        else if (!aHas && bHas) { aChecked = false; bChecked = true; }
+        else if (aHas && !bHas) { aChecked = true; bChecked = false; }
+        return `<tr class="${same ? 'merge-field-same' : 'merge-field-diff'}">
+          <td>${escHtml(f.label)}<div class="merge-notes-hint">Select one or both — both will be combined</div></td>
+          <td>
+            <label class="merge-cell-opt">
+              <input type="checkbox" class="merge-notes-cb" data-side="a" ${aChecked ? 'checked' : ''}>
+              <span class="merge-cell-val">${aHtml}</span>
+            </label>
+          </td>
+          <td>
+            <label class="merge-cell-opt">
+              <input type="checkbox" class="merge-notes-cb" data-side="b" ${bChecked ? 'checked' : ''}>
+              <span class="merge-cell-val">${bHtml}</span>
+            </label>
+          </td>
+        </tr>`;
+      }
+      return `<tr class="${same ? 'merge-field-same' : 'merge-field-diff'}">
+        <td>${escHtml(f.label)}</td>
+        <td>
+          <label class="merge-cell-opt">
+            <input type="radio" name="merge-field-${f.key}" value="a" ${side === 'a' ? 'checked' : ''}>
+            <span class="merge-cell-val">${aHtml}</span>
+          </label>
+        </td>
+        <td>
+          <label class="merge-cell-opt">
+            <input type="radio" name="merge-field-${f.key}" value="b" ${side === 'b' ? 'checked' : ''}>
+            <span class="merge-cell-val">${bHtml}</span>
+          </label>
+        </td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('merge-modal-body').innerHTML = `
+      <p style="font-size:0.9rem;color:var(--text-soft);margin-bottom:0.5rem;">
+        Choose which term ID to keep, then pick A or B for each field. The other term will be marked <em>Inactive</em>.
+      </p>
+      <div class="merge-keep-row">
+        <label class="merge-keep-opt">
+          <input type="radio" name="merge-keep-id" value="${escHtml(a.id)}" checked>
+          <span><strong>Keep ${escHtml(a.id)}</strong><br><span style="font-family:'Noto Serif TC',serif;">${escHtml(a.chinese)}</span></span>
+        </label>
+        <label class="merge-keep-opt">
+          <input type="radio" name="merge-keep-id" value="${escHtml(b.id)}">
+          <span><strong>Keep ${escHtml(b.id)}</strong><br><span style="font-family:'Noto Serif TC',serif;">${escHtml(b.chinese)}</span></span>
+        </label>
+      </div>
+      <table class="merge-compare-table">
+        <thead><tr>
+          <th>Field</th>
+          <th>A · ${escHtml(a.id)}</th>
+          <th>B · ${escHtml(b.id)}</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+    document.getElementById('merge-modal').dataset.termA = a.id;
+    document.getElementById('merge-modal').dataset.termB = b.id;
+    document.getElementById('merge-modal').classList.add('open');
+  }
+
+  function closeMergeModal() {
+    document.getElementById('merge-modal').classList.remove('open');
+  }
+  function closeMergeModalOutside(e) {
+    if (e.target.id === 'merge-modal') closeMergeModal();
+  }
+
+  async function confirmMerge() {
+    const modal = document.getElementById('merge-modal');
+    const idA = modal.dataset.termA;
+    const idB = modal.dataset.termB;
+    const a = allTerms.find(t => t.id === idA);
+    const b = allTerms.find(t => t.id === idB);
+    if (!a || !b) {
+      showToast('Terms missing — refresh and try again');
+      return;
+    }
+    const keepRadio = document.querySelector('input[name="merge-keep-id"]:checked');
+    const keepId = keepRadio ? keepRadio.value : idA;
+    const dropId = keepId === idA ? idB : idA;
+    const fields = {};
+    MERGE_FIELDS.forEach(f => {
+      if (f.key === 'notes') {
+        const aCb = document.querySelector('.merge-notes-cb[data-side="a"]');
+        const bCb = document.querySelector('.merge-notes-cb[data-side="b"]');
+        const parts = [];
+        if (aCb && aCb.checked && (a.notes || '').trim()) parts.push((a.notes || '').trim());
+        if (bCb && bCb.checked && (b.notes || '').trim()) {
+          const bNote = (b.notes || '').trim();
+          if (!parts.includes(bNote)) parts.push(bNote);
+        }
+        fields.notes = parts.join('\n\n');
+        return;
+      }
+      const picked = document.querySelector(`input[name="merge-field-${f.key}"]:checked`);
+      const side = picked ? picked.value : 'a';
+      const src = side === 'b' ? b : a;
+      fields[f.key] = src[f.key] || '';
+    });
+    const aNotes = (a.notes || '').trim();
+    const bNotes = (b.notes || '').trim();
+    if ((aNotes || bNotes) && !document.querySelector('.merge-notes-cb:checked')) {
+      showToast('Select at least one Notes option (A, B, or both)');
+      return;
+    }
+    const btn = document.getElementById('btn-merge-confirm');
+    if (btn) { btn.disabled = true; btn.textContent = 'Merging…'; }
+    try {
+      const res = await fetch('/api/terms/merge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keep_id: keepId, drop_id: dropId, fields }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Merge failed');
+      const keep = data.keep;
+      const ki = allTerms.findIndex(t => t.id === keepId);
+      if (ki >= 0) allTerms[ki] = { ...allTerms[ki], ...keep };
+      const di = allTerms.findIndex(t => t.id === dropId);
+      if (di >= 0) allTerms[di] = { ...allTerms[di], status: 'inactive' };
+      closeMergeModal();
+      exitMergeMode();
+      updateStats();
+      applyView();
+      requestAnimationFrame(() => scrollListToTerm(keepId));
+      showToast(`Merged into ${keepId}; ${dropId} marked inactive`);
+    } catch (e) {
+      showToast(e.message || 'Merge failed');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Confirm merge'; }
+    }
   }
 
   // ── ADD TERM MODAL ───────────────────────────────────────────────────────
