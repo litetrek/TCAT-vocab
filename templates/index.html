@@ -300,6 +300,13 @@
     .btn-save-note { font-family: 'EB Garamond', serif; font-size: 0.82rem; background: transparent; border: 1px solid var(--gold); color: var(--gold); border-radius: 3px; padding: 0.28rem 0.85rem; cursor: pointer; transition: background 0.15s, color 0.15s; white-space: nowrap; }
     .btn-save-note:hover { background: var(--gold); color: var(--ink); }
     .btn-save-note:disabled { opacity: 0.5; cursor: default; }
+    .notes-label-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.35rem; }
+    .notes-label-row label { margin-bottom: 0; }
+    .btn-edit-notes { font-family: 'EB Garamond', serif; font-size: 0.78rem; background: transparent; border: 1px solid rgba(26,18,8,0.25); color: var(--text-soft); border-radius: 3px; padding: 0.2rem 0.65rem; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+    .btn-edit-notes:hover { border-color: var(--gold); color: var(--ink); background: rgba(201,168,76,0.1); }
+    .notes-edit-wrap { display: none; }
+    .notes-edit-wrap.open { display: block; }
+    .notes-view-wrap.hidden { display: none; }
     .attach-note-msg { font-size: 0.78rem; font-family: 'EB Garamond', serif; }
     .attach-note-msg.error   { color: #a33; }
     .attach-note-msg.success { color: #2d7a4f; }
@@ -2053,8 +2060,17 @@
           </div>`;
           })()}
           <div class="meta-field full">
-            <label>Notes</label>
-            <div class="notes-display${t.notes ? '' : ' empty'}" id="notes-display-${t.id}">${escHtml(t.notes) || 'No notes yet.'}</div>
+            <div class="notes-label-row">
+              <label>Notes</label>
+              ${isLeaderOrAdmin ? `<button type="button" class="btn-edit-notes" id="btn-edit-notes-${t.id}" onclick="toggleNotesEdit('${t.id}')">Edit notes</button>` : ''}
+            </div>
+            <div class="notes-view-wrap" id="notes-view-${t.id}">
+              <div class="notes-display${t.notes ? '' : ' empty'}" id="notes-display-${t.id}">${escHtml(t.notes) || 'No notes yet.'}</div>
+            </div>
+            ${isLeaderOrAdmin ? `<div class="notes-edit-wrap" id="notes-edit-${t.id}">
+              <textarea class="meta-textarea" id="notes-ta-${t.id}" data-term-id="${t.id}" data-field="notes" onblur="autoSaveMeta(this)" oninput="autoResizeTextarea(this)" placeholder="Edit the full note history…">${escHtml(t.notes||'')}</textarea>
+              <div style="font-size:0.75rem;color:var(--text-soft);font-style:italic;margin-top:0.25rem;">Editing full note history — changes save when you leave the box.</div>
+            </div>` : ''}
           </div>
           ${canEdit ? `<div class="meta-field full">
             <label>Additional Note</label>
@@ -2445,6 +2461,49 @@
     applyView();
   }
 
+  function toggleNotesEdit(termId) {
+    const view = document.getElementById(`notes-view-${termId}`);
+    const edit = document.getElementById(`notes-edit-${termId}`);
+    const btn  = document.getElementById(`btn-edit-notes-${termId}`);
+    const ta   = document.getElementById(`notes-ta-${termId}`);
+    if (!view || !edit || !btn) return;
+    const opening = !edit.classList.contains('open');
+    if (opening) {
+      const term = allTerms.find(t => t.id === termId);
+      if (ta && term) {
+        ta.value = term.notes || '';
+        autoResizeTextarea(ta);
+      }
+      view.classList.add('hidden');
+      edit.classList.add('open');
+      btn.textContent = 'Done';
+      if (ta) ta.focus();
+    } else {
+      const text = ta ? ta.value : '';
+      if (ta) {
+        // Save then close — autoSaveMeta is async; sync local state from textarea
+        autoSaveMeta(ta).then(() => {
+          const term = allTerms.find(t => t.id === termId);
+          const display = document.getElementById(`notes-display-${termId}`);
+          const finalText = term ? (term.notes || '') : text.trim();
+          if (display) {
+            display.textContent = finalText || 'No notes yet.';
+            display.classList.toggle('empty', !finalText);
+          }
+        });
+      }
+      edit.classList.remove('open');
+      view.classList.remove('hidden');
+      btn.textContent = 'Edit notes';
+      const display = document.getElementById(`notes-display-${termId}`);
+      if (display) {
+        const shown = text.trim();
+        display.textContent = shown || 'No notes yet.';
+        display.classList.toggle('empty', !shown);
+      }
+    }
+  }
+
   async function attachNote(termId, btn) {
     const ta   = document.getElementById(`attach-note-${termId}`);
     const msg  = document.getElementById(`attach-note-msg-${termId}`);
@@ -2455,19 +2514,17 @@
       return;
     }
     msg.textContent = '';
-    const now   = new Date();
-    const pad   = n => String(n).padStart(2, '0');
-    const stamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    const name  = displayName(currentUserEmail);
-    const line  = `${stamp} - [${name}]: ${text}`;
-    const term  = allTerms.find(t => t.id === termId);
-    const prev  = term ? (term.notes || '') : '';
-    const combined = prev ? `${prev}\n${line}` : line;
     btn.disabled = true;
     try {
-      const res  = await fetch(`/api/terms/${termId}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({field:'notes', value:combined}) });
+      const res  = await fetch(`/api/terms/${termId}/notes/append`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ text }),
+      });
       const data = await res.json();
       if (data.error) { msg.textContent = '⚠ ' + data.error; msg.className = 'attach-note-msg error'; return; }
+      const combined = data.notes || '';
+      const term = allTerms.find(t => t.id === termId);
       if (term) {
         term.notes = combined;
         if (data.last_modified_by) { term.last_modified_by = data.last_modified_by; term.last_modified_time = data.last_modified_time; updateModifiedDisplay(termId); }
@@ -2477,13 +2534,22 @@
         display.textContent = combined;
         display.classList.remove('empty');
       }
+      const notesTa = document.querySelector(`textarea[data-term-id="${termId}"][data-field="notes"]`);
+      if (notesTa) {
+        notesTa.value = combined;
+        autoResizeTextarea(notesTa);
+      }
       ta.value = '';
       autoResizeTextarea(ta);
       msg.textContent = '✓ Note saved';
       msg.className   = 'attach-note-msg success';
       setTimeout(() => { if (msg) msg.textContent = ''; }, 2500);
-    } catch(e) { msg.textContent = '⚠ Failed to save'; msg.className = 'attach-note-msg error'; }
-    finally    { btn.disabled = false; }
+    } catch(e) {
+      msg.textContent = '⚠ Failed to save note';
+      msg.className   = 'attach-note-msg error';
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   function updateModifiedDisplay(termId) {

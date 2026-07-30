@@ -164,6 +164,8 @@ def api_update_term(term_id):
         return jsonify({"error": "Invalid field"}), 400
     if field == "chinese" and not is_leader():
         return jsonify({"error": "Leader or admin only"}), 403
+    if field == "notes" and not is_leader():
+        return jsonify({"error": "Only leaders and admins can edit the full Notes text. Use Add to Note to append."}), 403
     if field == "chinese" and not (data.get("value") or "").strip():
         return jsonify({"error": "Chinese term cannot be empty"}), 400
     try:
@@ -193,6 +195,49 @@ def api_update_term(term_id):
         if field == "pinyin":
             result["romanization_plain"] = strip_tone_marks(value)
         return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@terms_bp.route("/api/terms/<term_id>/notes/append", methods=["POST"])
+def api_append_note(term_id):
+    """Member+: append a stamped note line. Full notes rewrite is leader-only via PATCH."""
+    if not is_logged_in():
+        return jsonify({"error": "Unauthorized"}), 401
+    if not can_edit_existing():
+        return jsonify({"error": "Your role does not allow editing existing terms"}), 403
+    data = request.json or {}
+    text = (data.get("text") or "").strip()
+    if not text:
+        return jsonify({"error": "Note text is required"}), 400
+    try:
+        now_str  = datetime.now().strftime("%Y-%m-%d %H:%M")
+        modifier = session["user_email"]
+        name     = (session.get("user_name") or "").strip() or modifier
+        stamp_line = f"{now_str} - [{name}]: {text}"
+
+        term = terms_repo.get_term_record(term_id)
+        if not term:
+            return jsonify({"error": "Term not found"}), 404
+        prev = (term.get("Notes") or "").strip()
+        combined = f"{prev}\n{stamp_line}" if prev else stamp_line
+
+        chinese, old_value = terms_repo.update_term_field(
+            term_id, "notes", combined, modifier, now_str
+        )
+        if chinese is None:
+            return jsonify({"error": "Term not found"}), 404
+        write_audit(term_id, chinese, modifier, session.get("user_name", ""),
+                    "updated",
+                    field_changed=FIELD_LABELS.get("notes", "Notes"),
+                    old_value=old_value, new_value=combined,
+                    details="Appended note")
+        return jsonify({
+            "status": "updated",
+            "notes": combined,
+            "last_modified_by": modifier,
+            "last_modified_time": now_str,
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
