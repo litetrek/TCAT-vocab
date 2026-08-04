@@ -237,6 +237,21 @@
 
     /* translation panels — unified box */
     .trans-box { border: 1px solid var(--border); border-radius: 4px; overflow: hidden; background: white; margin-bottom: 0; }
+    .ask-ai-bar { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+    .ask-ai-panel {
+      display: none; margin-bottom: 1rem; padding: 0.85rem 1rem;
+      background: rgba(255,255,255,0.85); border: 1px solid rgba(201,168,76,0.35);
+      border-radius: 4px; box-shadow: var(--shadow);
+    }
+    .ask-ai-panel.open { display: block; }
+    .ask-ai-panel-title {
+      font-size: 0.67rem; text-transform: uppercase; letter-spacing: 0.12em;
+      color: var(--text-soft); margin-bottom: 0.45rem;
+    }
+    .ask-ai-panel-body {
+      font-size: 0.95rem; line-height: 1.55; color: var(--text);
+      white-space: pre-wrap; word-break: break-word;
+    }
     .trans-grid-3 { display: grid; grid-template-columns: repeat(3,1fr); }
     .trans-panel { padding: 0.9rem 1rem; border-right: 1px solid rgba(201,168,76,0.15); position: relative; }
     .trans-panel:last-child { border-right: none; }
@@ -1833,6 +1848,7 @@
     reviewed:         'Marked Reviewed',
     marked_pending:   'Marked Pending',
     ai_translated:    'AI Translated',
+    ask_ai:           'Asked AI',
     merged:           'Merged',
     merged_into:      'Merged Into',
     marked_inactive:  'Marked Inactive',
@@ -2012,6 +2028,14 @@
             ${srcSelect}
           </div>
         </div>
+      </div>
+      <div class="ask-ai-bar">
+        <button type="button" class="btn btn-secondary btn-sm" id="ask-ai-btn-${t.id}" onclick="askAiContext('${t.id}')">✦ Ask AI</button>
+        <span style="font-size:0.8rem;color:var(--text-soft);font-style:italic;">English doctrinal context for this term (not saved)</span>
+      </div>
+      <div class="ask-ai-panel" id="ask-ai-panel-${t.id}">
+        <div class="ask-ai-panel-title">AI context</div>
+        <div class="ask-ai-panel-body" id="ask-ai-body-${t.id}"></div>
       </div>
       <div class="trans-box">
         ${topRow}
@@ -2308,6 +2332,26 @@
   }
 
   // ── AI TRANSLATE (fill empty options) ────────────────────────────────────
+  async function askAiContext(termId) {
+    const btn   = document.getElementById(`ask-ai-btn-${termId}`);
+    const panel = document.getElementById(`ask-ai-panel-${termId}`);
+    const body  = document.getElementById(`ask-ai-body-${termId}`);
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Asking…'; }
+    try {
+      const res  = await fetch(`/api/terms/${termId}/ask-ai`, { method: 'POST', headers: {'Content-Type': 'application/json'} });
+      const data = await res.json();
+      if (!res.ok || data.error) { showToast('⚠ ' + (data.error || 'Ask AI failed')); return; }
+      if (body) body.textContent = data.explanation || '';
+      if (panel) panel.classList.add('open');
+      if (btn) btn.textContent = '✦ Ask again';
+      showToast('✓ AI context ready');
+    } catch (e) {
+      showToast('⚠ Ask AI failed');
+    } finally {
+      if (btn) { btn.disabled = false; if (btn.textContent === '⏳ Asking…') btn.textContent = '✦ Ask AI'; }
+    }
+  }
+
   async function aiTranslate(termId) {
     const btn = document.getElementById(`ai-btn-${termId}`);
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Generating…'; }

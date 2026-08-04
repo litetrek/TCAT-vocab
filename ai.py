@@ -105,6 +105,44 @@ Term: {chinese}
     return [parsed.get(f"TRANSLATION{i+1}", "") for i in range(count)]
 
 
+def explain_term_context(chinese, pinyin="", pali="", sanskrit="", context="", notes="",
+                         source_zh="", source_en="", entity_type="", known_trans=""):
+    """Return an English Buddhist doctrinal gloss for a Chinese term (ephemeral UI helper)."""
+    ai = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    meta = []
+    if pinyin:       meta.append(f"Pinyin: {pinyin}")
+    if pali:         meta.append(f"Pali: {pali}")
+    if sanskrit:     meta.append(f"Sanskrit: {sanskrit}")
+    if entity_type:  meta.append(f"Entity type: {entity_type}")
+    if known_trans:  meta.append(f"Known translation: {known_trans}")
+    if source_zh:    meta.append(f"Source passage (Chinese): {source_zh}")
+    if source_en:    meta.append(f"Source passage (English): {source_en}")
+    if context:      meta.append(f"Additional context: {context}")
+    if notes:        meta.append(f"Translator notes: {notes}")
+    meta_block = ("\n".join(meta) + "\n") if meta else ""
+
+    response = ai.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=900,
+        messages=[{
+            "role": "user",
+            "content": f"""You are an expert in Buddhist studies and Chinese Buddhist terminology.
+Write a short English doctrinal gloss for the Chinese Buddhist term below to help translators.
+
+Requirements:
+- English only (no Chinese in the body except when quoting the term itself once).
+- About 2–4 short paragraphs or short bullet sections covering: (1) core meaning / gloss, (2) doctrinal or textual usage, (3) related concepts if helpful.
+- Use the metadata when provided. Do not invent specific sutra citations or page references.
+- Be clear and practical for translators; avoid marketing fluff.
+
+Term: {chinese}
+{meta_block}
+Reply with the gloss only — no title line like "Gloss:" and no preamble."""
+        }]
+    )
+    return (response.content[0].text or "").strip()
+
+
 def find_known_translation(chinese_term, chinese_paragraph, english_paragraph):
     """Return the verbatim English phrase in english_paragraph that translates chinese_term.
     Validates the result is an actual substring; returns "" if not found or not verifiable."""

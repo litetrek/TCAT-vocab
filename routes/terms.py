@@ -8,7 +8,7 @@ from config import (
 )
 from repositories.audit_repo import write_audit, get_term_audit
 from repositories import terms_repo
-from ai import generate_term_data, generate_missing_translations, classify_term
+from ai import generate_term_data, generate_missing_translations, classify_term, explain_term_context
 from auth import is_logged_in, is_leader, can_create_term, can_edit_existing
 
 terms_bp = Blueprint('terms', __name__)
@@ -338,6 +338,43 @@ def api_mark_reviewed(term_id):
         write_audit(term_id, chinese, modifier, session.get("user_name", ""),
                     "reviewed", details="Marked as Reviewed")
         return jsonify({"status": "reviewed", "last_modified_by": modifier, "last_modified_time": now_str})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@terms_bp.route("/api/terms/<term_id>/ask-ai", methods=["POST"])
+def api_ask_ai(term_id):
+    """Logged-in: ephemeral Buddhist doctrinal gloss in English (not saved on the term)."""
+    if not is_logged_in():
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        term = terms_repo.get_term_record(term_id)
+        if not term:
+            return jsonify({"error": "Term not found"}), 404
+
+        explanation = explain_term_context(
+            chinese     = term.get("Chinese", ""),
+            pinyin      = term.get("Pinyin", ""),
+            pali        = term.get("Pali", ""),
+            sanskrit    = term.get("Sanskrit", ""),
+            context     = term.get("Context", ""),
+            notes       = term.get("Notes", ""),
+            source_zh   = term.get("SourceContentChinese", ""),
+            source_en   = term.get("SourceContentEnglish", ""),
+            known_trans = term.get("TranslationKnown", "") or term.get("TranslationFirst", ""),
+        )
+        if not explanation:
+            return jsonify({"error": "AI returned an empty response"}), 502
+
+        preview = explanation.replace("\n", " ")
+        if len(preview) > 160:
+            preview = preview[:157] + "…"
+        write_audit(
+            term_id, term.get("Chinese", ""),
+            session["user_email"], session.get("user_name", ""),
+            "ask_ai", details=preview,
+        )
+        return jsonify({"explanation": explanation})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
