@@ -2048,12 +2048,13 @@
         </div>
       </div>
       <div class="ask-ai-bar">
-        <button type="button" class="btn btn-secondary btn-sm" id="ask-ai-btn-${t.id}" onclick="askAiContext('${t.id}')">✦ Ask AI</button>
-        <span style="font-size:0.8rem;color:var(--text-soft);font-style:italic;">English doctrinal context for this term (not saved)</span>
+        <button type="button" class="btn btn-secondary btn-sm" id="ask-ai-btn-${t.id}" onclick="askAiContext('${t.id}')">${t.ai_context ? '✦ Ask again' : '✦ Ask AI'}</button>
+        ${t.ai_context ? `<button type="button" class="btn btn-secondary btn-sm" onclick="toggleAiContextPanel('${t.id}')">Show AI context</button>` : ''}
+        <span style="font-size:0.8rem;color:var(--text-soft);font-style:italic;">English doctrinal context for this term${t.ai_context && t.ai_context_generated_at ? ` · saved ${t.ai_context_generated_at.slice(0,10)}` : ''}</span>
       </div>
       <div class="ask-ai-panel" id="ask-ai-panel-${t.id}">
         <div class="ask-ai-panel-title">AI context</div>
-        <div class="ask-ai-panel-body" id="ask-ai-body-${t.id}"></div>
+        <div class="ask-ai-panel-body" id="ask-ai-body-${t.id}">${t.ai_context || ''}</div>
       </div>
       <div class="trans-box">
         ${topRow}
@@ -2350,10 +2351,16 @@
   }
 
   // ── AI TRANSLATE (fill empty options) ────────────────────────────────────
-  async function askAiContext(termId) {
-    const btn   = document.getElementById(`ask-ai-btn-${termId}`);
+  function toggleAiContextPanel(termId) {
     const panel = document.getElementById(`ask-ai-panel-${termId}`);
-    const body  = document.getElementById(`ask-ai-body-${termId}`);
+    if (panel) panel.classList.toggle('open');
+  }
+
+  async function askAiContext(termId) {
+    const btn       = document.getElementById(`ask-ai-btn-${termId}`);
+    const panel     = document.getElementById(`ask-ai-panel-${termId}`);
+    const body      = document.getElementById(`ask-ai-body-${termId}`);
+    const origLabel = btn ? btn.textContent : '✦ Ask AI';
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Asking…'; }
     try {
       const res  = await fetch(`/api/terms/${termId}/ask-ai`, { method: 'POST', headers: {'Content-Type': 'application/json'} });
@@ -2362,11 +2369,13 @@
       if (body) body.textContent = data.explanation || '';
       if (panel) panel.classList.add('open');
       if (btn) btn.textContent = '✦ Ask again';
-      showToast('✓ AI context ready');
+      const term = allTerms.find(x => x.id === termId);
+      if (term) { term.ai_context = data.explanation || ''; term.ai_context_generated_at = data.generated_at || ''; }
+      showToast('✓ AI context saved');
     } catch (e) {
       showToast('⚠ Ask AI failed');
     } finally {
-      if (btn) { btn.disabled = false; if (btn.textContent === '⏳ Asking…') btn.textContent = '✦ Ask AI'; }
+      if (btn) { btn.disabled = false; if (btn.textContent === '⏳ Asking…') btn.textContent = origLabel; }
     }
   }
 

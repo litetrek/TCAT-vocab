@@ -344,7 +344,7 @@ def api_mark_reviewed(term_id):
 
 @terms_bp.route("/api/terms/<term_id>/ask-ai", methods=["POST"])
 def api_ask_ai(term_id):
-    """Logged-in: ephemeral Buddhist doctrinal gloss in English (not saved on the term)."""
+    """Logged-in: Buddhist doctrinal gloss in English, saved on the term (overwritten on each re-ask)."""
     if not is_logged_in():
         return jsonify({"error": "Unauthorized"}), 401
     try:
@@ -366,6 +366,9 @@ def api_ask_ai(term_id):
         if not explanation:
             return jsonify({"error": "AI returned an empty response"}), 502
 
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+        terms_repo.save_ai_context(term_id, explanation, now_str)
+
         preview = explanation.replace("\n", " ")
         if len(preview) > 160:
             preview = preview[:157] + "…"
@@ -374,7 +377,7 @@ def api_ask_ai(term_id):
             session["user_email"], session.get("user_name", ""),
             "ask_ai", details=preview,
         )
-        return jsonify({"explanation": explanation})
+        return jsonify({"explanation": explanation, "generated_at": now_str})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

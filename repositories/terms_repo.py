@@ -138,6 +138,8 @@ def _row_to_response(row):
         "classification_source": _v(row, "classification_source"),
         "classified_by":         _v(row, "classified_by"),
         "classified_at":         _fmt_ts(_v(row, "classified_at")),
+        "ai_context":              _v(row, "ai_context"),
+        "ai_context_generated_at": _fmt_ts(_v(row, "ai_context_generated_at")),
     }
 
 
@@ -215,6 +217,13 @@ def get_term_record(term_id):
     if not result.data:
         return None
     return _row_to_sheets_fmt(result.data[0])
+
+
+def save_ai_context(term_id, explanation, now_str):
+    supabase.table("terms").update({
+        "ai_context":              explanation,
+        "ai_context_generated_at": _to_pg(now_str),
+    }).eq("display_id", term_id).execute()
 
 
 def create_term(data):
