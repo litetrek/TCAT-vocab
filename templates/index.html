@@ -94,6 +94,8 @@
     .filter-btn { background: none; border: 1px solid transparent; padding: 0.5rem 0.75rem; text-align: left; font-family: 'EB Garamond', serif; font-size: 0.9rem; color: var(--text); border-radius: 3px; cursor: pointer; transition: all 0.2s; }
     .filter-btn:hover, .filter-btn.active { background: rgba(201,168,76,0.15); border-color: rgba(201,168,76,0.4); color: var(--ink); }
     .filter-btn .count { float: right; font-size: 0.75rem; color: var(--text-soft); }
+    .filter-toggle-row { display: flex; align-items: center; gap: 0.45rem; padding: 0.45rem 0.75rem; font-family: 'EB Garamond', serif; font-size: 0.88rem; color: var(--text); cursor: pointer; }
+    .filter-toggle-row input { cursor: pointer; }
     .sidebar-source-sel { width: 100%; font-family: 'EB Garamond', serif; font-size: 0.88rem; padding: 0.35rem 0.5rem; border: 1px solid rgba(26,18,8,0.18); border-radius: 3px; background: rgba(255,255,255,0.6); color: var(--text); cursor: pointer; }
     .sidebar-source-sel:focus { outline: none; border-color: var(--gold); }
 
@@ -186,6 +188,9 @@
     .vocab-table th.sort-active { color: var(--gold-light); }
     .sort-icon { margin-left: 0.25rem; font-size: 0.6rem; opacity: 0.5; }
     .sort-active .sort-icon { opacity: 1; }
+    .sort-sub { margin-left: 0.6rem; font-size: 0.7rem; font-weight: normal; opacity: 0.5; padding: 0.05rem 0.3rem; border-radius: 2px; }
+    .sort-sub:hover { opacity: 1; }
+    .sort-sub.sort-active { opacity: 1; color: var(--gold-light); }
     .vocab-table td { padding: 0.6rem 0.9rem; border-bottom: 1px solid rgba(201,168,76,0.1); vertical-align: middle; }
     .vocab-table tbody tr { cursor: pointer; transition: background 0.15s; }
     .vocab-table tbody tr:hover td { background: rgba(201,168,76,0.06); }
@@ -812,6 +817,10 @@
         <button class="filter-btn" onclick="setFilter('pending',this)">Pending <span class="count" id="cnt-pending">0</span></button>
         <button class="filter-btn" onclick="setFilter('reviewed',this)">Reviewed <span class="count" id="cnt-finalized">0</span></button>
         <button class="filter-btn" onclick="setFilter('inactive',this)">Inactive <span class="count" id="cnt-inactive">0</span></button>
+        <label class="filter-toggle-row">
+          <input type="checkbox" id="filter-missing-known" onchange="toggleMissingKnown(this.checked)">
+          Missing Known Translation
+        </label>
       </div>
     </div>
 
@@ -1286,6 +1295,7 @@
   let currentSource      = '';
   let currentEntityType  = '';
   let currentSubjectField = '';
+  let filterMissingKnown = false;
   let currentPage   = 1;
   let pageSize      = 20;
 
@@ -1492,6 +1502,12 @@
     applyView();
   }
 
+  function toggleMissingKnown(checked) {
+    filterMissingKnown = checked;
+    currentPage = 1;
+    applyView();
+  }
+
   function populateSidebarSource() {
     const sel = document.getElementById('sidebar-source');
     if (!sel) return;
@@ -1529,6 +1545,8 @@
       terms = terms.filter(t => t.entity_type === currentEntityType);
     }
     if (currentSubjectField) terms = terms.filter(t => t.subject_field === currentSubjectField);
+
+    if (filterMissingKnown) terms = terms.filter(t => !t.trans_known || !t.trans_known.trim());
 
     if (currentFilter === 'inactive') {
       terms = terms.filter(t => t.status === 'inactive');
@@ -1650,7 +1668,7 @@
           </colgroup>
           <thead><tr>
             ${mergeMode ? '<th></th>' : ''}
-            <th class="${thClass('chinese')}" onclick="setSort('chinese')">Term ${sortIcon('chinese')}<div class="col-resizer" onclick="event.stopPropagation()"></div></th>
+            <th class="${thClass('chinese')}" onclick="setSort('chinese')">Term ${sortIcon('chinese')}<span class="sort-sub${sortField==='id'?' sort-active':''}" onclick="event.stopPropagation();setSort('id')" title="Sort by Term ID">ID${sortIcon('id')}</span><div class="col-resizer" onclick="event.stopPropagation()"></div></th>
             <th class="${thClass('pinyin')}"  onclick="setSort('pinyin')">Pinyin ${sortIcon('pinyin')}<div class="col-resizer" onclick="event.stopPropagation()"></div></th>
             <th>${currentFilter === 'reviewed' ? 'First Choice' : 'AI 1'}<div class="col-resizer" onclick="event.stopPropagation()"></div></th>
             <th>${currentFilter === 'reviewed' ? 'Second Choice' : 'AI 2'}<div class="col-resizer" onclick="event.stopPropagation()"></div></th>
