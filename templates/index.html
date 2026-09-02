@@ -2020,17 +2020,20 @@
     const backOnclick = opts.onBack    || 'closeEditView()';
     let navHtml = '';
     if (opts.navList) {
-      const list   = opts.navList;
-      const idx    = list.indexOf(t.id);
-      const prevId = idx > 0 ? list[idx - 1] : null;
-      const nextId = (idx >= 0 && idx < list.length - 1) ? list[idx + 1] : null;
+      // Use the explicit clicked-position index (opts.navIndex), not indexOf(t.id) —
+      // the same term can appear more than once in a unit, and indexOf always resolves
+      // to the first occurrence, which made Previous/Next stick on repeated terms.
+      const list = opts.navList;
+      const idx  = (typeof opts.navIndex === 'number') ? opts.navIndex : list.indexOf(t.id);
+      const prevIdx = idx > 0 ? idx - 1 : null;
+      const nextIdx = (idx >= 0 && idx < list.length - 1) ? idx + 1 : null;
       const posLabel = idx >= 0 ? `${idx + 1} / ${list.length}` : '—';
       if (list.length > 1) {
         navHtml = `
           <div class="edit-term-nav">
-            <button class="btn-page" onclick="${prevId ? `trdNavigateOverlayTerm('${prevId}')` : ''}"${prevId ? '' : ' disabled'} title="Previous term in this unit">← Previous</button>
+            <button class="btn-page" onclick="${prevIdx !== null ? `trdNavigateOverlayTerm(${prevIdx})` : ''}"${prevIdx !== null ? '' : ' disabled'} title="Previous term in this unit">← Previous</button>
             <span class="edit-term-pos">${posLabel}</span>
-            <button class="btn-page" onclick="${nextId ? `trdNavigateOverlayTerm('${nextId}')` : ''}"${nextId ? '' : ' disabled'} title="Next term in this unit">Next →</button>
+            <button class="btn-page" onclick="${nextIdx !== null ? `trdNavigateOverlayTerm(${nextIdx})` : ''}"${nextIdx !== null ? '' : ' disabled'} title="Next term in this unit">Next →</button>
           </div>`;
       }
     } else {
@@ -5003,23 +5006,31 @@
 
   function trdHandleTermClick(event, termId) {
     event.stopPropagation();
+    const clicked   = event.target.closest('.term-known[data-term-id]');
     const container = event.target.closest('.trans-unit-text, .trd-sent-text');
-    const navList = container
-      ? Array.from(container.querySelectorAll('.term-known[data-term-id]')).map(el => el.getAttribute('data-term-id'))
-      : [String(termId)];
-    trdOpenTermFull(termId, navList);
+    let navList  = [String(termId)];
+    let navIndex = 0;
+    if (container) {
+      const spans = Array.from(container.querySelectorAll('.term-known[data-term-id]'));
+      navList  = spans.map(el => el.getAttribute('data-term-id'));
+      navIndex = clicked ? spans.indexOf(clicked) : 0;
+      if (navIndex < 0) navIndex = 0;
+    }
+    trdOpenTermFull(termId, navList, navIndex);
   }
 
   // ── Full editable term panel (reuses the Vocabulary tab's edit view as an overlay) ──
 
-  async function trdOpenTermFull(termId, navList) {
+  async function trdOpenTermFull(termId, navList, navIndex) {
     let term = allTerms.find(t => String(t.id) === String(termId));
     if (!term) { await loadTerms(); term = allTerms.find(t => String(t.id) === String(termId)); }
     if (!term) { showToast('Term details not found.'); return; }
     trdHideCandidatePanel();
     const list = (navList && navList.length) ? navList.map(String) : [String(term.id)];
+    const idx  = (typeof navIndex === 'number' && navIndex >= 0 && navIndex < list.length)
+      ? navIndex : list.indexOf(String(term.id));
     editingTermId = term.id;
-    _editViewOpts = { navList: list, backLabel: '← Back to Unit', onBack: 'trdCloseTermFull()' };
+    _editViewOpts = { navList: list, navIndex: idx, backLabel: '← Back to Unit', onBack: 'trdCloseTermFull()' };
     const ev = document.getElementById('edit-view');
     if (!_editViewHome) _editViewHome = { parent: ev.parentNode, next: ev.nextSibling };
     if (ev.parentNode !== document.body) document.body.appendChild(ev);
@@ -5031,8 +5042,11 @@
     ev.scrollTop = 0;
   }
 
-  function trdNavigateOverlayTerm(termId) {
-    trdOpenTermFull(termId, _editViewOpts ? _editViewOpts.navList : null);
+  function trdNavigateOverlayTerm(targetIndex) {
+    if (!_editViewOpts || !_editViewOpts.navList) return;
+    const termId = _editViewOpts.navList[targetIndex];
+    if (termId === undefined) return;
+    trdOpenTermFull(termId, _editViewOpts.navList, targetIndex);
   }
 
   function trdCloseTermFull() {
@@ -5073,7 +5087,7 @@
   function trdShowCandidatePanel(selectedText) {
     const match = trdKnownTerms.find(t => t.chinese === selectedText);
     if (match) {
-      trdOpenTermFull(match.id, [String(match.id)]);
+      trdOpenTermFull(match.id, [String(match.id)], 0);
       return;
     }
 
