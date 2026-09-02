@@ -4425,13 +4425,17 @@
         const typeTag = c.section_type && c.section_type !== 'body'
           ? `<span class="trans-ch-type">${escHtml(c.section_type)}</span>` : '';
         const titleSafe = escHtml(c.title || '');
+        const allConfirmed = (c.draft_total || 0) > 0 && c.draft_confirmed === c.draft_total;
+        const reviewBtn = allConfirmed ? '' :
+          `<button class="btn btn-sm btn-primary" onclick="transOpenReview(${c.id},'${titleSafe}')">Review Drafts</button>`;
+        const unitsBtnLabel = allConfirmed ? 'Work on Units' : 'Browse Units';
         return `<div class="trans-chapter-row" style="cursor:default;">
           <span class="trans-ch-idx">${c.chapter_index + 1}</span>
           <span class="trans-ch-title">${escHtml(c.title || _transCurrentBookTitle)}</span>
           ${typeTag}
           <div class="trd-ch-actions">
-            <button class="btn btn-sm btn-primary" onclick="transOpenReview(${c.id},'${titleSafe}')">Review Drafts</button>
-            <button class="btn btn-sm btn-secondary" onclick="transOpenChapter(${c.id},'${titleSafe}')">Browse Units</button>
+            ${reviewBtn}
+            <button class="btn btn-sm btn-secondary" onclick="transOpenChapter(${c.id},'${titleSafe}')">${unitsBtnLabel}</button>
           </div>
         </div>`;
       }).join('');

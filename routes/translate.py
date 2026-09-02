@@ -297,7 +297,7 @@ def api_upload_chapter(book_id):
 @translate_bp.route("/api/trans/books/<int:book_id>/chapters", methods=["GET"])
 @_require_translation
 def api_list_chapters(book_id):
-    """Return chapters of a book ordered by chapter_index."""
+    """Return chapters of a book ordered by chapter_index, with draft-review completion counts."""
     try:
         result = (
             supabase.table("trans_chapters")
@@ -306,9 +306,28 @@ def api_list_chapters(book_id):
             .order("chapter_index")
             .execute()
         )
+        chapters = result.data
+        chapter_ids = [c["id"] for c in chapters]
+        draft_counts = {}
+        if chapter_ids:
+            drafts_result = (
+                supabase.table("trans_unit_drafts")
+                .select("chapter_id,status")
+                .in_("chapter_id", chapter_ids)
+                .execute()
+            )
+            for d in drafts_result.data:
+                counts = draft_counts.setdefault(d["chapter_id"], {"total": 0, "confirmed": 0})
+                counts["total"] += 1
+                if d["status"] == "confirmed":
+                    counts["confirmed"] += 1
+        for c in chapters:
+            counts = draft_counts.get(c["id"], {"total": 0, "confirmed": 0})
+            c["draft_total"] = counts["total"]
+            c["draft_confirmed"] = counts["confirmed"]
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
-    return jsonify(result.data)
+    return jsonify(chapters)
 
 
 # ── GET /api/trans/chapters/<chapter_id>/units ────────────────────────────────
