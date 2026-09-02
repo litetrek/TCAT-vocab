@@ -1106,7 +1106,7 @@
     <div id="trans-review-view" style="display:none;">
       <div class="main-toolbar" style="margin-bottom:1rem;">
         <div style="display:flex;align-items:center;gap:1rem;">
-          <button class="btn-back" onclick="transShowChapterList()">← Chapters</button>
+          <button class="btn-back" onclick="transBackToChapters()">← Chapters</button>
           <h1 class="main-title" id="trans-review-title">Review Drafts</h1>
         </div>
         <span style="font-size:0.85rem;color:var(--text-soft);" id="trans-review-progress"></span>
@@ -1120,7 +1120,7 @@
     <div id="trans-unit-view" style="display:none;">
       <div class="main-toolbar" style="margin-bottom:1.5rem;">
         <div style="display:flex;align-items:center;gap:1rem;">
-          <button class="btn-back" onclick="transShowChapterList()">← Chapters</button>
+          <button class="btn-back" onclick="transBackToChapters()">← Chapters</button>
           <h1 class="main-title" id="trans-unit-title">Units</h1>
         </div>
       </div>
@@ -4059,6 +4059,14 @@
     _pushHash('#translation/chapters/' + _transCurrentBookId);
     _transHideAll();
     document.getElementById('trans-chapter-view').style.display = '';
+  }
+
+  // Used by the "← Chapters" back buttons — re-fetches so draft_total/draft_confirmed
+  // (and therefore the Review Drafts / Work on Units button state) reflect anything
+  // just confirmed in Review Drafts, not the stale render from before that visit.
+  function transBackToChapters() {
+    transShowChapterList();
+    transReloadChapters();
   }
 
   function transShowUnitList() {
