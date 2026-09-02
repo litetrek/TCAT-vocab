@@ -500,6 +500,9 @@
     .term-known:hover { background: rgba(201,168,76,0.32); }
     .term-known.term-has-known { background: rgba(70,130,180,0.12); border-bottom: 1.5px solid rgba(70,130,180,0.7); }
     .term-known.term-has-known:hover { background: rgba(70,130,180,0.22); }
+    .term-known.term-reviewed { background: rgba(58,156,92,0.16); border-bottom: 1.5px solid rgba(58,156,92,0.75); }
+    .term-known.term-reviewed:hover { background: rgba(58,156,92,0.28); }
+    .edit-view-overlay { position: fixed; inset: 0; z-index: 600; background: var(--paper, #fdfaf3); box-shadow: 0 0 40px rgba(26,18,8,0.35); }
     #trans-review-body .term-known { cursor: pointer; }
     #ext-text-zh .term-known { cursor: pointer; }
     #ext-candidate-panel { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 500; pointer-events: none; }
@@ -1815,16 +1818,24 @@
     el.addEventListener('animationend', () => el.classList.remove('term-flash'), { once: true });
   }
 
+  let _editViewOpts = null; // non-null while #edit-view is showing as a Translation-module overlay
+  let _editViewHome  = null; // { parent, next } — #edit-view's normal spot inside #vocab-view
+
   function openEditView(termId) {
     _pushHash('#vocabulary/term/' + termId);
     const term = allTerms.find(t => t.id === termId);
     if (!term) return;
     editingTermId = termId;
+    _editViewOpts = null;
     // Keep list pagination aligned with this term's place in the filtered list
     const { index } = getAdjacentTerms(termId);
     if (index >= 0) currentPage = Math.floor(index / pageSize) + 1;
     document.getElementById('list-view').style.display = 'none';
     const ev = document.getElementById('edit-view');
+    ev.classList.remove('edit-view-overlay');
+    if (_editViewHome && ev.parentNode !== _editViewHome.parent) {
+      _editViewHome.parent.insertBefore(ev, _editViewHome.next);
+    }
     ev.style.display = 'block';
     ev.innerHTML = buildEditView(term);
     ev.querySelectorAll('.tp-textarea, .meta-textarea').forEach(ta => autoResizeTextarea(ta));
@@ -1849,7 +1860,7 @@
     const term = allTerms.find(t => t.id === editingTermId);
     if (term) {
       const ev = document.getElementById('edit-view');
-      ev.innerHTML = buildEditView(term);
+      ev.innerHTML = buildEditView(term, _editViewOpts);
       ev.querySelectorAll('.tp-textarea, .meta-textarea').forEach(ta => autoResizeTextarea(ta));
       loadAuditLog(editingTermId);
     }
@@ -1917,7 +1928,8 @@
     return '';
   }
 
-  function buildEditView(t) {
+  function buildEditView(t, opts) {
+    opts = opts || {};
     const isLeaderOrAdmin = isAdmin || userRole === 'leader';
     const isFinalized     = t.status === 'reviewed';
     const firstKey  = t.final || '';
@@ -2004,10 +2016,35 @@
 
     const lmBy  = t.last_modified_by   || '';
     const lmAt  = t.last_modified_time || '';
-    const adj   = getAdjacentTerms(t.id);
-    const prevDis = adj.prev ? '' : ' disabled';
-    const nextDis = adj.next ? '' : ' disabled';
-    const posLabel = adj.index >= 0 ? `${adj.index + 1} / ${adj.total}` : '—';
+    const backLabel   = opts.backLabel || '← Back to list';
+    const backOnclick = opts.onBack    || 'closeEditView()';
+    let navHtml = '';
+    if (opts.navList) {
+      const list   = opts.navList;
+      const idx    = list.indexOf(t.id);
+      const prevId = idx > 0 ? list[idx - 1] : null;
+      const nextId = (idx >= 0 && idx < list.length - 1) ? list[idx + 1] : null;
+      const posLabel = idx >= 0 ? `${idx + 1} / ${list.length}` : '—';
+      if (list.length > 1) {
+        navHtml = `
+          <div class="edit-term-nav">
+            <button class="btn-page" onclick="${prevId ? `trdNavigateOverlayTerm('${prevId}')` : ''}"${prevId ? '' : ' disabled'} title="Previous term in this unit">← Previous</button>
+            <span class="edit-term-pos">${posLabel}</span>
+            <button class="btn-page" onclick="${nextId ? `trdNavigateOverlayTerm('${nextId}')` : ''}"${nextId ? '' : ' disabled'} title="Next term in this unit">Next →</button>
+          </div>`;
+      }
+    } else {
+      const adj = getAdjacentTerms(t.id);
+      const prevDis = adj.prev ? '' : ' disabled';
+      const nextDis = adj.next ? '' : ' disabled';
+      const posLabel = adj.index >= 0 ? `${adj.index + 1} / ${adj.total}` : '—';
+      navHtml = `
+          <div class="edit-term-nav">
+            <button class="btn-page" onclick="navigateEditTerm(-1)"${prevDis} title="Previous term in current list">← Previous</button>
+            <span class="edit-term-pos">${posLabel}</span>
+            <button class="btn-page" onclick="navigateEditTerm(1)"${nextDis} title="Next term in current list">Next →</button>
+          </div>`;
+    }
     return `
       <div class="edit-header">
         <div class="edit-header-term">
@@ -2035,12 +2072,8 @@
           </div>
         </div>
         <div class="edit-header-actions">
-          <button class="btn-back" onclick="closeEditView()">← Back to list</button>
-          <div class="edit-term-nav">
-            <button class="btn-page" onclick="navigateEditTerm(-1)"${prevDis} title="Previous term in current list">← Previous</button>
-            <span class="edit-term-pos">${posLabel}</span>
-            <button class="btn-page" onclick="navigateEditTerm(1)"${nextDis} title="Next term in current list">Next →</button>
-          </div>
+          <button class="btn-back" onclick="${backOnclick}">${backLabel}</button>
+          ${navHtml}
           <div class="edit-header-source">
             <span class="edit-header-source-lbl">Source</span>
             ${srcSelect}
@@ -4643,7 +4676,6 @@
   let trdKnownTerms       = [];
   let _trdCurrentTerm     = '';
   let _trdCurrentIsNew    = false;
-  let _trdCurrentMatch    = null;
   let _trdGeneratedFields = null;
   let _trdPanelPos        = null;
 
@@ -4724,7 +4756,7 @@
         }
         if (!overlap) {
           const tip = term.trans_known || term.trans1 || '';
-          segs.push({ start: idx, end: idx + ch.length, termId: term.id, ch, tip, hasKnown: !!term.trans_known });
+          segs.push({ start: idx, end: idx + ch.length, termId: term.id, ch, tip, hasKnown: !!term.trans_known, isReviewed: term.status === 'reviewed' });
           for (let i = idx; i < idx + ch.length; i++) claimed[i] = 1;
         }
         pos = idx + 1;
@@ -4735,7 +4767,8 @@
     let html = '', cursor = 0;
     for (const s of segs) {
       if (cursor < s.start) html += escHtml(text.slice(cursor, s.start));
-      html += `<span class="term-known${s.hasKnown ? ' term-has-known' : ''}" data-term-id="${s.termId}" title="${escHtml(s.tip)}" onclick="trdHandleTermClick(event,'${escHtml(String(s.termId))}')">${escHtml(s.ch)}</span>`;
+      const colorClass = s.isReviewed ? ' term-reviewed' : (s.hasKnown ? ' term-has-known' : '');
+      html += `<span class="term-known${colorClass}" data-term-id="${s.termId}" title="${escHtml(s.tip)}" onclick="trdHandleTermClick(event,'${escHtml(String(s.termId))}')">${escHtml(s.ch)}</span>`;
       cursor = s.end;
     }
     if (cursor < len) html += escHtml(text.slice(cursor));
@@ -4970,8 +5003,55 @@
 
   function trdHandleTermClick(event, termId) {
     event.stopPropagation();
-    const term = trdKnownTerms.find(t => String(t.id) === String(termId));
-    if (term) trdShowCandidatePanel(term.chinese);
+    const container = event.target.closest('.trans-unit-text, .trd-sent-text');
+    const navList = container
+      ? Array.from(container.querySelectorAll('.term-known[data-term-id]')).map(el => el.getAttribute('data-term-id'))
+      : [String(termId)];
+    trdOpenTermFull(termId, navList);
+  }
+
+  // ── Full editable term panel (reuses the Vocabulary tab's edit view as an overlay) ──
+
+  async function trdOpenTermFull(termId, navList) {
+    let term = allTerms.find(t => String(t.id) === String(termId));
+    if (!term) { await loadTerms(); term = allTerms.find(t => String(t.id) === String(termId)); }
+    if (!term) { showToast('Term details not found.'); return; }
+    trdHideCandidatePanel();
+    const list = (navList && navList.length) ? navList.map(String) : [String(term.id)];
+    editingTermId = term.id;
+    _editViewOpts = { navList: list, backLabel: '← Back to Unit', onBack: 'trdCloseTermFull()' };
+    const ev = document.getElementById('edit-view');
+    if (!_editViewHome) _editViewHome = { parent: ev.parentNode, next: ev.nextSibling };
+    if (ev.parentNode !== document.body) document.body.appendChild(ev);
+    ev.classList.add('edit-view-overlay');
+    ev.style.display = 'block';
+    ev.innerHTML = buildEditView(term, _editViewOpts);
+    ev.querySelectorAll('.tp-textarea, .meta-textarea').forEach(ta => autoResizeTextarea(ta));
+    loadAuditLog(term.id);
+    ev.scrollTop = 0;
+  }
+
+  function trdNavigateOverlayTerm(termId) {
+    trdOpenTermFull(termId, _editViewOpts ? _editViewOpts.navList : null);
+  }
+
+  function trdCloseTermFull() {
+    const ev = document.getElementById('edit-view');
+    if (document.activeElement && ev.contains(document.activeElement)) document.activeElement.blur();
+    ev.style.display = 'none';
+    ev.classList.remove('edit-view-overlay');
+    ev.innerHTML = '';
+    if (_editViewHome && ev.parentNode !== _editViewHome.parent) {
+      _editViewHome.parent.insertBefore(ev, _editViewHome.next);
+    }
+    editingTermId = null;
+    _editViewOpts = null;
+    // Reflect any edits (status color, translations) in the already-rendered highlighting
+    trdFetchKnownTerms().then(() => {
+      document.querySelectorAll('.trans-unit-text, .trd-sent-text').forEach(el => {
+        el.innerHTML = trdHighlightKnownTerms(el.textContent);
+      });
+    });
   }
 
   function trdHandleSelection() {
@@ -4991,10 +5071,15 @@
   }
 
   function trdShowCandidatePanel(selectedText) {
+    const match = trdKnownTerms.find(t => t.chinese === selectedText);
+    if (match) {
+      trdOpenTermFull(match.id, [String(match.id)]);
+      return;
+    }
+
     _trdCurrentTerm     = selectedText;
     _trdGeneratedFields = null;
-    const match = trdKnownTerms.find(t => t.chinese === selectedText);
-    _trdCurrentIsNew = !match;
+    _trdCurrentIsNew    = true;
 
     let inner = `<div class="ext-term-modal" id="trd-modal-inner">`;
     inner += `<div class="ext-candidate-header" id="trd-modal-handle">`;
@@ -5002,48 +5087,16 @@
     inner += `<button class="ext-candidate-clear" onclick="trdClearSelection()" title="Close">✕</button>`;
     inner += `</div>`;
 
-    if (match) {
-      _trdCurrentMatch = match;
-      const isFinalized = match.status === 'reviewed';
-      const finalLabel  = { TranslationKnown:'Known Trans.', Translation1:'Translation 1', Translation2:'Translation 2', Translation3:'Translation 3' }[match.final] || '';
-      inner += `<div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">`;
-      inner += `<div class="ext-candidate-badge ext-candidate-known" style="margin:0;">Already in database</div>`;
-      if (isFinalized) {
-        inner += `<div class="ext-candidate-badge" style="margin:0;background:var(--green-soft,#e8f5e9);color:var(--green-dark,#2e7d32);border-color:var(--green-dark,#2e7d32);">Reviewed${finalLabel ? ' — ' + finalLabel : ''}</div>`;
-      } else {
-        inner += `<div class="ext-candidate-badge" style="margin:0;background:#fff8e1;color:#a67c00;border-color:#e6c84b;">Pending</div>`;
-      }
-      inner += `</div>`;
-      const refFields = [
-        ['Known Trans.',  match.trans_known],
-        ['Translation 1', match.trans1],
-        ['Translation 2', match.trans2],
-        ['Translation 3', match.trans3],
-        ['Pinyin',        match.pinyin],
-        ['Pali',          match.pali],
-        ['Sanskrit',      match.sanskrit],
-      ].filter(([, v]) => v);
-      if (refFields.length) {
-        inner += `<div class="ext-candidate-fields" style="margin-top:0.9rem;">`;
-        for (const [label, value] of refFields)
-          inner += `<span class="ext-cfield-label">${escHtml(label)}</span><span class="ext-cfield-value">${escHtml(value)}</span>`;
-        inner += `</div>`;
-      }
-      inner += `<div class="ext-save-row">`;
-      inner += `<button class="btn btn-secondary" onclick="trdShowTermEditMode()">✎ Edit Term</button>`;
-      inner += `</div>`;
-    } else {
-      inner += `<div class="ext-candidate-badge ext-candidate-new">New term — not yet in database</div>`;
-      inner += `<div class="ext-find-row" style="margin-top:0.65rem;">`;
-      inner += `<button class="btn-ext-find" id="trd-gen-btn" onclick="trdGenerateTranslations()">✨ Generate 3 AI Translations</button>`;
-      inner += `<span class="ext-find-msg" id="trd-gen-msg"></span>`;
-      inner += `</div>`;
-      inner += `<div id="trd-gen-fields"></div>`;
-      inner += `<div class="ext-save-row">`;
-      inner += `<button class="btn btn-primary" id="trd-save-btn" onclick="trdSaveTerm()">Add to Database</button>`;
-      inner += `<span class="ext-save-msg" id="trd-save-msg"></span>`;
-      inner += `</div>`;
-    }
+    inner += `<div class="ext-candidate-badge ext-candidate-new">New term — not yet in database</div>`;
+    inner += `<div class="ext-find-row" style="margin-top:0.65rem;">`;
+    inner += `<button class="btn-ext-find" id="trd-gen-btn" onclick="trdGenerateTranslations()">✨ Generate 3 AI Translations</button>`;
+    inner += `<span class="ext-find-msg" id="trd-gen-msg"></span>`;
+    inner += `</div>`;
+    inner += `<div id="trd-gen-fields"></div>`;
+    inner += `<div class="ext-save-row">`;
+    inner += `<button class="btn btn-primary" id="trd-save-btn" onclick="trdSaveTerm()">Add to Database</button>`;
+    inner += `<span class="ext-save-msg" id="trd-save-msg"></span>`;
+    inner += `</div>`;
     inner += `</div>`;
 
     const panel = document.getElementById('trd-candidate-panel');
@@ -5097,139 +5150,6 @@
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
     });
-  }
-
-  // Maps field key → VOTE_KEY_TO_COL_KEY key expected by /api/terms/<id>/final
-  const _TRD_FINALIZE_KEY = {
-    trans_known: 'TranslationKnown',
-    trans1:      'Translation1',
-    trans2:      'Translation2',
-    trans3:      'Translation3',
-  };
-
-  function trdShowTermEditMode() {
-    const match = _trdCurrentMatch;
-    if (!match) return;
-    const editFields = [
-      { label: 'Known Translation', field: 'trans_known', value: match.trans_known || '' },
-      { label: 'Translation 1',     field: 'trans1',      value: match.trans1      || '' },
-      { label: 'Translation 2',     field: 'trans2',      value: match.trans2      || '' },
-      { label: 'Translation 3',     field: 'trans3',      value: match.trans3      || '' },
-      { label: 'Pinyin',            field: 'pinyin',      value: match.pinyin      || '' },
-      { label: 'Pali',              field: 'pali',        value: match.pali        || '' },
-      { label: 'Sanskrit',          field: 'sanskrit',    value: match.sanskrit    || '' },
-    ];
-    let inner = `<div class="ext-term-modal" id="trd-modal-inner">`;
-    inner += `<div class="ext-candidate-header" id="trd-modal-handle">`;
-    inner += `<span class="ext-candidate-zh">${escHtml(match.chinese || _trdCurrentTerm)}</span>`;
-    inner += `<button class="ext-candidate-clear" onclick="trdClearSelection()" title="Close">✕</button>`;
-    inner += `</div>`;
-    inner += `<div class="ext-candidate-badge ext-candidate-known">Edit Term</div>`;
-    inner += `<div style="margin-top:0.9rem;">`;
-    for (const f of editFields) {
-      const voteKey = _TRD_FINALIZE_KEY[f.field];
-      const canFinalize = !!voteKey;
-      inner += `<div style="margin-bottom:0.65rem;">`;
-      inner += `<label class="ext-cfield-label" style="display:block;margin-bottom:0.2rem;">${escHtml(f.label)}</label>`;
-      inner += `<div style="display:flex;gap:0.4rem;align-items:center;">`;
-      inner += `<input class="ext-known-input" style="min-height:unset;padding:0.35rem 0.6rem;flex:1;" id="trd-edit-${f.field}" type="text" value="${escHtml(f.value)}">`;
-      if (canFinalize && f.value) {
-        inner += `<button class="btn btn-secondary" style="padding:0.25rem 0.55rem;font-size:0.72rem;white-space:nowrap;" onclick="trdFinalizeTerm('${voteKey}')">Finalize</button>`;
-      }
-      inner += `</div>`;
-      inner += `</div>`;
-    }
-    inner += `</div>`;
-    inner += `<div class="ext-save-row">`;
-    inner += `<button class="btn btn-primary" id="trd-edit-save-btn" onclick="trdSaveTermEdits()">Save Changes</button>`;
-    inner += `<button class="btn btn-secondary" onclick="trdShowCandidatePanel(_trdCurrentTerm)" style="margin-left:0.5rem;">Cancel</button>`;
-    inner += `<span class="ext-save-msg" id="trd-edit-msg"></span>`;
-    inner += `</div>`;
-    inner += `</div>`;
-    const panel = document.getElementById('trd-candidate-panel');
-    if (!panel) return;
-    panel.innerHTML = inner;
-    panel.style.display = 'block';
-    const modal = document.getElementById('trd-modal-inner');
-    const handle = document.getElementById('trd-modal-handle');
-    if (modal && _trdPanelPos) {
-      modal.style.left  = _trdPanelPos.x + 'px';
-      modal.style.top   = _trdPanelPos.y + 'px';
-      modal.style.right = 'auto';
-    }
-    if (modal && handle) _trdMakeDraggable(modal, handle);
-  }
-
-  async function trdSaveTermEdits() {
-    const match = _trdCurrentMatch;
-    if (!match) return;
-    const btn = document.getElementById('trd-edit-save-btn');
-    const msg = document.getElementById('trd-edit-msg');
-    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
-    if (msg) { msg.textContent = ''; msg.style.color = ''; }
-    const editFields = [
-      { field: 'trans_known', orig: match.trans_known || '' },
-      { field: 'trans1',      orig: match.trans1      || '' },
-      { field: 'trans2',      orig: match.trans2      || '' },
-      { field: 'trans3',      orig: match.trans3      || '' },
-      { field: 'pinyin',      orig: match.pinyin      || '' },
-      { field: 'pali',        orig: match.pali        || '' },
-      { field: 'sanskrit',    orig: match.sanskrit    || '' },
-    ];
-    const changed = [];
-    for (const f of editFields) {
-      const el = document.getElementById(`trd-edit-${f.field}`);
-      if (!el) continue;
-      const newVal = el.value.trim();
-      if (newVal !== f.orig) changed.push({ field: f.field, value: newVal });
-    }
-    if (!changed.length) {
-      if (msg) { msg.textContent = 'No changes to save.'; msg.style.color = 'var(--text-soft)'; }
-      if (btn) { btn.disabled = false; btn.textContent = 'Save Changes'; }
-      return;
-    }
-    try {
-      for (const { field, value } of changed) {
-        const r = await fetch(`/api/terms/${match.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ field, value }),
-        });
-        const data = await r.json();
-        if (data.error) throw new Error(data.error);
-        _trdCurrentMatch[field] = value;
-        // Update trdKnownTerms cache in-place so read-only view reflects changes immediately
-        const idx = trdKnownTerms.findIndex(t => String(t.id) === String(match.id));
-        if (idx !== -1) trdKnownTerms[idx][field] = value;
-      }
-      if (msg) { msg.textContent = `✓ ${changed.length} field${changed.length > 1 ? 's' : ''} updated`; msg.style.color = 'var(--text-soft)'; }
-      setTimeout(() => trdShowCandidatePanel(_trdCurrentTerm), 1000);
-    } catch(e) {
-      if (msg) { msg.textContent = 'Error: ' + e.message; msg.style.color = 'var(--red-soft)'; }
-      if (btn) { btn.disabled = false; btn.textContent = 'Save Changes'; }
-    }
-  }
-
-  async function trdFinalizeTerm(voteKey) {
-    const match = _trdCurrentMatch;
-    if (!match) return;
-    if (!confirm(`Finalize this term using "${voteKey.replace('Translation', 'Translation ')}"?`)) return;
-    try {
-      const r = await fetch(`/api/terms/${match.id}/final`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ final: voteKey, which: 'first' }),
-      });
-      const data = await r.json();
-      if (data.error) { alert(data.error); return; }
-      _trdCurrentMatch.status = 'reviewed';
-      _trdCurrentMatch.final  = voteKey;
-      const idx = trdKnownTerms.findIndex(t => String(t.id) === String(match.id));
-      if (idx !== -1) { trdKnownTerms[idx].status = 'reviewed'; trdKnownTerms[idx].final = voteKey; }
-      trdShowCandidatePanel(_trdCurrentTerm);
-    } catch(e) {
-      alert('Error: ' + e.message);
-    }
   }
 
   async function trdGenerateTranslations() {
