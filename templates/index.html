@@ -4000,7 +4000,7 @@
     ai_drafted:   'AI Draft',
     in_review:    'In Review',
     revised:      'Revised',
-    approved:     'Approved',
+    approved:     'Reviewed',
   };
 
   // T3: role gates for translate/save/approve actions (roles shared app-wide)
@@ -4540,7 +4540,7 @@
       ${_CAN_TRANSLATE ? `<div class="trans-unit-actions">
         <button class="btn btn-sm btn-secondary trans-unit-translate-btn" onclick="transTranslateUnit(${u.id})">${translateLabel}</button>
         <button class="btn btn-sm btn-secondary" onclick="transSaveUnit(${u.id}, false)">Save</button>
-        ${_CAN_APPROVE ? `<button class="btn btn-sm btn-primary" onclick="transSaveUnit(${u.id}, true)">Approve</button>` : ''}
+        ${_CAN_APPROVE ? `<button class="btn btn-sm btn-primary" onclick="transSaveUnit(${u.id}, true)">Reviewed</button>` : ''}
       </div>` : ''}
     </div>`;
   }
@@ -4573,7 +4573,7 @@
       const unit = await r.json();
       _transReplaceUnitRow(unit);
     } catch(e) {
-      alert((approve ? 'Approve' : 'Save') + ' failed: ' + e.message);
+      alert((approve ? 'Reviewed' : 'Save') + ' failed: ' + e.message);
     }
   }
 
