@@ -239,6 +239,12 @@
     .source-select { font-family: 'EB Garamond', serif; font-size: 0.82rem; border: 1px solid rgba(26,18,8,0.18); border-radius: 2px; background: rgba(255,255,255,0.7); color: var(--text-soft); padding: 0.25rem 0.5rem; cursor: pointer; }
     .source-select:focus { outline: none; border-color: var(--gold); }
     .source-multiselect { min-width: 170px; }
+    .src-msel { position: relative; }
+    .src-msel-btn { font-family: 'EB Garamond', serif; font-size: 0.82rem; border: 1px solid rgba(26,18,8,0.18); border-radius: 2px; background: rgba(255,255,255,0.7); color: var(--text-soft); padding: 0.25rem 0.6rem; cursor: pointer; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; display: block; }
+    .src-msel-btn:hover, .src-msel-btn:focus { outline: none; border-color: var(--gold); }
+    .src-msel-panel { position: absolute; top: calc(100% + 4px); right: 0; z-index: 50; background: var(--paper, #fdfaf3); border: 1px solid rgba(26,18,8,0.2); border-radius: 3px; box-shadow: 0 4px 16px rgba(26,18,8,0.18); padding: 0.5rem 0.6rem; min-width: 200px; max-height: 220px; overflow-y: auto; }
+    .src-msel-opt { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; padding: 0.25rem 0.15rem; cursor: pointer; white-space: nowrap; color: var(--text); }
+    .src-msel-opt:hover { background: rgba(201,168,76,0.1); }
     .edit-context { background: rgba(201,168,76,0.06); border: 1px solid var(--border); border-radius: 3px; padding: 0.7rem 1rem; margin-bottom: 1.25rem; font-size: 0.88rem; color: var(--text-soft); font-style: italic; }
 
     /* translation panels — unified box */
@@ -1955,12 +1961,7 @@
     const hasFirst  = !!(t.trans_first);
 
     const termSources = t.sources || [];
-    const srcOpts = allSources.map(s =>
-      `<option value="${s.SourceID}"${termSources.includes(s.SourceID)?' selected':''}>${s.SourceName}</option>`
-    ).join('');
-    const srcSelect = canEdit
-      ? `<select class="source-select source-multiselect" multiple size="4" data-term-id="${t.id}" data-field="sources" onchange="autoSaveSources(this)">${srcOpts}</select>`
-      : `<select class="source-select source-multiselect" multiple size="4" disabled>${srcOpts}</select>`;
+    const srcSelect = sourceMultiSelectHtml(t.id, termSources, canEdit);
 
     const statusBadge = t.status === 'reviewed'
       ? '<span class="tag tag-final">✓ Reviewed</span>'
@@ -2097,7 +2098,7 @@
           <button class="btn-back" onclick="${backOnclick}">${backLabel}</button>
           ${navHtml}
           <div class="edit-header-source">
-            <span class="edit-header-source-lbl">Sources <span style="text-transform:none;letter-spacing:normal;font-style:italic;">(ctrl/cmd-click for multiple)</span></span>
+            <span class="edit-header-source-lbl">Sources</span>
             ${srcSelect}
           </div>
         </div>
@@ -2511,11 +2512,47 @@
     } catch(e) { showToast('⚠ Failed to save'); }
   }
 
-  async function autoSaveSources(el) {
-    const termId = el.dataset.termId;
-    const term   = allTerms.find(t => t.id === termId);
-    const value  = Array.from(el.selectedOptions).map(o => o.value);
-    const orig   = (term && term.sources) || [];
+  // Compact one-line "Sources" control: a button showing the current selection as
+  // text, opening a small checkbox popover — replaces a multi-row <select multiple>
+  // which ate too much vertical space in the edit-view header.
+  function sourceMultiSelectHtml(termId, selectedIds, editable) {
+    const label = selectedIds.length ? sourceNames(selectedIds) : '— Sources —';
+    const opts = allSources.map(s => `
+      <label class="src-msel-opt">
+        <input type="checkbox" value="${s.SourceID}" ${selectedIds.includes(s.SourceID) ? 'checked' : ''} ${editable ? '' : 'disabled'} onchange="onSourceCheckboxChange(this,'${termId}')">
+        ${escHtml(s.SourceName)}
+      </label>`).join('') || '<span style="font-size:0.8rem;color:var(--text-soft);font-style:italic;">No sources yet</span>';
+    return `
+      <div class="src-msel">
+        <button type="button" class="src-msel-btn" onclick="toggleSourceDropdown(this)" title="${escHtml(label)}">${escHtml(label)}</button>
+        <div class="src-msel-panel" style="display:none;">${opts}</div>
+      </div>`;
+  }
+
+  function toggleSourceDropdown(btn) {
+    const panel  = btn.nextElementSibling;
+    const isOpen = panel.style.display !== 'none';
+    document.querySelectorAll('.src-msel-panel').forEach(p => { p.style.display = 'none'; });
+    panel.style.display = isOpen ? 'none' : 'block';
+  }
+
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.src-msel')) {
+      document.querySelectorAll('.src-msel-panel').forEach(p => { p.style.display = 'none'; });
+    }
+  });
+
+  async function onSourceCheckboxChange(cb, termId) {
+    const wrap  = cb.closest('.src-msel');
+    const btn   = wrap.querySelector('.src-msel-btn');
+    const value = Array.from(wrap.querySelectorAll('input[type="checkbox"]:checked')).map(c => c.value);
+    const term  = allTerms.find(t => t.id === termId);
+    const orig  = (term && term.sources) || [];
+    const setLabel = ids => {
+      const label = ids.length ? sourceNames(ids) : '— Sources —';
+      btn.textContent = label; btn.title = label;
+    };
+    setLabel(value);
     if (value.length === orig.length && value.every(v => orig.includes(v))) return;
     try {
       const res  = await fetch(`/api/terms/${termId}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({field:'sources', value}) });
@@ -2523,6 +2560,7 @@
       if (data.error) { showToast('⚠ ' + data.error); return; }
       if (term) {
         term.sources = data.sources || value;
+        setLabel(term.sources);
         if (data.last_modified_by) { term.last_modified_by = data.last_modified_by; term.last_modified_time = data.last_modified_time; updateModifiedDisplay(termId); }
       }
       showToast('✓ Saved');
