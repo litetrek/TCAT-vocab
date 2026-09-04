@@ -115,7 +115,7 @@ buddhist-vocab/
 
 ---
 
-## Supabase Database Schema (12 tables, all live)
+## Supabase Database Schema (13 tables, all live)
 
 **Project:** `TCAT-vocab` (id: `yvkadctkigkjtjmmxrqc`, region: us-west-1)
 **Connection:** supabase-py HTTPS REST (port 443), `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` env vars
@@ -130,6 +130,7 @@ each display_id to eliminate the race condition from the old Sheets "scan for ma
 | `sources` | S000001 | |
 | `terms` | T000001 | status check: pending/finalized; idx on chinese, status; **no longer has a `source` column** — see `term_sources` (2026-09-03) |
 | `term_sources` | — | many-to-many terms↔sources; PK (term_id, source_id); both FKs ON DELETE CASCADE (2026-09-03) |
+| `book_glossary_terms` | G000001 | Leader-curated, per-`trans_books` glossary; term_id/book_id FKs ON DELETE CASCADE; UNIQUE (book_id, term_id); status draft/reviewed (2026-09-03) |
 | `audit_log` | — | ts timestamptz; term_id is text (no FK — historical rows may ref deleted terms) |
 | `ext_documents` | D000001 | |
 | `ext_paragraphs` | — | FK → ext_documents(id); UNIQUE (document_id, paragraph_index) |
@@ -878,14 +879,88 @@ A run of small UX fixes/features to the Translation module, done incrementally:
 - Update path (term already exists): now also calls `add_term_source()` so re-encountering a known term in a new document links the new book without touching its existing sources
 
 #### `templates/index.html`
-- Edit view **Sources** field is now a `<select multiple>` (ctrl/cmd-click), saved via new `autoSaveSources()` — same optimistic-update pattern as `autoSaveMeta()` but diffs arrays instead of strings
-- Add Term modal's Source field is the same multi-select; `submitSingleTerm()` sends `sources: [...]`
+- Edit view **Sources** field: initially a `<select multiple>` (ctrl/cmd-click), saved via `autoSaveSources()` — same optimistic-update pattern as `autoSaveMeta()` but diffs arrays instead of strings. **Superseded same day**: replaced with a compact one-line dropdown button (`sourceMultiSelectHtml()` + `toggleSourceDropdown()` + `onSourceCheckboxChange()`) after user feedback that the 4-row select ate too much header space — see "Translation Module — UI Polish Pass" below. `autoSaveSources()` itself was removed; the checkbox popover posts the same `PATCH {field:'sources'}` directly.
+- Add Term modal's Source field is still the native `<select multiple>` (has room to spare there); `submitSingleTerm()` sends `sources: [...]`
 - Sidebar source filter, search haystack, and the list table's Source column all switched from `t.source`/`sourceName()` to `t.sources`/new `sourceNames()` helper (comma-joined)
 - Merge-duplicates modal: removed the per-side Source radio row entirely; added a read-only **Sources — combined automatically** info row showing the union, since merging always keeps both terms' sources now
 - `config.py` `FIELD_LABELS`: `"source"` → `"sources": "Sources"` (used in audit-log field-changed labels)
 
 #### Not yet verified
-- No live browser test of the new multi-select UI (edit view, Add Term modal, merge modal) this session — backend read/write paths were verified directly against Supabase, but the actual `<select multiple>` controls, `autoSaveSources()`, and the merge modal's union display haven't been clicked through in the running app yet
+- No live browser test of the merge-modal union display this session — backend read/write paths and the compact Sources dropdown button were both verified (dropdown confirmed working via later user screenshots this session; merge modal has not been)
+
+---
+
+### Book Glossary (2026-09-03)
+
+**Scope**: Leader/Admin-curated glossary per **Translation Book** (`trans_books` — the book being
+actively translated, not the vocabulary "Sources" citation tag). A term can be marked as a
+glossary entry for a specific book, with an AI-drafted bilingual (EN+ZH) explanation the user can
+regenerate and hand-edit — distinct from the term-scoped "Ask AI" doctrinal gloss (`ai_context`),
+which is translator-facing and not book-scoped. Planned via `EnterPlanMode`/`ExitPlanMode` with
+two user-confirmed decisions: "book" = `trans_books`, and only Leader/Admin can add/remove/edit/
+generate (Members can view).
+
+#### Migration 016 — `016_book_glossary.sql`
+- New table `book_glossary_terms`: `book_id`/`term_id` FKs (`ON DELETE CASCADE`), `explanation`
+  text, `explanation_source` (ai/manual), `status` (draft/reviewed), UNIQUE (book_id, term_id)
+- Applied live via Supabase MCP; verified with `list_tables`
+
+#### `ai.py` — `generate_glossary_entry()`
+- Sibling to `explain_term_context()` (unchanged) but shorter and reader-facing: one concise
+  bilingual paragraph per language ("dictionary style"), not the multi-section translator essay
+  Ask AI produces. Same `── English ──` / `── 中文 ──` format for consistent rendering.
+- Verified live against the Anthropic API (522-char bilingual entry for a test term)
+
+#### `repositories/glossary_repo.py` (new)
+- `list_for_book()`, `add_term()` (dedupe via UNIQUE constraint → friendly "already in glossary"),
+  `remove_term()`, `get_one()`/`get_response()` (join with `terms`+`trans_books` for display
+  fields), `update_entry()` (partial update; setting `explanation` without an explicit
+  `explanation_source` defaults to `'manual'`, so the AI-generate endpoint must pass
+  `explanation_source='ai'` explicitly to avoid mislabeling its own output)
+- All functions verified directly against live Supabase with disposable book+term (created,
+  full CRUD cycle, cleaned up) — zero leftover rows confirmed via row-count check
+
+#### `routes/translate.py` — 5 new endpoints
+| Endpoint | Method | Guard |
+|---|---|---|
+| `/api/trans/books/<book_id>/glossary` | GET | any translation-module user |
+| `/api/trans/books/<book_id>/glossary` | POST | Leader+ (`{term_id}`) |
+| `/api/trans/glossary/<id>/generate` | POST | Leader+ |
+| `/api/trans/glossary/<id>` | PATCH | Leader+ (`{explanation}` and/or `{status}`) |
+| `/api/trans/glossary/<id>` | DELETE | Leader+ |
+
+All 5 verified end-to-end through Flask's test client (real HTTP request/response cycle, admin
+session, live Supabase + live Anthropic API) this session — add → duplicate-add rejected →
+generate → manual edit + mark reviewed → list → delete → list empty — then cleaned up with zero
+leftover rows.
+
+#### `templates/index.html`
+- **Entry point**: "📖 Glossary" button in the Chapters view toolbar (Leader+ only, `{% if is_leader %}`) → `transOpenGlossaryList()`
+- **New sub-view** `#trans-glossary-list-view`: one row per entry (Chinese + pinyin, draft/reviewed
+  badge reusing the `.trans-status-*` classes, explanation preview with the bilingual header
+  markers stripped) — each row opens the **same full editable term panel** built earlier this
+  session (`trdOpenTermFull`), with `navList` = the book's ordered glossary term ids so Previous/
+  Next walk the glossary instead of a unit's terms — zero changes needed in `buildEditView()`'s
+  nav logic, it already generalized to this via `opts.navList`/`navIndex`
+- **Term panel**: new Glossary section in `buildEditView()`, shown only when `opts.bookId` is set
+  (i.e. opened from inside a Translation book — never from the plain Vocabulary tab). Not-yet-
+  glossary shows "★ Add to Glossary — {book}"; already-glossary shows a status badge, an editable
+  explanation textarea (`autoSaveGlossaryExplanation()`, blur-to-save), Generate/Regenerate, a
+  Draft⇄Reviewed toggle, and Remove — all Leader+-gated client-side (server is the real authority)
+- `_transCurrentBookId`/`_transCurrentBookTitle` (already-existing globals) are read directly
+  into `_editViewOpts.bookId`/`bookTitle` inside `trdOpenTermFull()` — no new params needed since
+  the panel is only ever opened from contexts where those globals are already set
+- `trdGlossaryMap` (term_id → entry) + `trdGlossaryList` (ordered array) fetched once via
+  `trdFetchGlossaryTerms()` whenever a book context opens (Review Drafts/Work on Units/Review
+  Vocabularies/Glossary list), avoiding a per-term round trip; `trdCloseTermFull()` re-fetches
+  both on close so edits are immediately reflected
+- One bug caught and fixed before commit: the glossary row's `onclick` embedded a JSON-stringified
+  navList array inside a double-quoted HTML attribute, which broke because `JSON.stringify`
+  produces double-quoted strings — fixed by switching that one attribute to single-quoted
+
+#### Out of scope this pass (documented, not built)
+Exporting/printing the glossary as a book appendix; custom (non-alphabetical) sort/reorder;
+copying a glossary entry to another book; a live glossary-count badge on the Book List cards.
 
 ---
 
@@ -919,6 +994,12 @@ A run of small UX fixes/features to the Translation module, done incrementally:
 
 ## Next Steps
 
+- **Book Glossary live UI test** (backend fully verified via live Supabase + a real Flask
+  test-client HTTP cycle, but never clicked through in an actual browser): open a book → Chapters
+  → "📖 Glossary" button (Leader+ only — confirm it's absent for Members) → open a term from
+  Review Vocabularies → "Add to Glossary" → Generate → edit the textarea → Mark Reviewed → back to
+  Chapters → Glossary list → confirm the entry, badge, and preview text look right → click the row
+  → confirm Previous/Next walks other glossary terms (not the chapter's terms) → Remove
 - **Multi-source terms live UI test** (backend verified directly against Supabase, but not clicked through in the browser): open a term's edit view and confirm the multi-select shows its linked sources correctly and ctrl/cmd-click saves via `autoSaveSources()`; add a new term with 2+ sources selected; try the merge-duplicates modal and confirm the "Sources — combined automatically" row shows the right union
 - **T4.1/T4.2 live testing** (nothing has touched these live yet — `style_guide` and embedding columns are still empty in Supabase):
   - Set at least one of `VOYAGE_API_KEY` / `OPENAI_API_KEY` in `.env`

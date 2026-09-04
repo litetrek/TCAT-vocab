@@ -151,6 +151,48 @@ Reply in exactly this format, with no other preamble or title line:
     return (response.content[0].text or "").strip()
 
 
+def generate_glossary_entry(chinese, pinyin="", pali="", sanskrit="", known_trans="", book_title=""):
+    """Return a short bilingual (English + Chinese) glossary entry for a Chinese Buddhist term,
+    written for a general reader of a published book's glossary appendix — not the longer,
+    translator-facing doctrinal gloss produced by explain_term_context()."""
+    ai = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    meta = []
+    if pinyin:       meta.append(f"Pinyin: {pinyin}")
+    if pali:         meta.append(f"Pali: {pali}")
+    if sanskrit:     meta.append(f"Sanskrit: {sanskrit}")
+    if known_trans:  meta.append(f"Known translation: {known_trans}")
+    if book_title:   meta.append(f"Appears in book: {book_title}")
+    meta_block = ("\n".join(meta) + "\n") if meta else ""
+
+    response = ai.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=600,
+        messages=[{
+            "role": "user",
+            "content": f"""You are writing a glossary entry for the appendix of a published book on
+Chinese Buddhism, aimed at general readers (not translators or scholars).
+
+Requirements:
+- One concise paragraph in English (2-4 sentences), then the same entry naturally written in
+  Chinese (繁體中文) — not a literal word-for-word translation.
+- Dictionary/glossary style: define the term plainly and give just enough context for a reader
+  to understand it when they meet it in the text. No section headers, no bullet points.
+- Use the metadata when provided. Do not invent specific sutra citations or page references.
+
+Term: {chinese}
+{meta_block}
+Reply in exactly this format, with no other preamble or title line:
+
+── English ──
+<english entry>
+
+── 中文 ──
+<chinese entry>"""
+        }]
+    )
+    return (response.content[0].text or "").strip()
+
+
 def find_known_translation(chinese_term, chinese_paragraph, english_paragraph):
     """Return the verbatim English phrase in english_paragraph that translates chinese_term.
     Validates the result is an actual substring; returns "" if not found or not verifiable."""

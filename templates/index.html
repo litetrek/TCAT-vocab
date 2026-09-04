@@ -264,6 +264,19 @@
       font-size: 0.95rem; line-height: 1.55; color: var(--text);
       white-space: pre-wrap; word-break: break-word;
     }
+    .glossary-bar { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+    .glossary-panel {
+      margin-bottom: 1rem; padding: 0.85rem 1rem;
+      background: rgba(255,255,255,0.85); border: 1px solid rgba(201,168,76,0.35);
+      border-radius: 4px; box-shadow: var(--shadow);
+    }
+    .glossary-textarea {
+      width: 100%; font-family: 'EB Garamond', serif; font-size: 0.92rem; line-height: 1.5;
+      border: 1px solid rgba(26,18,8,0.15); border-radius: 3px; padding: 0.6rem 0.7rem;
+      resize: vertical; min-height: 90px; color: var(--text);
+    }
+    .glossary-textarea:focus { outline: none; border-color: var(--gold); }
+    .glossary-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.6rem; }
     .trans-grid-3 { display: grid; grid-template-columns: repeat(3,1fr); }
     .trans-panel { padding: 0.9rem 1rem; border-right: 1px solid rgba(201,168,76,0.15); position: relative; }
     .trans-panel:last-child { border-right: none; }
@@ -1083,6 +1096,9 @@
           <button class="btn-back" onclick="transShowPicker()">← Books</button>
           <h1 class="main-title" id="trans-chapter-title">Chapters</h1>
         </div>
+        {% if is_leader %}
+        <button class="btn btn-secondary" onclick="transOpenGlossaryList()">📖 Glossary</button>
+        {% endif %}
       </div>
 
       <div id="trans-chapter-list" class="trans-chapter-list">
@@ -1148,6 +1164,19 @@
         <div class="loading">☸ Loading sentences…</div>
       </div>
     </div><!-- #trans-vocab-view -->
+
+    <!-- ── GLOSSARY LIST SUB-VIEW ───────────────────────────────────────── -->
+    <div id="trans-glossary-list-view" style="display:none;">
+      <div class="main-toolbar" style="margin-bottom:1.5rem;">
+        <div style="display:flex;align-items:center;gap:1rem;">
+          <button class="btn-back" onclick="transBackToChapters()">← Chapters</button>
+          <h1 class="main-title" id="trans-glossary-list-title">Glossary</h1>
+        </div>
+      </div>
+      <div id="trans-glossary-list" class="trans-unit-list">
+        <div class="loading">☸ Loading glossary…</div>
+      </div>
+    </div><!-- #trans-glossary-list-view -->
 
     <!-- ── STYLE GUIDE SUB-VIEW (T4.1) ─────────────────────────────────── -->
     <div id="trans-styleguide-view" style="display:none;">
@@ -2031,6 +2060,45 @@
         ${transPanel('trans_other2', 'TranslationOther2', 'Other 2', 'trans-panel')}
       </div>`;
 
+    // Book Glossary — only shown when this panel was opened from inside a Translation
+    // book (Review Vocabularies / Work on Units / Review Drafts / the Glossary list),
+    // which is where opts.bookId comes from. Not shown on the plain Vocabulary tab.
+    let glossaryHtml = '';
+    if (opts.bookId) {
+      const bookTitleSafe = escHtml(opts.bookTitle || 'this book');
+      const gEntry = trdGlossaryMap[t.id];
+      if (!gEntry) {
+        glossaryHtml = isLeaderOrAdmin ? `
+          <div class="glossary-bar">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="glossaryAddTerm('${t.id}')">★ Add to Glossary — ${bookTitleSafe}</button>
+          </div>` : '';
+      } else {
+        const gStatusBadge = gEntry.status === 'reviewed'
+          ? '<span class="tag tag-final">✓ Reviewed</span>'
+          : '<span class="tag tag-status-pending">Draft</span>';
+        const sourceNote = gEntry.explanation_source === 'manual' ? 'manually edited' : 'AI-generated';
+        glossaryHtml = `
+          <div class="glossary-bar">
+            <span class="edit-header-source-lbl">Glossary — ${bookTitleSafe}</span>
+            ${gStatusBadge}
+            <span style="font-size:0.78rem;color:var(--text-soft);font-style:italic;">${sourceNote}${gEntry.last_modified_at ? ' · saved ' + String(gEntry.last_modified_at).slice(0,10) : ''}</span>
+          </div>
+          <div class="glossary-panel">
+            ${isLeaderOrAdmin
+              ? `<textarea class="glossary-textarea" data-glossary-id="${gEntry.id}" data-term-id="${t.id}" rows="4" onblur="autoSaveGlossaryExplanation(this)" placeholder="No explanation yet — click Generate.">${escHtml(gEntry.explanation || '')}</textarea>`
+              : `<div class="ask-ai-panel-body">${escHtml(gEntry.explanation || '') || '<span class="placeholder">No explanation yet.</span>'}</div>`}
+            ${isLeaderOrAdmin ? `
+            <div class="glossary-actions">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="glossaryGenerate(${gEntry.id})">✦ ${gEntry.explanation ? 'Regenerate' : 'Generate'}</button>
+              ${gEntry.status !== 'reviewed'
+                ? `<button type="button" class="btn btn-primary btn-sm" onclick="glossarySetStatus(${gEntry.id},'reviewed')">Mark Reviewed</button>`
+                : `<button type="button" class="btn btn-secondary btn-sm" onclick="glossarySetStatus(${gEntry.id},'draft')">Mark Draft</button>`}
+              <button type="button" class="btn-danger btn-sm" onclick="glossaryRemoveTerm(${gEntry.id},'${t.id}')">Remove from Glossary</button>
+            </div>` : ''}
+          </div>`;
+      }
+    }
+
     let apText = '';
     if (t.status === 'reviewed' && t.trans_first) {
       apText = `<span style="color:var(--gold);font-weight:600;">✓ Reviewed</span> &nbsp;—&nbsp; Suggest 1: <strong>${t.trans_first}</strong>${t.trans_second ? ` &nbsp;·&nbsp; Suggest 2: <strong>${t.trans_second}</strong>` : ''}`;
@@ -2125,6 +2193,7 @@
         <div class="ask-ai-panel-title">AI context</div>
         <div class="ask-ai-panel-body" id="ask-ai-body-${t.id}">${t.ai_context || ''}</div>
       </div>
+      ${glossaryHtml}
       <div class="trans-box">
         ${topRow}
         ${bottomRow}
@@ -4131,7 +4200,7 @@
   const _CAN_APPROVE   = ['leader','admin'].includes(userRole);
 
   function _transHideAll() {
-    ['trans-picker','trans-chapter-view','trans-review-view','trans-unit-view','trans-vocab-view','trans-styleguide-view']
+    ['trans-picker','trans-chapter-view','trans-review-view','trans-unit-view','trans-vocab-view','trans-glossary-list-view','trans-styleguide-view']
       .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
   }
 
@@ -4164,6 +4233,11 @@
   function transShowVocabList() {
     _transHideAll();
     document.getElementById('trans-vocab-view').style.display = '';
+  }
+
+  function transShowGlossaryList() {
+    _transHideAll();
+    document.getElementById('trans-glossary-list-view').style.display = '';
   }
 
   function transShowReviewView() {
@@ -4591,6 +4665,7 @@
     list.innerHTML = '<div class="loading">☸ Loading sentences…</div>';
     transShowVocabList();
     await trdFetchKnownTerms();
+    await trdFetchGlossaryTerms();
     try {
       const r = await fetch(`/api/trans/chapters/${chapterId}/units`);
       if (!r.ok) throw new Error(await r.text());
@@ -4619,6 +4694,41 @@
       </div>
       <div class="trans-unit-text">${trdHighlightKnownTerms(u.chinese_text || '')}</div>
     </div>`;
+  }
+
+  // ── Book Glossary — list view (Leader/Admin curated, per book) ──────────────
+
+  async function transOpenGlossaryList() {
+    _pushHash('#translation/glossary/' + _transCurrentBookId);
+    document.getElementById('trans-glossary-list-title').innerHTML =
+      `<span style="font-size:1.1rem;font-style:normal;">${escHtml(_transCurrentBookTitle)}</span> — Glossary`;
+    document.getElementById('trans-glossary-list').innerHTML = '<div class="loading">☸ Loading glossary…</div>';
+    transShowGlossaryList();
+    await trdFetchGlossaryTerms();
+    trdRenderGlossaryList();
+  }
+
+  function trdRenderGlossaryList() {
+    const list = document.getElementById('trans-glossary-list');
+    if (!list) return;
+    if (!trdGlossaryList.length) {
+      list.innerHTML = '<div class="empty-state"><h3>No glossary terms yet</h3><p>Open a term from Review Vocabularies or Work on Units and click "Add to Glossary".</p></div>';
+      return;
+    }
+    const navList = trdGlossaryList.map(g => g.term_id);
+    list.innerHTML = trdGlossaryList.map((g, i) => {
+      const statusCls = 'trans-status trans-status-' + (g.status === 'reviewed' ? 'approved' : 'untranslated');
+      const statusLabel = g.status === 'reviewed' ? 'Reviewed' : 'Draft';
+      const preview = (g.explanation || '').replace(/──[^─]*──/g, ' ').replace(/\s+/g, ' ').trim();
+      const previewShort = preview.length > 140 ? preview.slice(0, 140) + '…' : preview;
+      return `<div class="trans-unit-row" onclick='trdOpenTermFull(${JSON.stringify(g.term_id)}, ${JSON.stringify(navList)}, ${i})' style="cursor:pointer;">
+        <div class="trans-unit-top">
+          <span class="trans-unit-id">${escHtml(g.term_chinese || '')} <span style="color:var(--text-soft);font-style:italic;">${escHtml(g.term_pinyin || '')}</span></span>
+          <span class="trans-unit-status"><span class="${statusCls}">${statusLabel}</span></span>
+        </div>
+        <div class="trans-unit-text" style="color:${preview ? 'var(--text)' : 'var(--text-soft)'};font-style:${preview ? 'normal' : 'italic'};">${escHtml(previewShort || 'No explanation yet — click to generate one.')}</div>
+      </div>`;
+    }).join('');
   }
 
   // ── Upload chapter ────────────────────────────────────────────────────────
@@ -4686,6 +4796,7 @@
     list.innerHTML = '<div class="loading">☸ Loading sentences…</div>';
     transShowUnitList();
     await trdFetchKnownTerms();
+    await trdFetchGlossaryTerms();
     try {
       const r = await fetch(`/api/trans/chapters/${chapterId}/units`);
       if (!r.ok) throw new Error(await r.text());
@@ -4818,6 +4929,8 @@
   let _trdDragging       = null;    // {paraIdx, groupIdx, sentIdx}
   let _trdSaveTimers     = {};      // debounce per paragraph
   let trdKnownTerms       = [];
+  let trdGlossaryMap      = {}; // term display_id -> glossary entry, for _transCurrentBookId
+  let trdGlossaryList     = []; // same entries, ordered array (for the Glossary list view)
   let _trdCurrentTerm     = '';
   let _trdCurrentIsNew    = false;
   let _trdGeneratedFields = null;
@@ -4832,6 +4945,7 @@
       `<span style="font-size:1.1rem;font-style:normal;">${escHtml(_transCurrentBookTitle)}</span> — ${escHtml(chapterTitle || 'Chapter')} — Review Drafts`;
     transShowReviewView();
     await trdFetchKnownTerms();
+    await trdFetchGlossaryTerms();
     await trdLoad();
   }
 
@@ -4877,6 +4991,94 @@
       const r = await fetch('/api/trans/known-terms');
       if (r.ok) trdKnownTerms = await r.json();
     } catch(e) {}
+  }
+
+  // Populates trdGlossaryMap (term display_id -> glossary entry) for _transCurrentBookId,
+  // so the term panel can show glossary status/controls without an extra round trip per term.
+  async function trdFetchGlossaryTerms() {
+    trdGlossaryMap  = {};
+    trdGlossaryList = [];
+    if (!_transCurrentBookId) return;
+    try {
+      const r = await fetch(`/api/trans/books/${_transCurrentBookId}/glossary`);
+      if (r.ok) {
+        trdGlossaryList = await r.json();
+        trdGlossaryList.forEach(g => { trdGlossaryMap[g.term_id] = g; });
+      }
+    } catch(e) {}
+  }
+
+  // ── Book Glossary — term panel controls (Leader/Admin only, server-enforced) ────
+
+  async function glossaryAddTerm(termId) {
+    if (!_transCurrentBookId) return;
+    try {
+      const res  = await fetch(`/api/trans/books/${_transCurrentBookId}/glossary`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ term_id: termId }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) { showToast('⚠ ' + (data.error || 'Failed to add to glossary')); return; }
+      trdGlossaryMap[termId] = data;
+      showToast('✓ Added to glossary');
+      if (editingTermId === termId) refreshEditView();
+    } catch(e) { showToast('⚠ Failed to add to glossary'); }
+  }
+
+  async function glossaryGenerate(glossaryId) {
+    try {
+      const res  = await fetch(`/api/trans/glossary/${glossaryId}/generate`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok || data.error) { showToast('⚠ ' + (data.error || 'Generate failed')); return; }
+      trdGlossaryMap[data.term_id] = data;
+      showToast('✓ Glossary entry generated');
+      if (editingTermId === data.term_id) refreshEditView();
+    } catch(e) { showToast('⚠ Generate failed'); }
+  }
+
+  async function glossarySetStatus(glossaryId, status) {
+    try {
+      const res  = await fetch(`/api/trans/glossary/${glossaryId}`, {
+        method: 'PATCH', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ status }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) { showToast('⚠ ' + (data.error || 'Update failed')); return; }
+      trdGlossaryMap[data.term_id] = data;
+      if (editingTermId === data.term_id) refreshEditView();
+    } catch(e) { showToast('⚠ Update failed'); }
+  }
+
+  async function glossaryRemoveTerm(glossaryId, termId) {
+    if (!confirm('Remove this term from the glossary?')) return;
+    try {
+      const res  = await fetch(`/api/trans/glossary/${glossaryId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok || data.error) { showToast('⚠ ' + (data.error || 'Remove failed')); return; }
+      delete trdGlossaryMap[termId];
+      showToast('✓ Removed from glossary');
+      if (editingTermId === termId) refreshEditView();
+    } catch(e) { showToast('⚠ Remove failed'); }
+  }
+
+  async function autoSaveGlossaryExplanation(el) {
+    const glossaryId = el.dataset.glossaryId;
+    const termId      = el.dataset.termId;
+    const value       = el.value.trim();
+    const entry       = trdGlossaryMap[termId];
+    const orig        = (entry && entry.explanation) || '';
+    if (value === orig) return;
+    try {
+      const res  = await fetch(`/api/trans/glossary/${glossaryId}`, {
+        method: 'PATCH', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ explanation: value }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) { showToast('⚠ ' + (data.error || 'Failed to save')); return; }
+      trdGlossaryMap[termId] = data;
+      showToast('✓ Saved');
+      if (editingTermId === termId) refreshEditView();
+    } catch(e) { showToast('⚠ Failed to save'); }
   }
 
   function trdHighlightKnownTerms(text) {
@@ -5171,7 +5373,10 @@
     const idx  = (typeof navIndex === 'number' && navIndex >= 0 && navIndex < list.length)
       ? navIndex : list.indexOf(String(term.id));
     editingTermId = term.id;
-    _editViewOpts = { navList: list, navIndex: idx, backLabel: '← Back to Unit', onBack: 'trdCloseTermFull()' };
+    _editViewOpts = {
+      navList: list, navIndex: idx, backLabel: '← Back to Unit', onBack: 'trdCloseTermFull()',
+      bookId: _transCurrentBookId, bookTitle: _transCurrentBookTitle,
+    };
     const ev = document.getElementById('edit-view');
     if (!_editViewHome) _editViewHome = { parent: ev.parentNode, next: ev.nextSibling };
     if (ev.parentNode !== document.body) document.body.appendChild(ev);
@@ -5201,11 +5406,14 @@
     }
     editingTermId = null;
     _editViewOpts = null;
-    // Reflect any edits (status color, translations) in the already-rendered highlighting
-    trdFetchKnownTerms().then(() => {
+    // Reflect any edits (status color, translations, glossary membership) in the
+    // already-rendered highlighting, and refresh the glossary list if it's open
+    Promise.all([trdFetchKnownTerms(), trdFetchGlossaryTerms()]).then(() => {
       document.querySelectorAll('.trans-unit-text, .trd-sent-text').forEach(el => {
         el.innerHTML = trdHighlightKnownTerms(el.textContent);
       });
+      const glossaryView = document.getElementById('trans-glossary-list-view');
+      if (glossaryView && glossaryView.style.display !== 'none') trdRenderGlossaryList();
     });
   }
 
