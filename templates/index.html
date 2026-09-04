@@ -664,7 +664,7 @@
     .trans-upload-msg.success { color: #2d7a4f; }
 
     /* Chapter list */
-    .trans-chapter-list { background: white; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; box-shadow: var(--shadow); }
+    .trans-chapter-list { background: white; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; box-shadow: var(--shadow); margin-bottom: 1.25rem; }
     .trans-chapter-row {
       display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1.25rem;
       border-bottom: 1px solid rgba(201,168,76,0.1); cursor: pointer; transition: background 0.15s;
@@ -1085,6 +1085,10 @@
         </div>
       </div>
 
+      <div id="trans-chapter-list" class="trans-chapter-list">
+        <div class="loading">☸ Loading chapters…</div>
+      </div>
+
       <!-- Upload chapter section — admin only -->
       {% if is_admin %}
       <div class="trans-ch-upload">
@@ -1103,10 +1107,6 @@
         <div class="trans-upload-msg" id="trans-ch-upload-msg" style="display:none;"></div>
       </div>
       {% endif %}
-
-      <div id="trans-chapter-list" class="trans-chapter-list">
-        <div class="loading">☸ Loading chapters…</div>
-      </div>
     </div><!-- #trans-chapter-view -->
 
     <!-- ── DRAFT REVIEW SUB-VIEW (T2.1) ─────────────────────────────────── -->
