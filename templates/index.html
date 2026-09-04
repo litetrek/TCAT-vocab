@@ -791,7 +791,7 @@
   <button class="top-tab-btn active" data-tab="vocabulary" onclick="location.hash='#vocabulary'">Vocabulary</button>
   <button class="top-tab-btn" data-tab="extraction" onclick="location.hash='#extraction'">Extraction</button>
   {% if can_access_translation %}
-  <button class="top-tab-btn" data-tab="translation" onclick="location.hash='#translation'">Translation</button>
+  <button class="top-tab-btn" data-tab="translation" onclick="location.hash='#translation'">Books</button>
   {% endif %}
 </div>
 
@@ -1048,7 +1048,7 @@
     <!-- ── PICKER SUB-VIEW ──────────────────────────────────────────────── -->
     <div id="trans-picker">
       <div class="main-toolbar" style="margin-bottom:1.5rem;">
-        <h1 class="main-title">Translation <span>Books</span></h1>
+        <h1 class="main-title">Book <span>List</span></h1>
         <div style="display:flex;gap:0.5rem;align-items:center;">
           {% if is_leader %}
           <button class="btn btn-secondary" onclick="transShowStyleGuide()">☰ Style Guide</button>
