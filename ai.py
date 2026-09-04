@@ -107,7 +107,8 @@ Term: {chinese}
 
 def explain_term_context(chinese, pinyin="", pali="", sanskrit="", context="", notes="",
                          source_zh="", source_en="", entity_type="", known_trans=""):
-    """Return an English Buddhist doctrinal gloss for a Chinese term (ephemeral UI helper)."""
+    """Return a bilingual (English + Chinese) Buddhist doctrinal gloss for a Chinese term
+    (ephemeral UI helper)."""
     ai = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
     meta = []
     if pinyin:       meta.append(f"Pinyin: {pinyin}")
@@ -123,21 +124,28 @@ def explain_term_context(chinese, pinyin="", pali="", sanskrit="", context="", n
 
     response = ai.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=900,
+        max_tokens=1500,
         messages=[{
             "role": "user",
             "content": f"""You are an expert in Buddhist studies and Chinese Buddhist terminology.
-Write a short English doctrinal gloss for the Chinese Buddhist term below to help translators.
+Write a short bilingual doctrinal gloss for the Chinese Buddhist term below to help translators —
+one version in English, then the same content in Chinese.
 
 Requirements:
-- English only (no Chinese in the body except when quoting the term itself once).
 - About 2–4 short paragraphs or short bullet sections covering: (1) core meaning / gloss, (2) doctrinal or textual usage, (3) related concepts if helpful.
+- The English section must be English only (no Chinese, except when quoting the term itself once). The Chinese section must be written in Chinese (繁體中文), not a literal word-for-word translation of the English — write it naturally for a Chinese-reading translator.
 - Use the metadata when provided. Do not invent specific sutra citations or page references.
 - Be clear and practical for translators; avoid marketing fluff.
 
 Term: {chinese}
 {meta_block}
-Reply with the gloss only — no title line like "Gloss:" and no preamble."""
+Reply in exactly this format, with no other preamble or title line:
+
+── English ──
+<english gloss>
+
+── 中文 ──
+<chinese gloss>"""
         }]
     )
     return (response.content[0].text or "").strip()

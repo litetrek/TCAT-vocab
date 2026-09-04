@@ -2119,7 +2119,7 @@
       <div class="ask-ai-bar">
         <button type="button" class="btn btn-secondary btn-sm" id="ask-ai-btn-${t.id}" onclick="askAiContext('${t.id}')">${t.ai_context ? '✦ Ask again' : '✦ Ask AI'}</button>
         ${t.ai_context ? `<button type="button" class="btn btn-secondary btn-sm" onclick="toggleAiContextPanel('${t.id}')">Show AI context</button>` : ''}
-        <span style="font-size:0.8rem;color:var(--text-soft);font-style:italic;">English doctrinal context for this term${t.ai_context && t.ai_context_generated_at ? ` · saved ${t.ai_context_generated_at.slice(0,10)}` : ''}</span>
+        <span style="font-size:0.8rem;color:var(--text-soft);font-style:italic;">English &amp; Chinese doctrinal context for this term${t.ai_context && t.ai_context_generated_at ? ` · saved ${t.ai_context_generated_at.slice(0,10)}` : ''}</span>
       </div>
       <div class="ask-ai-panel" id="ask-ai-panel-${t.id}">
         <div class="ask-ai-panel-title">AI context</div>
