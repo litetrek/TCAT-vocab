@@ -1136,6 +1136,19 @@
       </div>
     </div><!-- #trans-unit-view -->
 
+    <!-- ── VOCABULARY REVIEW SUB-VIEW ────────────────────────────────────── -->
+    <div id="trans-vocab-view" style="display:none;">
+      <div class="main-toolbar" style="margin-bottom:1.5rem;">
+        <div style="display:flex;align-items:center;gap:1rem;">
+          <button class="btn-back" onclick="transBackToChapters()">← Chapters</button>
+          <h1 class="main-title" id="trans-vocab-title">Review Vocabularies</h1>
+        </div>
+      </div>
+      <div id="trans-vocab-list" class="trans-unit-list">
+        <div class="loading">☸ Loading sentences…</div>
+      </div>
+    </div><!-- #trans-vocab-view -->
+
     <!-- ── STYLE GUIDE SUB-VIEW (T4.1) ─────────────────────────────────── -->
     <div id="trans-styleguide-view" style="display:none;">
       <div class="main-toolbar" style="margin-bottom:1.5rem;">
@@ -4118,7 +4131,7 @@
   const _CAN_APPROVE   = ['leader','admin'].includes(userRole);
 
   function _transHideAll() {
-    ['trans-picker','trans-chapter-view','trans-review-view','trans-unit-view','trans-styleguide-view']
+    ['trans-picker','trans-chapter-view','trans-review-view','trans-unit-view','trans-vocab-view','trans-styleguide-view']
       .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
   }
 
@@ -4146,6 +4159,11 @@
   function transShowUnitList() {
     _transHideAll();
     document.getElementById('trans-unit-view').style.display = '';
+  }
+
+  function transShowVocabList() {
+    _transHideAll();
+    document.getElementById('trans-vocab-view').style.display = '';
   }
 
   function transShowReviewView() {
@@ -4563,9 +4581,44 @@
     }
   }
 
-  // TODO: Review Vocabularies — placeholder until the feature is built out.
-  function transReviewVocab(chapterId, chapterTitle) {
-    showToast('Review Vocabularies — coming soon');
+  // Same unit list as Translation, minus the English side — lets a reviewer
+  // click through every highlighted term in a chapter without translation UI in the way.
+  async function transReviewVocab(chapterId, chapterTitle) {
+    _pushHash('#translation/vocab/' + _transCurrentBookId + '/' + chapterId);
+    document.getElementById('trans-vocab-title').innerHTML =
+      `<span style="font-size:1.1rem;font-style:normal;">${escHtml(_transCurrentBookTitle)}</span> — ${escHtml(chapterTitle || 'Chapter')} — Review Vocabularies`;
+    const list = document.getElementById('trans-vocab-list');
+    list.innerHTML = '<div class="loading">☸ Loading sentences…</div>';
+    transShowVocabList();
+    await trdFetchKnownTerms();
+    try {
+      const r = await fetch(`/api/trans/chapters/${chapterId}/units`);
+      if (!r.ok) throw new Error(await r.text());
+      const units = await r.json();
+      if (!units.length) {
+        list.innerHTML = '<div class="empty-state"><h3>No confirmed sentences yet</h3><p>Use "Review Drafts" to confirm paragraphs first.</p></div>';
+        return;
+      }
+      let lastPara = -1;
+      list.innerHTML = units.map(u => {
+        const paraBreak = u.paragraph_index !== lastPara && lastPara !== -1
+          ? '<div style="height:1px;background:rgba(201,168,76,0.12);margin:0.25rem 0;"></div>' : '';
+        lastPara = u.paragraph_index;
+        return `${paraBreak}${_transVocabRowHtml(u)}`;
+      }).join('');
+    } catch(e) {
+      list.innerHTML = `<div class="ext-error-banner">Error: ${escHtml(e.message)}</div>`;
+    }
+  }
+
+  function _transVocabRowHtml(u) {
+    const cls = u.is_long_sentence ? ' long-sentence' : '';
+    return `<div class="trans-unit-row${cls}" data-unit-id="${u.id}">
+      <div class="trans-unit-top">
+        <span class="trans-unit-id">${escHtml(u.display_id || '')}</span>
+      </div>
+      <div class="trans-unit-text">${trdHighlightKnownTerms(u.chinese_text || '')}</div>
+    </div>`;
   }
 
   // ── Upload chapter ────────────────────────────────────────────────────────
