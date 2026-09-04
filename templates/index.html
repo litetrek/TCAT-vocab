@@ -4136,8 +4136,8 @@
   }
 
   // Used by the "← Chapters" back buttons — re-fetches so draft_total/draft_confirmed
-  // (and therefore the Review Drafts / Work on Units button state) reflect anything
-  // just confirmed in Review Drafts, not the stale render from before that visit.
+  // (and therefore the Review Drafts button visibility) reflect anything just
+  // confirmed in Review Drafts, not the stale render from before that visit.
   function transBackToChapters() {
     transShowChapterList();
     transReloadChapters();
@@ -4546,7 +4546,7 @@
         const allConfirmed = (c.draft_total || 0) > 0 && c.draft_confirmed === c.draft_total;
         const reviewBtn = allConfirmed ? '' :
           `<button class="btn btn-sm btn-primary" onclick="transOpenReview(${c.id},'${titleSafe}')">Review Drafts</button>`;
-        const unitsBtnLabel = allConfirmed ? 'Work on Units' : 'Browse Units';
+        const unitsBtnLabel = 'Translation';
         return `<div class="trans-chapter-row" style="cursor:default;">
           <span class="trans-ch-idx">${c.chapter_index + 1}</span>
           <span class="trans-ch-title">${escHtml(c.title || _transCurrentBookTitle)}</span>
