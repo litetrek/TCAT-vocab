@@ -238,6 +238,7 @@
     .edit-header-source-lbl { font-size: 0.67rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-soft); }
     .source-select { font-family: 'EB Garamond', serif; font-size: 0.82rem; border: 1px solid rgba(26,18,8,0.18); border-radius: 2px; background: rgba(255,255,255,0.7); color: var(--text-soft); padding: 0.25rem 0.5rem; cursor: pointer; }
     .source-select:focus { outline: none; border-color: var(--gold); }
+    .source-multiselect { min-width: 170px; }
     .edit-context { background: rgba(201,168,76,0.06); border: 1px solid var(--border); border-radius: 3px; padding: 0.7rem 1rem; margin-bottom: 1.25rem; font-size: 0.88rem; color: var(--text-soft); font-style: italic; }
 
     /* translation panels — unified box */
@@ -1011,8 +1012,8 @@
         <input type="text" id="f-known" placeholder="e.g. bodhisattva (leave blank if unknown)">
       </div>
       <div class="form-field full">
-        <label>Source</label>
-        <select id="f-source"><option value="">— Select Source —</option></select>
+        <label>Sources <span style="text-transform:none;font-style:italic;font-weight:normal;">(ctrl/cmd-click for multiple)</span></label>
+        <select id="f-source" class="source-multiselect" multiple size="4"></select>
       </div>
       <div class="form-field"><label>Source Content Chinese</label><textarea id="f-source-content-zh" rows="3" placeholder="Paste the original Chinese passage containing this term…"></textarea></div>
       <div class="form-field"><label>Source Content English</label><textarea id="f-source-content-en" rows="3" placeholder="Paste the English translation of the passage (if available)…"></textarea></div>
@@ -1023,7 +1024,7 @@
       </div>
     </div>
     <div class="tab-panel" id="tab-bulk">
-      <div class="csv-hint">Upload a CSV with columns:<br><code>chinese, pinyin, pali, sanskrit, context, category, notes, source, trans_known, added_by</code><br>Only <code>chinese</code> is required. Pinyin, Pali, Sanskrit, and AI Translate 1–3 are auto-generated. <code>source</code> accepts a SourceID (e.g. <code>S001</code>). <code>added_by</code> defaults to the logged-in user if blank.</div>
+      <div class="csv-hint">Upload a CSV with columns:<br><code>chinese, pinyin, pali, sanskrit, context, category, notes, source, trans_known, added_by</code><br>Only <code>chinese</code> is required. Pinyin, Pali, Sanskrit, and AI Translate 1–3 are auto-generated. <code>source</code> accepts one or more SourceIDs separated by <code>|</code> (e.g. <code>S000001|S000002</code>). <code>added_by</code> defaults to the logged-in user if blank.</div>
       <div class="form-field"><label>CSV File</label><input type="file" id="f-csv" accept=".csv"></div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
@@ -1457,7 +1458,7 @@
   }
 
   function updateStats() {
-    const base      = currentSource ? allTerms.filter(t => t.source === currentSource) : allTerms;
+    const base      = currentSource ? allTerms.filter(t => (t.sources||[]).includes(currentSource)) : allTerms;
     const active    = base.filter(t => t.status !== 'inactive');
     const total     = active.length;
     const reviewed  = active.filter(t => t.status === 'reviewed').length;
@@ -1536,11 +1537,16 @@
     return s ? s.SourceName : id;
   }
 
+  function sourceNames(ids) {
+    if (!ids || !ids.length) return '';
+    return ids.map(sourceName).join(', ');
+  }
+
   function getFilteredSorted() {
     const q = (document.getElementById('search-input')?.value || '').toLowerCase().trim();
     let terms = allTerms.slice();
 
-    if (currentSource) terms = terms.filter(t => t.source === currentSource);
+    if (currentSource) terms = terms.filter(t => (t.sources||[]).includes(currentSource));
 
     if (currentEntityType === '_unclassified') {
       terms = terms.filter(t => !t.entity_type);
@@ -1569,7 +1575,7 @@
           t.trans_known, t.trans_other1, t.trans_other2,
           t.trans_first  ? getTermText(t, t.trans_first)  : '',
           t.trans_second ? getTermText(t, t.trans_second) : '',
-          sourceName(t.source)
+          sourceNames(t.sources)
         ].join(' ').toLowerCase();
         return words.every(w => hay.includes(w));
       });
@@ -1745,7 +1751,7 @@
       ? (t.trans_second ? (getTermText(t, t.trans_second) || t.trans_second) : '')
       : (t.trans2 || '');
     const thirdText  = t.trans3 || '';
-    const src        = sourceName(t.source);
+    const src        = sourceNames(t.sources);
     const statusBadge = t.status === 'reviewed'
       ? '<span class="tag tag-final">✓ Reviewed</span>'
       : t.status === 'pending'
@@ -1948,12 +1954,13 @@
     const secondKey = findKeyByText(t, t.trans_second) || '';
     const hasFirst  = !!(t.trans_first);
 
+    const termSources = t.sources || [];
     const srcOpts = allSources.map(s =>
-      `<option value="${s.SourceID}"${t.source===s.SourceID?' selected':''}>${s.SourceName}</option>`
+      `<option value="${s.SourceID}"${termSources.includes(s.SourceID)?' selected':''}>${s.SourceName}</option>`
     ).join('');
     const srcSelect = canEdit
-      ? `<select class="source-select" data-term-id="${t.id}" data-field="source" onchange="autoSaveMeta(this)"><option value="">— Source —</option>${srcOpts}</select>`
-      : `<select class="source-select" disabled><option value="">— Source —</option>${srcOpts}</select>`;
+      ? `<select class="source-select source-multiselect" multiple size="4" data-term-id="${t.id}" data-field="sources" onchange="autoSaveSources(this)">${srcOpts}</select>`
+      : `<select class="source-select source-multiselect" multiple size="4" disabled>${srcOpts}</select>`;
 
     const statusBadge = t.status === 'reviewed'
       ? '<span class="tag tag-final">✓ Reviewed</span>'
@@ -2090,7 +2097,7 @@
           <button class="btn-back" onclick="${backOnclick}">${backLabel}</button>
           ${navHtml}
           <div class="edit-header-source">
-            <span class="edit-header-source-lbl">Source</span>
+            <span class="edit-header-source-lbl">Sources <span style="text-transform:none;letter-spacing:normal;font-style:italic;">(ctrl/cmd-click for multiple)</span></span>
             ${srcSelect}
           </div>
         </div>
@@ -2504,6 +2511,24 @@
     } catch(e) { showToast('⚠ Failed to save'); }
   }
 
+  async function autoSaveSources(el) {
+    const termId = el.dataset.termId;
+    const term   = allTerms.find(t => t.id === termId);
+    const value  = Array.from(el.selectedOptions).map(o => o.value);
+    const orig   = (term && term.sources) || [];
+    if (value.length === orig.length && value.every(v => orig.includes(v))) return;
+    try {
+      const res  = await fetch(`/api/terms/${termId}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({field:'sources', value}) });
+      const data = await res.json();
+      if (data.error) { showToast('⚠ ' + data.error); return; }
+      if (term) {
+        term.sources = data.sources || value;
+        if (data.last_modified_by) { term.last_modified_by = data.last_modified_by; term.last_modified_time = data.last_modified_time; updateModifiedDisplay(termId); }
+      }
+      showToast('✓ Saved');
+    } catch(e) { showToast('⚠ Failed to save'); }
+  }
+
   // ── CLASSIFICATION ───────────────────────────────────────────────────────
   async function classifyTerm(termId) {
     const btn = document.getElementById(`cls-btn-${termId}`);
@@ -2696,7 +2721,6 @@
     { key: 'trans_second', label: 'Suggest 2 text' },
     { key: 'final', label: 'Final key' },
     { key: 'status', label: 'Status' },
-    { key: 'source', label: 'Source' },
     { key: 'context', label: 'Context' },
     { key: 'notes', label: 'Notes' },
     { key: 'category', label: 'Category' },
@@ -2768,11 +2792,12 @@
       showToast('Selected terms not found — refresh and try again');
       return;
     }
-    const displayVal = (key, term) => {
-      let v = term[key] || '';
-      if (key === 'source' && v) v = sourceName(v) || v;
-      return v;
-    };
+    const displayVal = (key, term) => term[key] || '';
+    const unionSources = Array.from(new Set([...(a.sources||[]), ...(b.sources||[])]));
+    const sourcesRow = `<tr class="merge-field-same">
+        <td>Sources<div class="merge-notes-hint">Always combined — nothing is dropped</div></td>
+        <td colspan="2" style="text-align:center;">${unionSources.length ? escHtml(sourceNames(unionSources)) : '<span class="merge-cell-empty">— empty —</span>'}</td>
+      </tr>`;
     const rows = MERGE_FIELDS.map(f => {
       const av = a[f.key] || '';
       const bv = b[f.key] || '';
@@ -2848,7 +2873,7 @@
           <th>A · ${escHtml(a.id)}</th>
           <th>B · ${escHtml(b.id)}</th>
         </tr></thead>
-        <tbody>${rows}</tbody>
+        <tbody>${sourcesRow}${rows}</tbody>
       </table>`;
     document.getElementById('merge-modal').dataset.termA = a.id;
     document.getElementById('merge-modal').dataset.termB = b.id;
@@ -2931,8 +2956,7 @@
   // ── ADD TERM MODAL ───────────────────────────────────────────────────────
   function openModal() {
     const sel = document.getElementById('f-source');
-    sel.innerHTML = '<option value="">— Select Source —</option>' +
-      allSources.map(s => `<option value="${s.SourceID}">${s.SourceName}</option>`).join('');
+    sel.innerHTML = allSources.map(s => `<option value="${s.SourceID}">${s.SourceName}</option>`).join('');
     document.getElementById('modal').classList.add('open');
   }
   function closeModal()          { document.getElementById('modal').classList.remove('open'); }
@@ -2954,7 +2978,7 @@
       const payload = {
         chinese,
         trans_known:            document.getElementById('f-known').value.trim(),
-        source:                 document.getElementById('f-source').value,
+        sources:                Array.from(document.getElementById('f-source').selectedOptions).map(o => o.value),
         source_content_chinese: document.getElementById('f-source-content-zh').value.trim(),
         source_content_english: document.getElementById('f-source-content-en').value.trim(),
         notes:                  document.getElementById('f-notes').value.trim(),
@@ -2994,7 +3018,7 @@
       if (el) el.value = '';
     });
     const src = document.getElementById('f-source');
-    if (src) src.value = '';
+    if (src) Array.from(src.options).forEach(o => o.selected = false);
   }
 
   // ── SOURCES MODAL ────────────────────────────────────────────────────────

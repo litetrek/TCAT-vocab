@@ -15,7 +15,6 @@ _FIELD_TO_DB = {
     "trans_known":  "translation_known",
     "trans_other1": "translation_other1",
     "trans_other2": "translation_other2",
-    "source":       "source",
     "context":      "context",
     "category":     "category",
     "notes":        "notes",
@@ -41,7 +40,6 @@ _MERGE_FIELD_TO_DB = {
     "trans_second":           "translation_second",
     "final":                  "final",
     "status":                 "status",
-    "source":                 "source",
     "context":                "context",
     "notes":                  "notes",
     "category":               "category",
@@ -75,7 +73,7 @@ _ALLOWED_INSERT_COLS = {
     "display_id", "chinese", "pinyin", "pali", "sanskrit", "context", "category", "notes",
     "translation1", "translation2", "translation3", "translation_first", "translation_second",
     "translation_other1", "translation_other2", "translation_known", "final", "status",
-    "source", "romanization_plain", "source_content_chinese", "source_content_english",
+    "romanization_plain", "source_content_chinese", "source_content_english",
     "added_by", "added_at", "last_modified_by", "last_modified_at",
     "entity_type", "subject_field", "classification_source", "classified_by", "classified_at",
 }
@@ -105,7 +103,7 @@ def _to_pg(val):
     return val if val != "" else None
 
 
-def _row_to_response(row):
+def _row_to_response(row, sources=None):
     return {
         "id":       _v(row, "display_id"),
         "chinese":  _v(row, "chinese"),
@@ -119,7 +117,7 @@ def _row_to_response(row):
         "trans2":        _v(row, "translation2"),
         "trans3":        _v(row, "translation3"),
         "trans_known":   _v(row, "translation_known"),
-        "source":        _v(row, "source"),
+        "sources":       sources or [],
         "trans_first":   _v(row, "translation_first"),
         "trans_second":  _v(row, "translation_second"),
         "trans_other1":  _v(row, "translation_other1"),
@@ -157,7 +155,6 @@ def _row_to_sheets_fmt(row):
         "Translation2":      _v(row, "translation2"),
         "Translation3":      _v(row, "translation3"),
         "TranslationKnown":  _v(row, "translation_known"),
-        "Source":            _v(row, "source"),
         "TranslationFirst":  _v(row, "translation_first"),
         "TranslationSecond": _v(row, "translation_second"),
         "TranslationOther1": _v(row, "translation_other1"),
@@ -191,6 +188,105 @@ def find_by_chinese(chinese_text):
     return _row_to_sheets_fmt(result.data[0])
 
 
+def _fetch_all_term_sources_map():
+    """Return {term_internal_id: [source_display_id, ...]} for every linked term."""
+    out = {}
+    offset = 0
+    while True:
+        chunk = (
+            supabase.table("term_sources")
+            .select("term_id, sources(display_id)")
+            .range(offset, offset + _PAGE - 1)
+            .execute()
+            .data
+        )
+        for row in chunk:
+            src = row.get("sources") or {}
+            display_id = src.get("display_id")
+            if display_id:
+                out.setdefault(row["term_id"], []).append(display_id)
+        if len(chunk) < _PAGE:
+            break
+        offset += _PAGE
+    return out
+
+
+def _source_display_ids_for_internal(term_internal_id):
+    rows = (
+        supabase.table("term_sources")
+        .select("sources(display_id)")
+        .eq("term_id", term_internal_id)
+        .execute()
+        .data
+    )
+    return sorted(r["sources"]["display_id"] for r in rows if r.get("sources"))
+
+
+def _set_term_sources_internal(term_internal_id, source_display_ids):
+    """Replace the linked sources for one term (by internal id)."""
+    source_display_ids = [s for s in (source_display_ids or []) if s]
+    supabase.table("term_sources").delete().eq("term_id", term_internal_id).execute()
+    if not source_display_ids:
+        return
+    src_rows = (
+        supabase.table("sources")
+        .select("id,display_id")
+        .in_("display_id", source_display_ids)
+        .execute()
+        .data
+    )
+    rows = [{"term_id": term_internal_id, "source_id": r["id"]} for r in src_rows]
+    if rows:
+        supabase.table("term_sources").insert(rows).execute()
+
+
+def set_term_sources(term_id, source_display_ids, modifier, now_str):
+    """
+    Replace a term's linked sources. term_id is the display_id (e.g. T000123).
+    Returns (chinese, old_sources, new_sources), or (None, None, None) if not found.
+    """
+    result = supabase.table("terms").select("id,chinese").eq("display_id", term_id).limit(1).execute()
+    if not result.data:
+        return None, None, None
+    row         = result.data[0]
+    internal_id = row["id"]
+    chinese     = row.get("chinese") or ""
+    old_sources = _source_display_ids_for_internal(internal_id)
+    _set_term_sources_internal(internal_id, source_display_ids)
+    supabase.table("terms").update({
+        "last_modified_by": modifier,
+        "last_modified_at": _to_pg(now_str),
+    }).eq("display_id", term_id).execute()
+    new_sources = _source_display_ids_for_internal(internal_id)
+    return chinese, old_sources, new_sources
+
+
+def add_term_source(term_id, source_display_id, modifier, now_str):
+    """
+    Link one additional source to a term without removing its existing ones
+    (e.g. an already-known term encountered again in a different source book).
+    Returns the term's chinese text, or None if not found / no source given.
+    """
+    if not source_display_id:
+        return None
+    result = supabase.table("terms").select("id,chinese").eq("display_id", term_id).limit(1).execute()
+    if not result.data:
+        return None
+    row         = result.data[0]
+    internal_id = row["id"]
+    chinese     = row.get("chinese") or ""
+    current = set(_source_display_ids_for_internal(internal_id))
+    if source_display_id in current:
+        return chinese
+    current.add(source_display_id)
+    _set_term_sources_internal(internal_id, list(current))
+    supabase.table("terms").update({
+        "last_modified_by": modifier,
+        "last_modified_at": _to_pg(now_str),
+    }).eq("display_id", term_id).execute()
+    return chinese
+
+
 def list_terms():
     """Fetch all terms using paginated requests to bypass PostgREST's 1000-row limit."""
     rows = []
@@ -209,7 +305,8 @@ def list_terms():
             break
         offset += _PAGE
     logger.info("list_terms: fetched %d rows total", len(rows))
-    return [_row_to_response(r) for r in rows]
+    sources_map = _fetch_all_term_sources_map()
+    return [_row_to_response(r, sources_map.get(r["id"])) for r in rows]
 
 
 def get_term_record(term_id):
@@ -229,6 +326,7 @@ def save_ai_context(term_id, explanation, now_str):
 def create_term(data):
     """
     Insert a new term. data uses legacy key names as sent by routes layer.
+    data may include "sources": [SourceID, ...] to link one or more source books.
     Returns the generated display_id (e.g. 'T002845').
     """
     display_id = supabase.rpc(
@@ -236,15 +334,20 @@ def create_term(data):
         {"p_prefix": "T", "p_seq_name": "seq_terms_display"}
     ).execute().data
 
+    sources = data.get("sources") or []
     mapped = {"display_id": display_id}
     for k, v in data.items():
+        if k == "sources":
+            continue
         col = _CREATE_KEY_MAP.get(k, k)
         if col in _ALLOWED_INSERT_COLS:
             mapped[col] = _to_pg(v)
     if not mapped.get("status"):
         mapped["status"] = "new"
 
-    supabase.table("terms").insert(mapped).execute()
+    result = supabase.table("terms").insert(mapped).execute()
+    if sources and result.data:
+        _set_term_sources_internal(result.data[0]["id"], sources)
     return display_id
 
 
@@ -469,8 +572,30 @@ def merge_terms(keep_id, drop_id, field_values, modifier, now_str):
         "last_modified_at": _to_pg(now_str),
     }).eq("display_id", drop_id).execute()
 
+    # Sources aren't a per-field radio choice — merging always keeps the union of
+    # both terms' linked sources on keep_id, so no source book gets silently dropped.
+    keep_internal = keep_row["id"]
+    drop_internal = drop_row["id"]
+    link_rows = (
+        supabase.table("term_sources")
+        .select("source_id")
+        .in_("term_id", [keep_internal, drop_internal])
+        .execute()
+        .data
+    )
+    union_source_ids = sorted({r["source_id"] for r in link_rows})
+    if union_source_ids:
+        supabase.table("term_sources").delete().eq("term_id", keep_internal).execute()
+        supabase.table("term_sources").insert(
+            [{"term_id": keep_internal, "source_id": sid} for sid in union_source_ids]
+        ).execute()
+    keep_sources = _source_display_ids_for_internal(keep_internal)
+
     refreshed = supabase.table("terms").select("*").eq("display_id", keep_id).limit(1).execute()
-    keep_out = _row_to_response(refreshed.data[0] if refreshed.data else {**keep_row, **updates, "display_id": keep_id})
+    keep_out = _row_to_response(
+        refreshed.data[0] if refreshed.data else {**keep_row, **updates, "display_id": keep_id},
+        keep_sources,
+    )
     return {
         "keep":         keep_out,
         "keep_id":      keep_id,

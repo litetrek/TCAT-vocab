@@ -115,7 +115,7 @@ buddhist-vocab/
 
 ---
 
-## Supabase Database Schema (11 tables, all live)
+## Supabase Database Schema (12 tables, all live)
 
 **Project:** `TCAT-vocab` (id: `yvkadctkigkjtjmmxrqc`, region: us-west-1)
 **Connection:** supabase-py HTTPS REST (port 443), `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` env vars
@@ -128,7 +128,8 @@ each display_id to eliminate the race condition from the old Sheets "scan for ma
 |---|---|---|
 | `members` | — | email UNIQUE, role check constraint |
 | `sources` | S000001 | |
-| `terms` | T000001 | status check: pending/finalized; idx on chinese, status |
+| `terms` | T000001 | status check: pending/finalized; idx on chinese, status; **no longer has a `source` column** — see `term_sources` (2026-09-03) |
+| `term_sources` | — | many-to-many terms↔sources; PK (term_id, source_id); both FKs ON DELETE CASCADE (2026-09-03) |
 | `audit_log` | — | ts timestamptz; term_id is text (no FK — historical rows may ref deleted terms) |
 | `ext_documents` | D000001 | |
 | `ext_paragraphs` | — | FK → ext_documents(id); UNIQUE (document_id, paragraph_index) |
@@ -834,6 +835,60 @@ Commits: `0d9010e` (highlighting + modal + edit term), `42feaf9` (status badge +
 
 ---
 
+### Translation Module — UI Polish Pass (2026-09-01 to 2026-09-03)
+
+A run of small UX fixes/features to the Translation module, done incrementally:
+
+- **"Approve" → "Reviewed"**: renamed the T3 unit action button and its status badge label; underlying `trans_units.status = 'approved'` DB value unchanged (display-only). Commit `bc0702e`.
+- **Chapter list hides Review Drafts once fully confirmed**: `GET /api/trans/books/<id>/chapters` now also returns `draft_total`/`draft_confirmed` per chapter; frontend hides the **Review Drafts** button and relabels **Browse Units** → **Work on Units** once every paragraph draft in that chapter is confirmed. Commit `0a0ee7b`.
+- **Full editable term panel replaces the old cramped modal**: clicking a highlighted term in Review Drafts or Work on Units now opens the same rich Vocabulary edit view (`buildEditView()`, AI Translate, Suggest, Ask AI, audit log, etc.) as a full-screen overlay, reusing `#edit-view` via DOM reparenting rather than a separate small panel. Header shows **← Back to Unit** (closes the overlay, blurring any focused field first so autosave fires) and **Previous/Next** that walk the *other known terms in that same unit* (not the global vocabulary list) — hidden entirely when there's only one term to navigate to. Old small-panel edit/finalize functions (`trdShowTermEditMode`, `trdSaveTermEdits`, `trdFinalizeTerm`) removed as dead code. Term highlighting gained a third color: **green** (`.term-reviewed`) when the term's status is `reviewed`, on top of the existing gold/blue (no known-translation / has known-translation) scheme. Commit `a8d8325`.
+- **Fixed Previous/Next sticking on repeated terms**: when a term (e.g. 法, 相應) appears more than once in a unit, `Array.indexOf(termId)` always resolved to the first occurrence. Fixed by capturing the clicked span's actual position (`opts.navIndex`) instead of re-deriving it from the id on every navigation step. Commit `bd175bd`.
+- **Chapter list staleness fix**: the "← Chapters" back button only toggled panel visibility without re-fetching, so it kept showing the button state from before a Review Drafts session — not a data bug. Added `transBackToChapters()` which re-fetches on the way back. Commit `62910b0`.
+- **Vocabulary list "Go to Page"**: added a page-number jump input next to Prev/Next in the pagination bar (reuses the existing `goToPage(n)` clamp logic and the Extraction tab's `.ext-jump-input` styling). Commits `2431b52`, `2ceaab9`.
+
+---
+
+### Vocabulary — Multi-Source Terms (2026-09-03)
+
+**Scope**: `terms.source` was a single text column (one SourceID per term), so the same term appearing in multiple source books had to be duplicated or arbitrarily assigned to just one book. Replaced with a proper many-to-many relationship.
+
+#### Migration 015 — `015_term_sources_many_to_many.sql`
+- New table `term_sources (term_id bigint, source_id bigint)` — composite PK, both FKs `ON DELETE CASCADE`; indexes on both columns
+- Backfilled from the old `terms.source` column (1,902 of 3,654 terms had a source set — all values verified to resolve cleanly to existing `sources.display_id` before migrating, zero orphans)
+- `terms.source` column dropped after backfill
+- Applied directly to Supabase (`TCAT-vocab`) via MCP; backfill count (1,902 rows) verified to match pre-migration count exactly
+
+#### `repositories/terms_repo.py`
+- Removed `source` from `_FIELD_TO_DB`, `_MERGE_FIELD_TO_DB`, `_ALLOWED_INSERT_COLS`, `_row_to_response`, `_row_to_sheets_fmt`
+- `_row_to_response()` now takes an optional `sources` list param → `"sources": [SourceID, ...]` in the API response (empty list default)
+- `_fetch_all_term_sources_map()` — one paginated query joining `term_sources` + `sources`, returns `{term_internal_id: [SourceID, ...]}`; used by `list_terms()` to attach `sources` to every row in one shot rather than N+1 queries
+- `set_term_sources(term_id, source_display_ids, modifier, now_str)` — **replaces** a term's linked sources; returns `(chinese, old_sources, new_sources)`
+- `add_term_source(term_id, source_display_id, modifier, now_str)` — **additive** link (used when an already-known term is re-encountered in a different source book via Extraction — doesn't clobber its existing sources)
+- `create_term()` accepts an optional `"sources": [...]` list and links them after insert
+- `merge_terms()` no longer treats `source` as a per-side radio field — it now **always unions** both terms' linked sources onto `keep_id` automatically, so merging duplicates never silently drops a source book
+- All three write paths (`set_term_sources`, `add_term_source`, `merge_terms` union) verified against live Supabase data this session using a real term (round-tripped and restored to its original state) and disposable throwaway terms (created, merged, hard-deleted) — zero net change to production data, confirmed via row-count check on `term_sources` (1,902 before and after)
+
+#### `routes/terms.py`
+- `POST /api/terms`: `sources` (list) replaces `source` (string) in the payload passed to `create_term()`
+- `POST /api/terms/bulk` (CSV import): `source` column now accepts multiple SourceIDs separated by `|` (e.g. `S000001|S000002`)
+- `PATCH /api/terms/<id>`: `field: "sources"` now accepts `value` as a list and routes to `terms_repo.set_term_sources()`; audit log records old/new as comma-joined SourceID lists
+
+#### `routes/extract.py`
+- `POST /api/extract/save` insert path: `"source": source_id` → `"sources": [source_id]`
+- Update path (term already exists): now also calls `add_term_source()` so re-encountering a known term in a new document links the new book without touching its existing sources
+
+#### `templates/index.html`
+- Edit view **Sources** field is now a `<select multiple>` (ctrl/cmd-click), saved via new `autoSaveSources()` — same optimistic-update pattern as `autoSaveMeta()` but diffs arrays instead of strings
+- Add Term modal's Source field is the same multi-select; `submitSingleTerm()` sends `sources: [...]`
+- Sidebar source filter, search haystack, and the list table's Source column all switched from `t.source`/`sourceName()` to `t.sources`/new `sourceNames()` helper (comma-joined)
+- Merge-duplicates modal: removed the per-side Source radio row entirely; added a read-only **Sources — combined automatically** info row showing the union, since merging always keeps both terms' sources now
+- `config.py` `FIELD_LABELS`: `"source"` → `"sources": "Sources"` (used in audit-log field-changed labels)
+
+#### Not yet verified
+- No live browser test of the new multi-select UI (edit view, Add Term modal, merge modal) this session — backend read/write paths were verified directly against Supabase, but the actual `<select multiple>` controls, `autoSaveSources()`, and the merge modal's union display haven't been clicked through in the running app yet
+
+---
+
 ## Known Issues / Notes
 
 - `ftp.cyber-tech.com` does not resolve in DNS — raw IP `108.163.242.106` must be used
@@ -864,6 +919,7 @@ Commits: `0d9010e` (highlighting + modal + edit term), `42feaf9` (status badge +
 
 ## Next Steps
 
+- **Multi-source terms live UI test** (backend verified directly against Supabase, but not clicked through in the browser): open a term's edit view and confirm the multi-select shows its linked sources correctly and ctrl/cmd-click saves via `autoSaveSources()`; add a new term with 2+ sources selected; try the merge-duplicates modal and confirm the "Sources — combined automatically" row shows the right union
 - **T4.1/T4.2 live testing** (nothing has touched these live yet — `style_guide` and embedding columns are still empty in Supabase):
   - Set at least one of `VOYAGE_API_KEY` / `OPENAI_API_KEY` in `.env`
   - Add a style guide rule as leader → run AI Translate on a unit → confirm the rule's language shows up in behavior (AI compliance isn't 100%, may need a few tries)

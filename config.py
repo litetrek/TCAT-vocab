@@ -64,7 +64,7 @@ FIELD_LABELS = {
     "trans_known":  "Known Translation",
     "trans_other1": "Suggested 1",
     "trans_other2": "Suggested 2",
-    "source":       "Source",
+    "sources":      "Sources",
     "context":      "Context",
     "category":     "Category",
     "notes":        "Notes",

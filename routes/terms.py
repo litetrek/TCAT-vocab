@@ -61,7 +61,7 @@ def api_add_term():
             "added_by":     user_email,
             "created_at":   now_str,
             "translation_known":   trans_known,
-            "source":              data.get("source", ""),
+            "sources":             data.get("sources") or [],
             "translation_first":   "",
             "translation_second":  "",
             "translation_other_1": "",
@@ -101,7 +101,8 @@ def api_bulk_import():
         try:
             context     = row.get("context",     row.get("Context",     ""))
             notes       = row.get("notes",       row.get("Notes",       ""))
-            source      = row.get("source",      row.get("Source",      "")).strip()
+            source_raw  = row.get("source",      row.get("Source",      "")).strip()
+            sources     = [s.strip() for s in source_raw.split("|") if s.strip()]
             trans_known = row.get("trans_known",
                           row.get("TranslationKnown",
                           row.get("known", row.get("Known", "")))).strip()
@@ -127,7 +128,7 @@ def api_bulk_import():
                 "added_by":     added_by,
                 "created_at":   now_str,
                 "translation_known":   trans_known,
-                "source":              source,
+                "sources":             sources,
                 "translation_first":   "",
                 "translation_second":  "",
                 "translation_other_1": "",
@@ -152,16 +153,22 @@ def api_update_term(term_id):
         return jsonify({"error": "Your role does not allow editing existing terms"}), 403
     data  = request.json or {}
     field = data.get("field")
-    value = (data.get("value") or "").strip()
     editable = {
         "chinese",
         "pinyin", "trans1", "trans2", "trans3", "trans_known",
-        "trans_other1", "trans_other2", "source", "context", "category", "notes",
+        "trans_other1", "trans_other2", "sources", "context", "category", "notes",
         "source_content_chinese", "source_content_english",
         "entity_type", "subject_field",
     }
     if field not in editable:
         return jsonify({"error": "Invalid field"}), 400
+    if field == "sources":
+        raw_value = data.get("value")
+        if not isinstance(raw_value, list):
+            return jsonify({"error": "sources must be a list"}), 400
+        value = [str(v).strip() for v in raw_value if str(v).strip()]
+    else:
+        value = (data.get("value") or "").strip()
     if field == "chinese" and not is_leader():
         return jsonify({"error": "Leader or admin only"}), 403
     if field == "notes" and not is_leader():
@@ -171,6 +178,19 @@ def api_update_term(term_id):
     try:
         now_str  = datetime.now().strftime("%Y-%m-%d %H:%M")
         modifier = session["user_email"]
+
+        if field == "sources":
+            chinese, old_sources, new_sources = terms_repo.set_term_sources(
+                term_id, value, modifier, now_str
+            )
+            if chinese is None:
+                return jsonify({"error": "Term not found"}), 404
+            write_audit(term_id, chinese, modifier, session.get("user_name", ""),
+                        "updated", field_changed="Sources",
+                        old_value=", ".join(old_sources), new_value=", ".join(new_sources))
+            return jsonify({"status": "updated", "sources": new_sources,
+                             "last_modified_by":   modifier,
+                             "last_modified_time": now_str})
 
         extra = None
         if field in ("entity_type", "subject_field"):

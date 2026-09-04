@@ -137,7 +137,7 @@ def api_extract_save():
                 "added_by":     user_email,
                 "created_at":   now_str,
                 "translation_known":   known_translation,
-                "source":              source_id or None,
+                "sources":             [source_id] if source_id else [],
                 "translation_first":   "",
                 "translation_second":  "",
                 "translation_other_1": "",
@@ -165,6 +165,8 @@ def api_extract_save():
             existing_trans_known = existing.get("TranslationKnown", "")
             terms_repo.update_term_field(existing_term_id, "trans_known",
                                          known_translation, user_email, now_str)
+            if source_id:
+                terms_repo.add_term_source(existing_term_id, source_id, user_email, now_str)
             write_audit(existing_term_id, existing_chinese, user_email, user_name,
                         "updated",
                         field_changed=FIELD_LABELS.get("trans_known", "trans_known"),
