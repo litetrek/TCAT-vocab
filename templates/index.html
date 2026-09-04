@@ -1620,6 +1620,14 @@
     renderTable(all.slice(start, start + pageSize), all.length, totalPages);
   }
 
+  function goToPageFromInput(inputId) {
+    const el = document.getElementById(inputId);
+    if (!el) return;
+    const n = parseInt(el.value, 10);
+    if (!n || n < 1) return;
+    goToPage(n);
+  }
+
   function paginationBar(totalCount, totalPages) {
     const start   = Math.min((currentPage - 1) * pageSize + 1, totalCount);
     const end     = Math.min(currentPage * pageSize, totalCount);
@@ -1637,6 +1645,10 @@
         <button class="btn-page" onclick="goToPage(${currentPage - 1})"${prevDis}>← Prev</button>
         <span class="page-info">Page ${currentPage} of ${totalPages} &nbsp;·&nbsp; ${start}–${end} of ${totalCount}</span>
         <button class="btn-page" onclick="goToPage(${currentPage + 1})"${nextDis}>Next →</button>
+        <div class="ext-jump-wrap">
+          <input class="ext-jump-input" type="number" id="vocab-page-jump" min="1" max="${totalPages}" placeholder="#" title="Go to page" onkeydown="if(event.key==='Enter'){goToPageFromInput('vocab-page-jump');}">
+          <button class="btn btn-secondary btn-sm" onclick="goToPageFromInput('vocab-page-jump')">Go</button>
+        </div>
       </div>
     </div>`;
   }
