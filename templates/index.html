@@ -4553,6 +4553,7 @@
           ${typeTag}
           <div class="trd-ch-actions">
             ${reviewBtn}
+            <button class="btn btn-sm btn-secondary" onclick="transReviewVocab(${c.id},'${titleSafe}')">Review Vocabularies</button>
             <button class="btn btn-sm btn-secondary" onclick="transOpenChapter(${c.id},'${titleSafe}')">${unitsBtnLabel}</button>
           </div>
         </div>`;
@@ -4560,6 +4561,11 @@
     } catch(e) {
       list.innerHTML = `<div class="ext-error-banner">Error: ${escHtml(e.message)}</div>`;
     }
+  }
+
+  // TODO: Review Vocabularies — placeholder until the feature is built out.
+  function transReviewVocab(chapterId, chapterTitle) {
+    showToast('Review Vocabularies — coming soon');
   }
 
   // ── Upload chapter ────────────────────────────────────────────────────────
