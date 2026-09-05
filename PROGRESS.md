@@ -546,6 +546,17 @@ Two-axis structured classification added to all vocabulary terms:
 - `routes/translate.py`: `_require_translation` decorator on every endpoint — checks `is_logged_in()` + `can_access_translation_module(session role)` → 403 if either fails
 - Result: non-admin users cannot see the Translation tab, cannot navigate to it, and any direct API call to `/api/trans/...` returns 403
 
+**Update (2026-09-04) — released to everyone**: `TRANSLATION_MODULE_MIN_ROLE` default changed
+`admin` → `viewer` in `auth.py` (and local `.env`/`.env.example`), now that the module (renamed
+**Books** in the UI) is ready for general use. Per-action gating inside the module is unchanged —
+translate = member+, approve/glossary = leader+, chapter upload = admin — this only opens up
+visibility of the tab itself. **Not yet done**: the live GreenGeeks `.env` is never touched by the
+FTPS deploy (excludes `.env*`) and, per the pattern documented in `.env.example` since T2, almost
+certainly has an explicit `TRANSLATION_MIN_ROLE=admin` line overriding the new code default — someone
+needs to edit that line to `viewer` (or remove it) directly on the server and restart the Python
+app for this to actually take effect in production. No SSH/FTP access was available this session
+to do that step directly.
+
 #### 任務二 — Migration 006 + RPC Functions
 
 - `migrations/006_t2_import_book_rpc.sql`:
