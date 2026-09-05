@@ -3,7 +3,7 @@ from flask import session
 
 _ROLE_ORDER = ["viewer", "depositor", "member", "leader", "admin"]
 
-TRANSLATION_MODULE_MIN_ROLE = os.environ.get("TRANSLATION_MIN_ROLE", "admin")
+TRANSLATION_MODULE_MIN_ROLE = os.environ.get("TRANSLATION_MIN_ROLE", "viewer")
 
 
 def can_access_translation_module(user_role: str) -> bool:
