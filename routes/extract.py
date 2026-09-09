@@ -121,6 +121,28 @@ def api_extract_save():
             # ── INSERT path ──
             if not can_create_term():
                 return jsonify({"error": "You need Depositor access or higher to add new terms"}), 403
+
+            classification_source = None
+            classified_by         = None
+            if entity_type and subject_field:
+                classification_source = "manual"
+                classified_by         = user_email
+            else:
+                # Best-effort AI classification — the candidate-panel flow (Translation
+                # module's Review Vocabularies/Work on Units/Review Drafts, and Extraction's
+                # "new term" panel when the user skips the manual AI Classify button) never
+                # asks for entity_type/subject_field up front, so fill them in automatically
+                # rather than leaving every AI-drafted term unclassified.
+                try:
+                    cls = classify_term({"chinese": chinese_term, "pinyin": pinyin, "context": "", "notes": ""})
+                    entity_type   = entity_type   or cls.get("entity_type", "")
+                    subject_field = subject_field or cls.get("subject_field", "")
+                    if entity_type or subject_field:
+                        classification_source = "ai"
+                        classified_by         = "ai:claude-haiku-4-5"
+                except Exception:
+                    pass  # classification is a bonus — never block term creation on it
+
             term_id = terms_repo.create_term({
                 "chinese":      chinese_term,
                 "pinyin":       pinyin,
@@ -149,9 +171,9 @@ def api_extract_save():
                 "source_content_english": src_en,
                 "entity_type":            entity_type or None,
                 "subject_field":          subject_field or None,
-                "classification_source":  "manual" if entity_type else None,
-                "classified_by":          user_email if entity_type else None,
-                "classified_at":          now_str if entity_type else None,
+                "classification_source":  classification_source,
+                "classified_by":          classified_by,
+                "classified_at":          now_str if classification_source else None,
             })
             write_audit(term_id, chinese_term, user_email, user_name,
                         "created", details=f"Term created via Extraction (Pinyin={pinyin})")

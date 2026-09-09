@@ -5427,9 +5427,11 @@
     const range = sel.getRangeAt(0);
     const reviewBody = document.getElementById('trans-review-body');
     const unitList   = document.getElementById('trans-unit-list');
+    const vocabList  = document.getElementById('trans-vocab-list');
     const inReview = reviewBody && reviewBody.contains(range.commonAncestorContainer);
     const inUnits  = unitList   && unitList.contains(range.commonAncestorContainer);
-    if (!inReview && !inUnits) return;
+    const inVocab  = vocabList  && vocabList.contains(range.commonAncestorContainer);
+    if (!inReview && !inUnits && !inVocab) return;
     trdShowCandidatePanel(text);
   }
 
@@ -5591,7 +5593,11 @@
             const r = await fetch('/api/trans/known-terms');
             if (r.ok) {
               trdKnownTerms = await r.json();
-              trdRenderAll();
+              // Re-highlight in place — works regardless of which sub-view (Review
+              // Drafts / Work on Units / Review Vocabularies) is currently shown.
+              document.querySelectorAll('.trans-unit-text, .trd-sent-text').forEach(el => {
+                el.innerHTML = trdHighlightKnownTerms(el.textContent);
+              });
             }
           } catch(e) {}
         }, 900);
@@ -5604,6 +5610,7 @@
 
   document.getElementById('trans-review-body').addEventListener('mouseup', trdHandleSelection);
   document.getElementById('trans-unit-list').addEventListener('mouseup', trdHandleSelection);
+  document.getElementById('trans-vocab-list').addEventListener('mouseup', trdHandleSelection);
   document.addEventListener('keydown', e => { if (e.key === 'Escape') trdClearSelection(); });
 
   {% endif %}
