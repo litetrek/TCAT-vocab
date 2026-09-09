@@ -4612,9 +4612,14 @@
     _transCurrentBookTitle = bookTitle;
     document.getElementById('trans-chapter-title').innerHTML =
       `<span style="font-size:1.1rem;font-style:normal;">${escHtml(bookTitle)}</span> — Chapters`;
-    document.getElementById('trans-ch-upload-msg').style.display = 'none';
-    document.getElementById('trans-ch-title').value = '';
-    document.getElementById('trans-ch-file').value  = '';
+    // Upload Chapter form is admin-only ({% if is_admin %}) — these elements don't
+    // exist in the DOM for other roles, so guard against null.
+    const chUploadMsg  = document.getElementById('trans-ch-upload-msg');
+    const chTitleInput = document.getElementById('trans-ch-title');
+    const chFileInput  = document.getElementById('trans-ch-file');
+    if (chUploadMsg)  chUploadMsg.style.display = 'none';
+    if (chTitleInput) chTitleInput.value = '';
+    if (chFileInput)  chFileInput.value  = '';
     transShowChapterList();
     await transReloadChapters(bookId);
   }
