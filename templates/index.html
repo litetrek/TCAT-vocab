@@ -776,6 +776,15 @@
     .trd-long-flag { font-size: 0.58rem; color: #a04010; border: 1px solid rgba(224,120,48,0.4); background: rgba(224,120,48,0.08); padding: 0.03rem 0.28rem; border-radius: 2px; flex-shrink: 0; letter-spacing: 0.05em; }
     .trd-new-group-drop { border: 2px dashed rgba(201,168,76,0.22); border-radius: 3px; padding: 0.5rem; text-align: center; font-size: 0.78rem; color: var(--text-soft); font-style: italic; transition: border-color 0.15s, background 0.15s; }
     .trd-new-group-drop.trd-drag-over { border-color: var(--gold); background: rgba(201,168,76,0.08); color: var(--ink); }
+    .trd-add-group-btn {
+      background: none; border: none; cursor: pointer; font-size: 0.68rem; color: var(--text-soft);
+      padding: 0.15rem 0.3rem; align-self: flex-start; margin-top: 0.35rem;
+    }
+    .trd-add-group-btn:hover { color: var(--gold); }
+    .trd-add-group-top { margin-top: 0; margin-bottom: -0.15rem; }
+    .trd-group-empty { border-style: dashed; }
+    .trd-del-empty-group { font-size: 0.62rem; text-transform: none; letter-spacing: normal; margin-left: 0.5rem; color: var(--red-soft, #a04040); }
+    .trd-del-empty-group:hover { color: #a04040; }
     .trd-ch-actions { margin-left: auto; display: flex; gap: 0.4rem; flex-shrink: 0; }
     .trans-ch-upload { background: white; border: 1px solid var(--border); border-radius: 4px; padding: 1rem 1.25rem; margin-bottom: 1.25rem; box-shadow: var(--shadow); }
     .trans-ch-upload-title { font-family: 'Cormorant Garamond', serif; font-size: 0.95rem; font-style: italic; color: var(--ink); margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
@@ -5201,6 +5210,9 @@
           ondragleave="trdDragLeave(event,this)">
         ↓ 拖曳到此建立新組
       </div>`;
+    const addFirstHtml = !isConfirmed
+      ? `<button type="button" class="trd-add-group-btn trd-add-group-top" title="在最前面新增空白組" onclick="trdAddEmptyGroup(${paraIdx},-1)">+ 新增空白組</button>`
+      : '';
 
     return `<div class="trd-para-card${isConfirmed?' trd-para-confirmed':''}" id="trd-para-${paraIdx}">
       <div class="trd-para-header">
@@ -5215,6 +5227,7 @@
       </div>
       <div class="trd-save-indicator" id="trd-save-${paraIdx}" style="display:none;"></div>
       <div class="trd-groups">
+        ${addFirstHtml}
         ${groupsHtml}
         ${newDropHtml}
       </div>
@@ -5226,6 +5239,25 @@
 
   function trdGroupHtml(paraIdx, groupIdx, group, isConfirmed) {
     const sents = (group.sentences || []);
+    const addAfterHtml = !isConfirmed
+      ? `<button type="button" class="trd-add-group-btn" title="在此組之後新增空白組" onclick="trdAddEmptyGroup(${paraIdx},${groupIdx})">+ 新增空白組</button>`
+      : '';
+
+    if (sents.length === 0 && !isConfirmed) {
+      // Empty group: created via "+ 新增空白組" so text can be moved/typed in — either
+      // drag an existing sentence here, or type/paste new sentence text directly.
+      return `<div class="trd-group trd-group-empty" data-group-idx="${groupIdx}"
+          ondragover="trdDragOver(event,this)" ondrop="trdDropGroup(event,${paraIdx},${groupIdx})" ondragleave="trdDragLeave(event,this)">
+        <div class="trd-group-label">
+          第 ${groupIdx + 1} 組（空）
+          <button type="button" class="btn-icon-edit trd-del-empty-group" title="刪除空白組" onclick="trdDeleteEmptyGroup(${paraIdx},${groupIdx})">✕ 刪除空組</button>
+        </div>
+        <textarea class="trd-sent-input" rows="2" placeholder="拖曳句子到此，或直接輸入新句子文字…"
+          onblur="trdAddSentenceToEmptyGroup(${paraIdx},${groupIdx},this)"></textarea>
+        ${addAfterHtml}
+      </div>`;
+    }
+
     const sentsHtml = sents.map((s, si) => {
       const longFlag = s.is_long_sentence ? ' <span class="trd-long-flag">長</span>' : '';
       const hl = trdHighlightKnownTerms(s.text);
@@ -5247,6 +5279,7 @@
     return `<div class="trd-group" ${dropAttrs}>
       <div class="trd-group-label">第 ${groupIdx + 1} 組 (${sents.length} 句)</div>
       ${sentsHtml}
+      ${addAfterHtml}
     </div>`;
   }
 
@@ -5368,6 +5401,57 @@
     _trdRestoreOrder(dg);
 
     // Re-render this paragraph card
+    const card = document.getElementById(`trd-para-${paraIdx}`);
+    if (card) card.outerHTML = trdParaCardHtml(paraIdx);
+    trdScheduleSave(paraIdx);
+  }
+
+  // Insert a new, empty group immediately after afterGroupIdx (-1 = insert at the
+  // very start). Lets an admin split one over-long sentence across two groups: drag
+  // an existing sentence into the empty group, or type/paste new sentence text
+  // directly into it (trdAddSentenceToEmptyGroup below). Not sorted/saved yet —
+  // an empty group carries no _origIdx to sort by, so _trdRestoreOrder must not run
+  // until it actually holds a sentence.
+  function trdAddEmptyGroup(paraIdx, afterGroupIdx) {
+    const draft = _trdDrafts[paraIdx];
+    if (!draft) return;
+    const insertAt = afterGroupIdx + 1;
+    draft.draft_groups.splice(insertAt, 0, { sentences: [] });
+    const card = document.getElementById(`trd-para-${paraIdx}`);
+    if (card) card.outerHTML = trdParaCardHtml(paraIdx);
+    const group = document.querySelector(`#trd-para-${paraIdx} .trd-group-empty[data-group-idx="${insertAt}"] textarea`);
+    if (group) group.focus();
+  }
+
+  // Remove a group that has no sentences (e.g. created via trdAddEmptyGroup and
+  // then not used, or left behind after dragging its one sentence back out).
+  function trdDeleteEmptyGroup(paraIdx, groupIdx) {
+    const draft = _trdDrafts[paraIdx];
+    const group = draft && draft.draft_groups[groupIdx];
+    if (!group || group.sentences.length > 0) return;
+    draft.draft_groups.splice(groupIdx, 1);
+    const card = document.getElementById(`trd-para-${paraIdx}`);
+    if (card) card.outerHTML = trdParaCardHtml(paraIdx);
+    trdScheduleSave(paraIdx);
+  }
+
+  // Typing/pasting text directly into an empty group's textarea creates a brand
+  // new sentence there (as opposed to moving an existing one via drag-drop).
+  // Gives it a synthetic _origIdx that brackets its neighbors so the existing
+  // document-order sort (_trdRestoreOrder) keeps it exactly where it was placed.
+  function trdAddSentenceToEmptyGroup(paraIdx, groupIdx, el) {
+    const draft = _trdDrafts[paraIdx];
+    const dg    = draft && draft.draft_groups;
+    const group = dg && dg[groupIdx];
+    if (!group) return;
+    const value = el.value.trim();
+    if (!value) return; // left empty — leave the empty-group UI as is
+    const prevLast  = groupIdx > 0 ? dg[groupIdx - 1].sentences.slice(-1)[0] : null;
+    const nextFirst = groupIdx < dg.length - 1 ? dg[groupIdx + 1].sentences[0] : null;
+    const prevIdx = prevLast  ? prevLast._origIdx  : -1;
+    const nextIdx = nextFirst ? nextFirst._origIdx : (prevIdx + 2);
+    group.sentences.push({ text: value, is_long_sentence: false, _origIdx: (prevIdx + nextIdx) / 2 });
+    _trdRestoreOrder(dg);
     const card = document.getElementById(`trd-para-${paraIdx}`);
     if (card) card.outerHTML = trdParaCardHtml(paraIdx);
     trdScheduleSave(paraIdx);
