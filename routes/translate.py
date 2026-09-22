@@ -836,6 +836,112 @@ def api_patch_unit_chinese_text(unit_id):
     return jsonify({"status": "updated", "chinese_text": new_text})
 
 
+@translate_bp.route("/api/trans/units/<int:unit_id>/insert-empty", methods=["POST"])
+@_require_translation
+def api_insert_empty_unit(unit_id):
+    """Admin-only: insert a new, empty unit immediately above or below an existing one
+    in the same paragraph (e.g. so text can be moved/typed into it to split a sentence
+    that's really two ideas). Body: {"position": "above" | "below"}.
+
+    Unit numbering: the new unit gets the next display_id off the global U-number
+    sequence (same next_display_id() mechanism every other unit/term/book uses) — it
+    is NOT renumbered to sit between its neighbors' numbers, so it will very likely
+    have a higher number than units both before and after it. Where it appears in the
+    list is controlled separately by unit_order (a fractional sort key, halfway
+    between its two neighbors' unit_order values), not by the display_id number.
+    Existing units keep their current display_ids untouched either way.
+    """
+    if not is_admin():
+        return jsonify({"error": "Admin role required"}), 403
+    data = request.get_json() or {}
+    position = data.get("position")
+    if position not in ("above", "below"):
+        return jsonify({"error": "position must be 'above' or 'below'"}), 400
+
+    try:
+        ref_res = supabase.table("trans_units").select("*").eq("id", unit_id).execute()
+        if not ref_res.data:
+            return jsonify({"error": "Unit not found"}), 404
+        ref = ref_res.data[0]
+
+        siblings = (
+            supabase.table("trans_units")
+            .select("id,unit_order")
+            .eq("chapter_id", ref["chapter_id"])
+            .eq("paragraph_index", ref["paragraph_index"])
+            .order("unit_order")
+            .execute()
+            .data
+        )
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+
+    ref_order = float(ref["unit_order"])
+    orders = [float(s["unit_order"]) for s in siblings]
+    if position == "above":
+        neighbors = [o for o in orders if o < ref_order]
+        neighbor_order = max(neighbors) if neighbors else (ref_order - 2)
+        new_order = (neighbor_order + ref_order) / 2
+    else:
+        neighbors = [o for o in orders if o > ref_order]
+        neighbor_order = min(neighbors) if neighbors else (ref_order + 2)
+        new_order = (ref_order + neighbor_order) / 2
+
+    try:
+        display_id = supabase.rpc("next_display_id", {
+            "p_prefix": "U", "p_seq_name": "seq_trans_units_display"
+        }).execute().data
+        modifier = session.get("user_email", "")
+        result = supabase.table("trans_units").insert({
+            "display_id":       display_id,
+            "chapter_id":       ref["chapter_id"],
+            "paragraph_index":  ref["paragraph_index"],
+            "unit_order":       new_order,
+            "chinese_text":     "",
+            "status":           "untranslated",
+            "is_long_sentence": False,
+            "last_modified_by": modifier,
+            "last_modified_at": _now_iso(),
+        }).execute()
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+
+    new_unit = result.data[0]
+    write_audit(display_id, "", modifier, session.get("user_name", ""),
+                "created", details=f"Empty unit inserted {position} {ref.get('display_id','')}")
+    return jsonify(new_unit), 201
+
+
+@translate_bp.route("/api/trans/units/<int:unit_id>", methods=["DELETE"])
+@_require_translation
+def api_delete_unit(unit_id):
+    """Admin-only: delete a unit, but only if it's still empty (no Chinese or English
+    text) — a safety rail so this can only remove units nobody has put work into yet,
+    e.g. an empty one inserted via insert-empty and then not needed after all."""
+    if not is_admin():
+        return jsonify({"error": "Admin role required"}), 403
+    try:
+        result = supabase.table("trans_units").select("*").eq("id", unit_id).execute()
+        if not result.data:
+            return jsonify({"error": "Unit not found"}), 404
+        unit = result.data[0]
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+
+    if (unit.get("chinese_text") or "").strip() or (unit.get("english_draft") or "").strip() \
+            or (unit.get("english_final") or "").strip():
+        return jsonify({"error": "Only an empty unit (no Chinese or English text) can be deleted"}), 400
+
+    try:
+        supabase.table("trans_units").delete().eq("id", unit_id).execute()
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+
+    write_audit(unit.get("display_id", ""), "", session.get("user_email", ""), session.get("user_name", ""),
+                "updated", details="Deleted empty unit")
+    return jsonify({"status": "deleted"})
+
+
 # ── Book Glossary ────────────────────────────────────────────────────────────
 # Leader/Admin-curated, per-book list of terms with an AI-drafted, editable,
 # bilingual (EN+ZH) explanation — distinct from term_sources (bibliographic

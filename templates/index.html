@@ -4715,16 +4715,57 @@
 
   function _transVocabRowHtml(u) {
     const cls = u.is_long_sentence ? ' long-sentence' : '';
-    const editBtn = isAdmin
-      ? `<button type="button" class="btn-icon-edit" title="Edit Chinese text" onclick="trdEditVocabText(${u.id})">✎</button>`
+    const isEmpty = !(u.chinese_text || '').trim();
+    const adminBtns = isAdmin ? `
+        <button type="button" class="btn-icon-edit" title="Edit Chinese text" onclick="trdEditVocabText(${u.id})">✎</button>
+        <button type="button" class="btn-icon-edit" title="Insert empty unit above" onclick="trdInsertEmptyUnit(${u.id},'above')">+↑</button>
+        <button type="button" class="btn-icon-edit" title="Insert empty unit below" onclick="trdInsertEmptyUnit(${u.id},'below')">+↓</button>
+        ${isEmpty ? `<button type="button" class="btn-icon-edit trd-del-empty-group" title="Delete this empty unit" onclick="trdDeleteEmptyUnit(${u.id})">🗑</button>` : ''}`
       : '';
+    const textHtml = isEmpty
+      ? `<span class="trans-unit-empty-placeholder" style="color:var(--text-soft);font-style:italic;">— empty — click ✎ to add text —</span>`
+      : trdHighlightKnownTerms(u.chinese_text || '');
     return `<div class="trans-unit-row${cls}" data-unit-id="${u.id}">
       <div class="trans-unit-top">
         <span class="trans-unit-id">${escHtml(u.display_id || '')}</span>
-        ${editBtn}
+        ${adminBtns}
       </div>
-      <div class="trans-unit-text">${trdHighlightKnownTerms(u.chinese_text || '')}</div>
+      <div class="trans-unit-text">${textHtml}</div>
     </div>`;
+  }
+
+  // Admin-only: create a new empty unit immediately above/below this one (same
+  // paragraph) via a fractional unit_order between the two neighbors — see the
+  // insert-empty endpoint's docstring for the full numbering explanation. Opens
+  // the new unit straight into edit mode so text can be typed/pasted right away.
+  async function trdInsertEmptyUnit(unitId, position) {
+    try {
+      const res  = await fetch(`/api/trans/units/${unitId}/insert-empty`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ position }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) { showToast('⚠ ' + (data.error || 'Failed to insert unit')); return; }
+      const refRow = document.querySelector(`.trans-unit-row[data-unit-id="${unitId}"]`);
+      if (!refRow) return;
+      refRow.insertAdjacentHTML(position === 'above' ? 'beforebegin' : 'afterend', _transVocabRowHtml(data));
+      showToast('✓ Unit inserted — ' + (data.display_id || ''));
+      trdEditVocabText(data.id);
+    } catch(e) { showToast('⚠ Failed to insert unit'); }
+  }
+
+  // Admin-only: remove a unit, but only while it's still empty — the backend
+  // refuses to delete one that has any Chinese or English text.
+  async function trdDeleteEmptyUnit(unitId) {
+    if (!confirm('Delete this empty unit?')) return;
+    try {
+      const res  = await fetch(`/api/trans/units/${unitId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok || data.error) { showToast('⚠ ' + (data.error || 'Failed to delete unit')); return; }
+      const row = document.querySelector(`.trans-unit-row[data-unit-id="${unitId}"]`);
+      if (row) row.remove();
+      showToast('✓ Unit deleted');
+    } catch(e) { showToast('⚠ Failed to delete unit'); }
   }
 
   // Admin-only: swap a Review Vocabularies row's read-only highlighted text for an
@@ -4736,7 +4777,9 @@
     if (!row) return;
     const textDiv = row.querySelector('.trans-unit-text');
     if (!textDiv) return;
-    const raw = textDiv.textContent;
+    // The "— empty —" placeholder is display text, not the unit's actual chinese_text.
+    const isPlaceholder = !!textDiv.querySelector('.trans-unit-empty-placeholder');
+    const raw = isPlaceholder ? '' : textDiv.textContent;
     const ta = document.createElement('textarea');
     ta.className = 'trans-unit-zh-input';
     ta.rows = 2;
@@ -4764,8 +4807,25 @@
     }
     const div = document.createElement('div');
     div.className = 'trans-unit-text';
-    div.innerHTML = trdHighlightKnownTerms(finalText);
+    div.innerHTML = finalText
+      ? trdHighlightKnownTerms(finalText)
+      : `<span class="trans-unit-empty-placeholder" style="color:var(--text-soft);font-style:italic;">— empty — click ✎ to add text —</span>`;
     el.replaceWith(div);
+    // Insert/Delete buttons for this row change availability once its emptiness
+    // changes (e.g. the 🗑 only shows while empty) — refresh them in place.
+    const row = div.closest('.trans-unit-row');
+    if (row && row.dataset.unitId) {
+      const top = row.querySelector('.trans-unit-top');
+      if (top) {
+        const isEmpty = !finalText;
+        const delBtn = top.querySelector('.trd-del-empty-group');
+        if (isEmpty && !delBtn && isAdmin) {
+          top.insertAdjacentHTML('beforeend', `<button type="button" class="btn-icon-edit trd-del-empty-group" title="Delete this empty unit" onclick="trdDeleteEmptyUnit(${unitId})">🗑</button>`);
+        } else if (!isEmpty && delBtn) {
+          delBtn.remove();
+        }
+      }
+    }
   }
 
   // ── Book Glossary — list view (Leader/Admin curated, per book) ──────────────
