@@ -3,7 +3,7 @@ import time
 from datetime import datetime, timezone
 from functools import wraps
 from flask import Blueprint, jsonify, request, session
-from auth import is_logged_in, can_access_translation_module, can_edit_existing, is_leader
+from auth import is_logged_in, can_access_translation_module, can_edit_existing, is_leader, is_admin
 from db import supabase
 from segmenter import decode, split_paragraphs, detect_section_type, segment_paragraph
 from ai import group_sentences_by_topic, translate_unit, generate_glossary_entry
@@ -797,6 +797,43 @@ def api_patch_unit(unit_id):
         )
 
     return jsonify(upd.data[0])
+
+
+@translate_bp.route("/api/trans/units/<int:unit_id>/chinese-text", methods=["PATCH"])
+@_require_translation
+def api_patch_unit_chinese_text(unit_id):
+    """Admin-only: edit a confirmed unit's Chinese source text (e.g. fixing an OCR/typo
+    that only became visible once the unit was in Review Vocabularies or Review Drafts).
+    Body: {"chinese_text": str}"""
+    if not is_admin():
+        return jsonify({"error": "Admin role required"}), 403
+    data = request.get_json() or {}
+    new_text = (data.get("chinese_text") or "").strip()
+    if not new_text:
+        return jsonify({"error": "chinese_text is required"}), 400
+    try:
+        result = supabase.table("trans_units").select("display_id,chinese_text").eq("id", unit_id).execute()
+        if not result.data:
+            return jsonify({"error": "Unit not found"}), 404
+        unit = result.data[0]
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+
+    old_text = unit.get("chinese_text") or ""
+    modifier = session.get("user_email", "")
+    try:
+        supabase.table("trans_units").update({
+            "chinese_text":      new_text,
+            "last_modified_by":  modifier,
+            "last_modified_at":  _now_iso(),
+        }).eq("id", unit_id).execute()
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+
+    if new_text != old_text:
+        write_audit(unit.get("display_id", ""), new_text, modifier, session.get("user_name", ""),
+                    "updated", field_changed="chinese_text", old_value=old_text, new_value=new_text)
+    return jsonify({"status": "updated", "chinese_text": new_text})
 
 
 # ── Book Glossary ────────────────────────────────────────────────────────────

@@ -708,6 +708,14 @@
     }
     .trans-unit-actions { display: flex; gap: 0.5rem; align-items: center; }
     .trans-unit-actions .trans-unit-hint { font-size: 0.72rem; color: var(--text-soft); }
+    .btn-icon-edit { background: none; border: none; cursor: pointer; font-size: 0.8rem; color: var(--text-soft); padding: 0 0.25rem; flex-shrink: 0; }
+    .btn-icon-edit:hover { color: var(--gold); }
+    .trans-unit-zh-input {
+      width: 100%; font-family: 'Noto Serif TC', serif; font-size: 1rem; line-height: 1.7;
+      padding: 0.4rem 0.6rem; border: 1px solid var(--border); border-radius: 3px;
+      resize: vertical; margin-bottom: 0.5rem; color: var(--ink); box-sizing: border-box;
+    }
+    .trans-unit-zh-input:focus { outline: none; border-color: var(--gold); }
 
     /* Status badge */
     .trans-status { font-size: 0.62rem; padding: 0.1rem 0.4rem; border-radius: 2px; border: 1px solid; white-space: nowrap; }
@@ -760,6 +768,11 @@
     .trd-sent.trd-dragging { opacity: 0.45; box-shadow: 0 4px 12px rgba(26,18,8,0.2); cursor: grabbing; }
     .trd-sent-handle { color: rgba(107,90,58,0.28); font-size: 0.72rem; flex-shrink: 0; user-select: none; }
     .trd-sent-text { flex: 1; }
+    .trd-sent-input {
+      flex: 1; font-family: 'Noto Serif TC', serif; font-size: 0.95rem; line-height: 1.5;
+      padding: 0.2rem 0.4rem; border: 1px solid rgba(26,18,8,0.2); border-radius: 3px; resize: vertical;
+    }
+    .trd-sent-input:focus { outline: none; border-color: var(--gold); }
     .trd-long-flag { font-size: 0.58rem; color: #a04010; border: 1px solid rgba(224,120,48,0.4); background: rgba(224,120,48,0.08); padding: 0.03rem 0.28rem; border-radius: 2px; flex-shrink: 0; letter-spacing: 0.05em; }
     .trd-new-group-drop { border: 2px dashed rgba(201,168,76,0.22); border-radius: 3px; padding: 0.5rem; text-align: center; font-size: 0.78rem; color: var(--text-soft); font-style: italic; transition: border-color 0.15s, background 0.15s; }
     .trd-new-group-drop.trd-drag-over { border-color: var(--gold); background: rgba(201,168,76,0.08); color: var(--ink); }
@@ -4693,12 +4706,57 @@
 
   function _transVocabRowHtml(u) {
     const cls = u.is_long_sentence ? ' long-sentence' : '';
+    const editBtn = isAdmin
+      ? `<button type="button" class="btn-icon-edit" title="Edit Chinese text" onclick="trdEditVocabText(${u.id})">✎</button>`
+      : '';
     return `<div class="trans-unit-row${cls}" data-unit-id="${u.id}">
       <div class="trans-unit-top">
         <span class="trans-unit-id">${escHtml(u.display_id || '')}</span>
+        ${editBtn}
       </div>
       <div class="trans-unit-text">${trdHighlightKnownTerms(u.chinese_text || '')}</div>
     </div>`;
+  }
+
+  // Admin-only: swap a Review Vocabularies row's read-only highlighted text for an
+  // editable textarea in place (fixes an OCR/typo without leaving this view), then
+  // swap back to the highlighted view — preserving click-to-open-term-panel for
+  // everyone else, and for this row once editing is done.
+  function trdEditVocabText(unitId) {
+    const row = document.querySelector(`.trans-unit-row[data-unit-id="${unitId}"]`);
+    if (!row) return;
+    const textDiv = row.querySelector('.trans-unit-text');
+    if (!textDiv) return;
+    const raw = textDiv.textContent;
+    const ta = document.createElement('textarea');
+    ta.className = 'trans-unit-zh-input';
+    ta.rows = 2;
+    ta.value = raw;
+    ta.addEventListener('blur', () => trdSaveVocabText(ta, unitId, raw));
+    textDiv.replaceWith(ta);
+    ta.focus();
+  }
+
+  async function trdSaveVocabText(el, unitId, orig) {
+    const value = el.value.trim();
+    let finalText = orig;
+    if (!value) {
+      showToast('⚠ Chinese text cannot be empty');
+    } else if (value !== orig) {
+      try {
+        const res  = await fetch(`/api/trans/units/${unitId}/chinese-text`, {
+          method: 'PATCH', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ chinese_text: value }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) { showToast('⚠ ' + (data.error || 'Failed to save')); }
+        else { finalText = value; showToast('✓ Saved'); }
+      } catch(e) { showToast('⚠ Failed to save'); }
+    }
+    const div = document.createElement('div');
+    div.className = 'trans-unit-text';
+    div.innerHTML = trdHighlightKnownTerms(finalText);
+    el.replaceWith(div);
   }
 
   // ── Book Glossary — list view (Leader/Admin curated, per book) ──────────────
@@ -5171,14 +5229,17 @@
     const sentsHtml = sents.map((s, si) => {
       const longFlag = s.is_long_sentence ? ' <span class="trd-long-flag">長</span>' : '';
       const hl = trdHighlightKnownTerms(s.text);
+      const editBtn = isAdmin
+        ? `<button type="button" class="btn-icon-edit" title="Edit sentence text" onclick="trdEditSentenceText(event,${paraIdx},${groupIdx},${si})">✎</button>`
+        : '';
       if (isConfirmed) {
-        return `<div class="trd-sent"><span class="trd-sent-text">${hl}</span>${longFlag}</div>`;
+        return `<div class="trd-sent"><span class="trd-sent-text">${hl}</span>${longFlag}${editBtn}</div>`;
       }
       return `<div class="trd-sent" draggable="true"
           ondragstart="trdDragStart(event,${paraIdx},${groupIdx},${si})"
           ondragend="trdDragEnd(event)">
         <span class="trd-sent-handle">⠿</span>
-        <span class="trd-sent-text">${hl}</span>${longFlag}
+        <span class="trd-sent-text">${hl}</span>${longFlag}${editBtn}
       </div>`;
     }).join('');
     const dropAttrs = isConfirmed ? '' :
@@ -5187,6 +5248,44 @@
       <div class="trd-group-label">第 ${groupIdx + 1} 組 (${sents.length} 句)</div>
       ${sentsHtml}
     </div>`;
+  }
+
+  // Admin-only: swap one sentence's highlighted text for an editable textarea in
+  // place. On blur, write the edit into the in-memory draft and debounce-save it
+  // via the existing draft autosave path (trdScheduleSave) — same mechanism drag
+  // reordering already uses, so no new backend endpoint is needed here. If this
+  // paragraph was already confirmed, the backend PATCH flips its status back to
+  // 'human_adjusted' (existing behavior), which the re-render after save (in
+  // trdSave) surfaces by re-showing the Confirm button — the edit only reaches the
+  // live trans_units once the admin explicitly re-confirms, so in-progress
+  // translation work on that paragraph is never silently overwritten.
+  function trdEditSentenceText(event, paraIdx, groupIdx, sentIdx) {
+    event.stopPropagation();
+    const sentDiv  = event.currentTarget.closest('.trd-sent');
+    const textSpan = sentDiv ? sentDiv.querySelector('.trd-sent-text') : null;
+    if (!textSpan) return;
+    const raw = textSpan.textContent;
+    const ta = document.createElement('textarea');
+    ta.className = 'trd-sent-input';
+    ta.rows = 2;
+    ta.value = raw;
+    ta.addEventListener('blur', () => trdSaveSentenceText(paraIdx, groupIdx, sentIdx, ta));
+    textSpan.replaceWith(ta);
+    event.currentTarget.style.display = 'none';
+    ta.focus();
+  }
+
+  function trdSaveSentenceText(paraIdx, groupIdx, sentIdx, el) {
+    const draft    = _trdDrafts[paraIdx];
+    const group    = draft && draft.draft_groups[groupIdx];
+    const sentence = group && group.sentences[sentIdx];
+    const value    = el.value;
+    if (sentence && value !== sentence.text) {
+      sentence.text = value;
+      trdScheduleSave(paraIdx);
+    }
+    const card = document.getElementById(`trd-para-${paraIdx}`);
+    if (card) card.outerHTML = trdParaCardHtml(paraIdx);
   }
 
   // ── Drag-and-drop handlers ────────────────────────────────────────────────
@@ -5284,6 +5383,7 @@
   async function trdSave(paraIdx) {
     const draft = _trdDrafts[paraIdx];
     if (!draft) return;
+    const prevStatus = draft.status;
     const ind = document.getElementById(`trd-save-${paraIdx}`);
     if (ind) { ind.textContent = '儲存中…'; ind.style.display = ''; }
     try {
@@ -5298,6 +5398,12 @@
       const updated = await r.json();
       _trdDrafts[paraIdx] = Object.assign({}, draft, updated);
       _trdStampOrigIdx(_trdDrafts[paraIdx].draft_groups);
+      // A confirmed paragraph's status flips back to human_adjusted on any edit
+      // (server-side) — re-render so the badge/Confirm button reflect that.
+      if (updated.status !== prevStatus) {
+        const card = document.getElementById(`trd-para-${paraIdx}`);
+        if (card) card.outerHTML = trdParaCardHtml(paraIdx);
+      }
       if (ind) { ind.textContent = '✓ 已儲存'; setTimeout(() => { ind.style.display='none'; }, 2000); }
     } catch(err) {
       if (ind) { ind.textContent = '⚠ 儲存失敗：' + err.message; ind.style.display = ''; }
