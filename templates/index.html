@@ -5324,14 +5324,21 @@
       const editBtn = isAdmin
         ? `<button type="button" class="btn-icon-edit" title="Edit sentence text" onclick="trdEditSentenceText(event,${paraIdx},${groupIdx},${si})">✎</button>`
         : '';
+      // A sentence can end up blank after being edited down to nothing (e.g. its
+      // text was cut and pasted elsewhere as part of a manual split) — offer to
+      // remove it. Only ever reachable via the admin-only edit above, so gated
+      // the same way.
+      const delBtn = (isAdmin && !s.text.trim())
+        ? `<button type="button" class="btn-icon-edit trd-del-empty-group" title="刪除空白句子" onclick="trdDeleteEmptySentence(${paraIdx},${groupIdx},${si})">✕</button>`
+        : '';
       if (isConfirmed) {
-        return `<div class="trd-sent"><span class="trd-sent-text">${hl}</span>${longFlag}${editBtn}</div>`;
+        return `<div class="trd-sent"><span class="trd-sent-text">${hl}</span>${longFlag}${editBtn}${delBtn}</div>`;
       }
       return `<div class="trd-sent" draggable="true"
           ondragstart="trdDragStart(event,${paraIdx},${groupIdx},${si})"
           ondragend="trdDragEnd(event)">
         <span class="trd-sent-handle">⠿</span>
-        <span class="trd-sent-text">${hl}</span>${longFlag}${editBtn}
+        <span class="trd-sent-text">${hl}</span>${longFlag}${editBtn}${delBtn}
       </div>`;
     }).join('');
     const dropAttrs = isConfirmed ? '' :
@@ -5490,6 +5497,21 @@
     const group = draft && draft.draft_groups[groupIdx];
     if (!group || group.sentences.length > 0) return;
     draft.draft_groups.splice(groupIdx, 1);
+    const card = document.getElementById(`trd-para-${paraIdx}`);
+    if (card) card.outerHTML = trdParaCardHtml(paraIdx);
+    trdScheduleSave(paraIdx);
+  }
+
+  // Remove one blank sentence from a group that still has other content (the
+  // group-level delete above only handles a group with zero sentences left).
+  // If this was the group's last sentence, drop the now-empty group too.
+  function trdDeleteEmptySentence(paraIdx, groupIdx, sentIdx) {
+    const draft = _trdDrafts[paraIdx];
+    const group = draft && draft.draft_groups[groupIdx];
+    const sentence = group && group.sentences[sentIdx];
+    if (!sentence || sentence.text.trim()) return; // safety: only ever remove truly-blank sentences
+    group.sentences.splice(sentIdx, 1);
+    if (group.sentences.length === 0) draft.draft_groups.splice(groupIdx, 1);
     const card = document.getElementById(`trd-para-${paraIdx}`);
     if (card) card.outerHTML = trdParaCardHtml(paraIdx);
     trdScheduleSave(paraIdx);
