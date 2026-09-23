@@ -1142,6 +1142,10 @@
           </div>
           <button class="btn btn-primary" style="align-self:flex-end;" onclick="transUploadChapter()" id="trans-ch-upload-btn">Upload Chapter</button>
         </div>
+        <label style="display:flex;align-items:center;gap:0.5rem;margin-top:0.75rem;font-size:0.9rem;font-weight:normal;">
+          <input type="checkbox" id="trans-ch-manual-grouping">
+          Manual grouping — skip AI paragraph splitting; I'll create units myself in Review Draft
+        </label>
         <div class="trans-upload-msg" id="trans-ch-upload-msg" style="display:none;"></div>
       </div>
       {% endif %}
@@ -1154,7 +1158,10 @@
           <button class="btn-back" onclick="transBackToChapters()">← Chapters</button>
           <h1 class="main-title" id="trans-review-title">Review Drafts</h1>
         </div>
-        <span style="font-size:0.85rem;color:var(--text-soft);" id="trans-review-progress"></span>
+        <div style="display:flex;align-items:center;gap:1rem;">
+          <span style="font-size:0.85rem;color:var(--text-soft);" id="trans-review-progress"></span>
+          <button class="btn btn-sm btn-gold" onclick="trdConfirmAll()">✓ 全部段落確認寫入</button>
+        </div>
       </div>
       <div id="trans-review-body">
         <div class="loading">☸ Loading drafts…</div>
@@ -4887,9 +4894,11 @@
     }
 
     const file = fileInput.files[0];
+    const manualGrouping = document.getElementById('trans-ch-manual-grouping').checked;
     const fd = new FormData();
     fd.append('file', file);
     fd.append('title', titleInput.value.trim() || file.name.replace(/\.txt$/i, ''));
+    if (manualGrouping) fd.append('manual_grouping', '1');
 
     btn.disabled = true;
     btn.textContent = 'Uploading…';
@@ -4901,10 +4910,13 @@
         msg.textContent = data.error || 'Upload failed.';
         msg.className = 'trans-upload-msg error';
       } else {
-        msg.textContent = `Chapter uploaded: ${data.display_id} — ${data.paragraph_count} paragraphs (status: pending AI grouping)`;
+        msg.textContent = manualGrouping
+          ? `Chapter uploaded: ${data.display_id} — ${data.paragraph_count} paragraphs (status: pending manual grouping)`
+          : `Chapter uploaded: ${data.display_id} — ${data.paragraph_count} paragraphs (status: pending AI grouping)`;
         msg.className = 'trans-upload-msg success';
         titleInput.value = '';
         fileInput.value  = '';
+        document.getElementById('trans-ch-manual-grouping').checked = false;
         transReloadChapters();
       }
       msg.style.display = '';
@@ -5108,7 +5120,10 @@
     }
     trdUpdateProgress(paraIndices);
     document.getElementById('trans-review-body').innerHTML =
-      paraIndices.map(i => trdParaCardHtml(i)).join('');
+      paraIndices.map(i => trdParaCardHtml(i)).join('') +
+      `<div style="text-align:center;margin-top:1.5rem;">
+        <button class="btn btn-gold" onclick="trdConfirmAll()">✓ 全部段落確認寫入</button>
+      </div>`;
   }
 
   function trdUpdateProgress(paraIndices) {
@@ -5617,6 +5632,27 @@
       if (c) c.outerHTML = trdParaCardHtml(paraIdx);
       trdUpdateProgress(Object.keys(_trdDrafts).map(Number));
       showToast(`段落 ${paraIdx + 1} 已確認，共 ${res.unit_count} 個翻譯單元`);
+    } catch(err) {
+      showToast('確認失敗：' + err.message);
+    }
+  }
+
+  async function trdConfirmAll() {
+    const paraIndices = Object.keys(_trdDrafts).map(Number).sort((a,b) => a-b);
+    const pending = paraIndices.filter(i => (_trdDrafts[i] || {}).status !== 'confirmed');
+    if (!pending.length) { showToast('所有段落皆已確認'); return; }
+    if (!confirm(`確認將全部 ${pending.length} 個未確認段落的分組寫入正式資料庫？此操作會覆蓋這些段落的舊翻譯單元。`)) return;
+    try {
+      const r = await fetch(`/api/trans/chapters/${_trdChapterId}/confirm-all`, { method: 'POST' });
+      if (!r.ok) throw new Error(await r.text());
+      const res = await r.json();
+      for (const i of pending) if (_trdDrafts[i]) _trdDrafts[i].status = 'confirmed';
+      trdRenderAll();
+      if (res.errors && res.errors.length) {
+        showToast(`已確認 ${res.confirmed_count} 段落，共 ${res.unit_total} 個翻譯單元；${res.errors.length} 段落失敗`);
+      } else {
+        showToast(`已確認 ${res.confirmed_count} 段落，共 ${res.unit_total} 個翻譯單元`);
+      }
     } catch(err) {
       showToast('確認失敗：' + err.message);
     }

@@ -220,6 +220,7 @@ def api_upload_chapter(book_id):
 
     title = request.form.get("title", "").strip()
     section_type_override = request.form.get("section_type", "").strip()
+    manual_grouping = request.form.get("manual_grouping", "").strip().lower() in ("1", "true", "on")
 
     # Segment file: paragraphs → sentences
     paragraphs = split_paragraphs(text)
@@ -269,8 +270,13 @@ def api_upload_chapter(book_id):
             sentences = segment_paragraph(para)
             if not sentences:
                 continue
-            # Initial grouping: each sentence is its own group
-            draft_groups = [{"sentences": [s]} for s in sentences]
+            if manual_grouping:
+                # Manual mode: keep the whole paragraph as one group; the user
+                # splits it into units by hand in Review Draft (add/drag groups).
+                draft_groups = [{"sentences": sentences}]
+            else:
+                # Initial grouping: each sentence is its own group
+                draft_groups = [{"sentences": [s]} for s in sentences]
             drafts.append({
                 "chapter_id":      chapter_id,
                 "paragraph_index": para_idx,
@@ -460,6 +466,47 @@ def api_patch_draft(chapter_id, para_idx):
         return jsonify({"error": str(exc)}), 500
 
 
+# ── Confirm helpers ────────────────────────────────────────────────────────
+
+def _write_paragraph_units(chapter_id, para_idx, draft_groups):
+    """Delete + recreate trans_units for one paragraph from draft_groups. Returns unit_count."""
+    supabase.table("trans_units").delete() \
+        .eq("chapter_id", chapter_id) \
+        .eq("paragraph_index", para_idx) \
+        .execute()
+
+    unit_count = 0
+    for unit_order, group in enumerate(draft_groups, start=1):
+        sentences = group.get("sentences", [])
+        if not sentences:
+            continue
+        chinese_text = "".join(s["text"] for s in sentences)
+        is_long = any(s.get("is_long_sentence", False) for s in sentences)
+
+        u_did = supabase.rpc("next_display_id", {
+            "p_prefix": "U", "p_seq_name": "seq_trans_units_display"
+        }).execute().data
+
+        supabase.table("trans_units").insert({
+            "display_id":      u_did,
+            "chapter_id":      chapter_id,
+            "paragraph_index": para_idx,
+            "unit_order":      unit_order,
+            "chinese_text":    chinese_text,
+            "is_long_sentence": is_long,
+            "sentence_map":    sentences,
+        }).execute()
+        unit_count += 1
+    return unit_count
+
+
+def _mark_draft_confirmed(chapter_id, para_idx):
+    supabase.table("trans_unit_drafts").update({
+        "status":          "confirmed",
+        "last_modified_at": _now_iso(),
+    }).eq("chapter_id", chapter_id).eq("paragraph_index", para_idx).execute()
+
+
 # ── POST /api/trans/chapters/<id>/paragraphs/<idx>/confirm ───────────────────
 
 @translate_bp.route(
@@ -487,49 +534,59 @@ def api_confirm_paragraph(chapter_id, para_idx):
     if not draft_groups:
         return jsonify({"error": "No groups to confirm"}), 400
 
-    # Re-confirm is allowed: delete any existing units for this paragraph first
     try:
-        supabase.table("trans_units").delete() \
-            .eq("chapter_id", chapter_id) \
-            .eq("paragraph_index", para_idx) \
-            .execute()
-    except Exception:
-        pass
-
-    unit_count = 0
-    try:
-        for unit_order, group in enumerate(draft_groups, start=1):
-            sentences = group.get("sentences", [])
-            if not sentences:
-                continue
-            chinese_text = "".join(s["text"] for s in sentences)
-            is_long = any(s.get("is_long_sentence", False) for s in sentences)
-
-            u_did = supabase.rpc("next_display_id", {
-                "p_prefix": "U", "p_seq_name": "seq_trans_units_display"
-            }).execute().data
-
-            supabase.table("trans_units").insert({
-                "display_id":      u_did,
-                "chapter_id":      chapter_id,
-                "paragraph_index": para_idx,
-                "unit_order":      unit_order,
-                "chinese_text":    chinese_text,
-                "is_long_sentence": is_long,
-                "sentence_map":    sentences,
-            }).execute()
-            unit_count += 1
-
-        # Mark draft as confirmed (keep the row for AI-quality tracking)
-        supabase.table("trans_unit_drafts").update({
-            "status":          "confirmed",
-            "last_modified_at": _now_iso(),
-        }).eq("chapter_id", chapter_id).eq("paragraph_index", para_idx).execute()
-
+        unit_count = _write_paragraph_units(chapter_id, para_idx, draft_groups)
+        _mark_draft_confirmed(chapter_id, para_idx)
         return jsonify({"status": "confirmed", "unit_count": unit_count})
-
     except Exception as exc:
         return jsonify({"error": f"Database error: {exc}"}), 500
+
+
+# ── POST /api/trans/chapters/<id>/confirm-all ─────────────────────────────────
+
+@translate_bp.route(
+    "/api/trans/chapters/<int:chapter_id>/confirm-all",
+    methods=["POST"],
+)
+@_require_translation
+def api_confirm_all_paragraphs(chapter_id):
+    """Confirm every not-yet-confirmed paragraph draft in a chapter in one pass."""
+    try:
+        drafts_res = (
+            supabase.table("trans_unit_drafts")
+            .select("*")
+            .eq("chapter_id", chapter_id)
+            .order("paragraph_index")
+            .execute()
+        )
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+
+    drafts = drafts_res.data or []
+    confirmed_count = 0
+    unit_total = 0
+    errors = []
+    for draft in drafts:
+        para_idx = draft["paragraph_index"]
+        if draft.get("status") == "confirmed":
+            continue
+        draft_groups = draft.get("draft_groups") or []
+        if not draft_groups:
+            continue
+        try:
+            unit_count = _write_paragraph_units(chapter_id, para_idx, draft_groups)
+            _mark_draft_confirmed(chapter_id, para_idx)
+            confirmed_count += 1
+            unit_total += unit_count
+        except Exception as exc:
+            errors.append({"paragraph_index": para_idx, "error": str(exc)})
+
+    return jsonify({
+        "paragraph_count":  len(drafts),
+        "confirmed_count":  confirmed_count,
+        "unit_total":       unit_total,
+        "errors":           errors,
+    })
 
 
 # ── T3 — AI Translation Drafting ──────────────────────────────────────────────
