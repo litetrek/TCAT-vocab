@@ -4670,8 +4670,9 @@
           ? `<span class="trans-ch-type">${escHtml(c.section_type)}</span>` : '';
         const titleSafe = escHtml(c.title || '');
         const allConfirmed = (c.draft_total || 0) > 0 && c.draft_confirmed === c.draft_total;
-        const reviewBtn = allConfirmed ? '' :
-          `<button class="btn btn-sm btn-primary" onclick="transOpenReview(${c.id},'${titleSafe}')">Review Drafts</button>`;
+        const reviewBtn = allConfirmed
+          ? (isAdmin ? `<button class="btn btn-sm btn-secondary" onclick="transOpenReview(${c.id},'${titleSafe}')">Revise Grouping</button>` : '')
+          : `<button class="btn btn-sm btn-primary" onclick="transOpenReview(${c.id},'${titleSafe}')">Review Drafts</button>`;
         const unitsBtnLabel = 'Translation';
         return `<div class="trans-chapter-row" style="cursor:default;">
           <span class="trans-ch-idx">${c.chapter_index + 1}</span>
@@ -5072,6 +5073,7 @@
   let _trdDrafts         = {};      // paraIdx → draft object
   let _trdDragging       = null;    // {paraIdx, groupIdx, sentIdx}
   let _trdSaveTimers     = {};      // debounce per paragraph
+  let _trdRevising       = new Set(); // paraIdx set — admin unlocked grouping edits on an already-confirmed paragraph
   let trdKnownTerms       = [];
   let trdGlossaryMap      = {}; // term display_id -> glossary entry, for _transCurrentBookId
   let trdGlossaryList     = []; // same entries, ordered array (for the Glossary list view)
@@ -5085,6 +5087,7 @@
     _trdChapterId = chapterId;
     _trdDrafts    = {};
     trdKnownTerms = [];
+    _trdRevising  = new Set();
     document.getElementById('trans-review-title').innerHTML =
       `<span style="font-size:1.1rem;font-style:normal;">${escHtml(_transCurrentBookTitle)}</span> — ${escHtml(chapterTitle || 'Chapter')} — Review Drafts`;
     transShowReviewView();
@@ -5271,7 +5274,9 @@
   function trdParaCardHtml(paraIdx) {
     const draft = _trdDrafts[paraIdx];
     if (!draft) return '';
-    const isConfirmed = draft.status === 'confirmed';
+    const wasConfirmed = draft.status === 'confirmed';
+    const revising     = _trdRevising.has(paraIdx);
+    const isConfirmed  = wasConfirmed && !revising;
     const statusLabels = { pending:'Pending', ai_suggested:'AI 建議', human_adjusted:'已調整', confirmed:'已確認' };
     const statusClasses = { pending:'trd-status-pending', ai_suggested:'trd-status-ai', human_adjusted:'trd-status-adjusted', confirmed:'trd-status-confirmed' };
     const sl = statusLabels[draft.status] || draft.status;
@@ -5288,12 +5293,20 @@
     const addFirstHtml = !isConfirmed
       ? `<button type="button" class="trd-add-group-btn trd-add-group-top" title="在最前面新增空白組" onclick="trdAddEmptyGroup(${paraIdx},-1)">+ 新增空白組</button>`
       : '';
+    const reviseBtn = (isAdmin && wasConfirmed && !revising)
+      ? `<button class="btn btn-sm btn-secondary" onclick="trdReviseGrouping(${paraIdx})">✎ Revise Grouping</button>`
+      : '';
+    const cancelReviseBtn = (isAdmin && wasConfirmed && revising)
+      ? `<button class="btn btn-sm btn-secondary" onclick="trdCancelRevise(${paraIdx})">✕ 取消修改</button>`
+      : '';
 
     return `<div class="trd-para-card${isConfirmed?' trd-para-confirmed':''}" id="trd-para-${paraIdx}">
       <div class="trd-para-header">
         <span class="trd-para-num">段落 ${paraIdx + 1}</span>
         <span class="trd-status-badge ${sc}">${sl}</span>
         <div class="trd-para-actions">
+          ${reviseBtn}
+          ${cancelReviseBtn}
           ${!isConfirmed ? `<button class="btn btn-sm btn-secondary" onclick="trdRunAI(${paraIdx})">✦ AI 分組</button>` : ''}
           ${(isConfirmed || (draft.draft_groups || []).length >= 3) ? `<button class="btn btn-sm btn-gold" onclick="trdConfirm(${paraIdx})"${isConfirmed?' disabled':''}>
             ${isConfirmed ? '✓ 已確認' : '確認寫入'}
@@ -5616,6 +5629,25 @@
     }
   }
 
+  // ── Revise grouping on an already-confirmed paragraph (admin only) ────────
+  // Unlocks the normal drag/drop + add/delete-group editing UI for a
+  // 'confirmed' paragraph. Once the admin actually changes anything, the
+  // existing autosave (PATCH .../draft) flips draft.status to
+  // 'human_adjusted' on its own, which naturally re-locks isConfirmed=false
+  // and requires an explicit re-confirm — no separate unlock bookkeeping needed.
+
+  function trdReviseGrouping(paraIdx) {
+    _trdRevising.add(paraIdx);
+    const card = document.getElementById(`trd-para-${paraIdx}`);
+    if (card) card.outerHTML = trdParaCardHtml(paraIdx);
+  }
+
+  function trdCancelRevise(paraIdx) {
+    _trdRevising.delete(paraIdx);
+    const card = document.getElementById(`trd-para-${paraIdx}`);
+    if (card) card.outerHTML = trdParaCardHtml(paraIdx);
+  }
+
   // ── Confirm paragraph ────────────────────────────────────────────────────
 
   async function trdConfirm(paraIdx) {
@@ -5628,6 +5660,7 @@
       if (!r.ok) throw new Error(await r.text());
       const res = await r.json();
       if (_trdDrafts[paraIdx]) _trdDrafts[paraIdx].status = 'confirmed';
+      _trdRevising.delete(paraIdx);
       const c = document.getElementById(`trd-para-${paraIdx}`);
       if (c) c.outerHTML = trdParaCardHtml(paraIdx);
       trdUpdateProgress(Object.keys(_trdDrafts).map(Number));
