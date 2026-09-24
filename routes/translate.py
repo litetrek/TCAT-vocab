@@ -316,17 +316,26 @@ def api_list_chapters(book_id):
         chapter_ids = [c["id"] for c in chapters]
         draft_counts = {}
         if chapter_ids:
-            drafts_result = (
-                supabase.table("trans_unit_drafts")
-                .select("chapter_id,status")
-                .in_("chapter_id", chapter_ids)
-                .execute()
-            )
-            for d in drafts_result.data:
-                counts = draft_counts.setdefault(d["chapter_id"], {"total": 0, "confirmed": 0})
-                counts["total"] += 1
-                if d["status"] == "confirmed":
-                    counts["confirmed"] += 1
+            # Paginate: Supabase/PostgREST caps a single select at 1000 rows, and a
+            # book can have more draft rows than that (paragraphs across all chapters).
+            page_size = 1000
+            offset = 0
+            while True:
+                page = (
+                    supabase.table("trans_unit_drafts")
+                    .select("chapter_id,status")
+                    .in_("chapter_id", chapter_ids)
+                    .range(offset, offset + page_size - 1)
+                    .execute()
+                ).data
+                for d in page:
+                    counts = draft_counts.setdefault(d["chapter_id"], {"total": 0, "confirmed": 0})
+                    counts["total"] += 1
+                    if d["status"] == "confirmed":
+                        counts["confirmed"] += 1
+                if len(page) < page_size:
+                    break
+                offset += page_size
         for c in chapters:
             counts = draft_counts.get(c["id"], {"total": 0, "confirmed": 0})
             c["draft_total"] = counts["total"]
