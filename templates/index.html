@@ -1143,7 +1143,7 @@
           <button class="btn btn-primary" style="align-self:flex-end;" onclick="transUploadChapter()" id="trans-ch-upload-btn">Upload Chapter</button>
         </div>
         <label style="display:flex;align-items:center;gap:0.5rem;margin-top:0.75rem;font-size:0.9rem;font-weight:normal;">
-          <input type="checkbox" id="trans-ch-manual-grouping">
+          <input type="checkbox" id="trans-ch-manual-grouping" checked>
           Manual grouping — skip AI paragraph splitting; I'll create units myself in Review Draft
         </label>
         <div class="trans-upload-msg" id="trans-ch-upload-msg" style="display:none;"></div>
@@ -4917,7 +4917,7 @@
         msg.className = 'trans-upload-msg success';
         titleInput.value = '';
         fileInput.value  = '';
-        document.getElementById('trans-ch-manual-grouping').checked = false;
+        document.getElementById('trans-ch-manual-grouping').checked = true;
         transReloadChapters();
       }
       msg.style.display = '';
