@@ -1977,6 +1977,11 @@
     merged_into:      'Merged Into',
     marked_inactive:  'Marked Inactive',
     reactivated:      'Restored',
+    deleted:          'Deleted',
+    ai_classified:    'AI Classified',
+    ai_translate:         'AI Translate',
+    translation_saved:    'Saved',
+    translation_approved: 'Reviewed',
   };
 
   async function loadAuditLog(termId) {
@@ -1997,7 +2002,9 @@
         const user   = e.UserName || e.UserEmail || '—';
         const dt     = (e.Timestamp || '').slice(0, 16);
         let detail   = e.Details || '';
-        if (!detail && e.FieldChanged) {
+        if (action === 'ai_translate' && e.NewValue) {
+          detail = `${detail ? detail + ': ' : ''}"${escHtml(e.NewValue)}"`;
+        } else if (!detail && e.FieldChanged) {
           detail = e.FieldChanged;
           if (e.OldValue !== undefined || e.NewValue !== undefined) {
             const from = e.OldValue ? ` from "${e.OldValue}"` : '';
@@ -4978,8 +4985,23 @@
         <button class="btn btn-sm btn-secondary trans-unit-translate-btn" onclick="transTranslateUnit(${u.id})">${translateLabel}</button>
         <button class="btn btn-sm btn-secondary" onclick="transSaveUnit(${u.id}, false)">Save</button>
         ${_CAN_APPROVE ? `<button class="btn btn-sm btn-primary" onclick="transSaveUnit(${u.id}, true)">Reviewed</button>` : ''}
-      </div>` : ''}
+        <button class="btn btn-sm btn-secondary" onclick="transToggleUnitHistory('${escHtml(u.display_id || '')}')">History</button>
+      </div>` : `<div class="trans-unit-actions">
+        <button class="btn btn-sm btn-secondary" onclick="transToggleUnitHistory('${escHtml(u.display_id || '')}')">History</button>
+      </div>`}
+      <div class="trans-unit-history" id="audit-log-${escHtml(u.display_id || '')}" style="display:none;margin-top:0.5rem;"></div>
     </div>`;
+  }
+
+  // Toggle the per-unit audit history (reuses loadAuditLog — audit rows are keyed by the unit's display_id)
+  function transToggleUnitHistory(displayId) {
+    if (!displayId) return;
+    const el = document.getElementById(`audit-log-${displayId}`);
+    if (!el) return;
+    if (el.style.display !== 'none') { el.style.display = 'none'; return; }
+    el.style.display = '';
+    el.innerHTML = '<p style="font-size:0.82rem;color:var(--text-soft);font-style:italic;padding:0.35rem 0;">Loading history…</p>';
+    loadAuditLog(displayId);
   }
 
   async function transTranslateUnit(unitId) {
