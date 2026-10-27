@@ -809,6 +809,8 @@ def api_patch_unit(unit_id):
     - approve=true,  text unchanged from baseline → status=approved, no revision written
     - approve=true,  text changed from baseline   → status=revised,  revision written, approved_by set
     - approve=false (default)                     → status=in_review, work-in-progress save
+    Either way, if the text differs from the original AI draft (english_draft),
+    the unit's single trans_revisions row is created/updated for RAG learning.
     """
     if not can_edit_existing():
         return jsonify({"error": "Member role or higher required"}), 403
@@ -846,28 +848,51 @@ def api_patch_unit(unit_id):
     else:
         updates["status"] = "in_review"
 
-    if changed and approve:
+    # Feed the AI learning loop (RAG) on every save — Save or Reviewed.
+    # Compare against the original AI draft (not the last saved text), so a
+    # Save followed by Reviewed still counts as a human correction.
+    # One revision row per unit: created on the first differing save, then
+    # updated in place on later saves so RAG never sees duplicates of a unit.
+    ai_baseline = (unit.get("english_draft") or "").strip()
+    if new_text and ai_baseline and new_text != ai_baseline:
         try:
-            r_did = supabase.rpc("next_display_id", {
-                "p_prefix": "R", "p_seq_name": "seq_trans_revisions_display"
-            }).execute().data
-            rev_result = supabase.table("trans_revisions").insert({
-                "display_id":     r_did,
-                "unit_id":        unit_id,
-                "chinese_text":   unit.get("chinese_text") or "",
-                "english_before": baseline,
-                "english_after":  new_text,
-                "revision_type":  data.get("revision_type") or "other",
-                "note":           data.get("note") or "",
-                "revised_by":     modifier,
-            }).execute()
+            existing = (supabase.table("trans_revisions")
+                        .select("id,embedding_voyage,embedding_openai")
+                        .eq("unit_id", unit_id).order("id", desc=True).limit(1)
+                        .execute().data)
+            if existing:
+                rev_id = existing[0]["id"]
+                need_embed = (existing[0].get("embedding_voyage") is None
+                              or existing[0].get("embedding_openai") is None)
+                supabase.table("trans_revisions").update({
+                    "chinese_text":   unit.get("chinese_text") or "",
+                    "english_before": ai_baseline,
+                    "english_after":  new_text,
+                    "revised_by":     modifier,
+                    "revised_at":     _now_iso(),
+                }).eq("id", rev_id).execute()
+            else:
+                r_did = supabase.rpc("next_display_id", {
+                    "p_prefix": "R", "p_seq_name": "seq_trans_revisions_display"
+                }).execute().data
+                rev_result = supabase.table("trans_revisions").insert({
+                    "display_id":     r_did,
+                    "unit_id":        unit_id,
+                    "chinese_text":   unit.get("chinese_text") or "",
+                    "english_before": ai_baseline,
+                    "english_after":  new_text,
+                    "revision_type":  data.get("revision_type") or "other",
+                    "note":           data.get("note") or "",
+                    "revised_by":     modifier,
+                }).execute()
+                rev_id = rev_result.data[0]["id"] if rev_result.data else None
+                need_embed = True
         except Exception as exc:
             return jsonify({"error": f"Database error writing revision: {exc}"}), 500
 
-        # Best-effort: write embeddings — must not fail the overall request
-        try:
-            rev_id = rev_result.data[0]["id"] if rev_result.data else None
-            if rev_id:
+        # Best-effort: write embeddings (of the Chinese text) — must not fail the request
+        if rev_id and need_embed:
+            try:
                 embeds = get_embeddings(unit.get("chinese_text") or "")
                 emb_updates = {}
                 if embeds.get("voyage") is not None:
@@ -876,8 +901,8 @@ def api_patch_unit(unit_id):
                     emb_updates["embedding_openai"] = embeds["openai"]
                 if emb_updates:
                     supabase.table("trans_revisions").update(emb_updates).eq("id", rev_id).execute()
-        except Exception:
-            pass
+            except Exception:
+                pass
 
     try:
         upd = supabase.table("trans_units").update(updates).eq("id", unit_id).execute()
