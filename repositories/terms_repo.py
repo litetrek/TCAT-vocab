@@ -497,6 +497,7 @@ def get_classification_source(term_id):
 def get_translation_constraint_terms():
     """Return terms usable as AI translation constraints (T3): those with a
     non-empty Final selection or a TranslationKnown value.
+    Inactive (merged/deleted) terms are excluded.
 
     Each item: {"chinese": str, "english": str}. Filtered client-side (rather
     than a PostgREST .or_() filter) to keep the query shape identical to the
@@ -507,7 +508,7 @@ def get_translation_constraint_terms():
     while True:
         chunk = (
             supabase.table("terms")
-            .select("chinese,translation_known,translation_first,final")
+            .select("chinese,translation_known,translation_first,final,status")
             .range(offset, offset + _PAGE - 1)
             .execute()
             .data
@@ -522,6 +523,8 @@ def get_translation_constraint_terms():
         chinese = (r.get("chinese") or "").strip()
         if not chinese:
             continue
+        if (r.get("status") or "").strip() == "inactive":
+            continue  # merged/deleted terms must not constrain AI translation
         english = (r.get("translation_known") or "").strip()
         if not english and r.get("final"):
             english = (r.get("translation_first") or "").strip()
