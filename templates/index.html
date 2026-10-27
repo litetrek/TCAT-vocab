@@ -5009,6 +5009,7 @@
       if (!r.ok) throw new Error(await r.text());
       const unit = await r.json();
       _transReplaceUnitRow(unit);
+      showToast(approve ? '✓ Marked as Reviewed' : '✓ Saved');
     } catch(e) {
       alert((approve ? 'Reviewed' : 'Save') + ' failed: ' + e.message);
     }
