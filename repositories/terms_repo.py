@@ -494,10 +494,16 @@ def get_classification_source(term_id):
     return result.data[0].get("classification_source")
 
 
-def get_translation_constraint_terms():
+def get_translation_constraint_terms(prefer_source_id=None):
     """Return terms usable as AI translation constraints (T3): those with a
     non-empty Final selection or a TranslationKnown value.
     Inactive (merged/deleted) terms are excluded.
+
+    prefer_source_id: internal sources.id of the book being translated. When the
+    same Chinese text has several entries with different English, entries linked
+    to that source win and the others are dropped, so a book's own curated
+    vocabulary takes precedence over entries from other books. If none of the
+    duplicates is linked to the source, all are kept (previous behaviour).
 
     Each item: {"chinese": str, "english": str}. Filtered client-side (rather
     than a PostgREST .or_() filter) to keep the query shape identical to the
@@ -508,7 +514,7 @@ def get_translation_constraint_terms():
     while True:
         chunk = (
             supabase.table("terms")
-            .select("chinese,translation_known,translation_first,final,status")
+            .select("id,chinese,translation_known,translation_first,final,status")
             .range(offset, offset + _PAGE - 1)
             .execute()
             .data
@@ -518,7 +524,29 @@ def get_translation_constraint_terms():
             break
         offset += _PAGE
 
-    out = []
+    preferred_ids = set()
+    if prefer_source_id:
+        try:
+            offset = 0
+            while True:
+                chunk = (
+                    supabase.table("term_sources")
+                    .select("term_id")
+                    .eq("source_id", prefer_source_id)
+                    .range(offset, offset + _PAGE - 1)
+                    .execute()
+                    .data
+                )
+                preferred_ids.update(r["term_id"] for r in chunk)
+                if len(chunk) < _PAGE:
+                    break
+                offset += _PAGE
+        except Exception as exc:
+            logger.warning("term_sources lookup failed for source %s: %s", prefer_source_id, exc)
+            preferred_ids = set()
+
+    # chinese -> list of (english, is_preferred), in first-seen order
+    by_chinese = {}
     for r in rows:
         chinese = (r.get("chinese") or "").strip()
         if not chinese:
@@ -529,6 +557,17 @@ def get_translation_constraint_terms():
         if not english and r.get("final"):
             english = (r.get("translation_first") or "").strip()
         if english:
+            by_chinese.setdefault(chinese, []).append((english, r.get("id") in preferred_ids))
+
+    out = []
+    for chinese, cands in by_chinese.items():
+        if any(pref for _, pref in cands):
+            cands = [c for c in cands if c[1]]
+        seen = set()
+        for english, _ in cands:
+            if english in seen:
+                continue
+            seen.add(english)
             out.append({"chinese": chinese, "english": english})
     return out
 

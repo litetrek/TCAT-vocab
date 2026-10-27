@@ -37,10 +37,39 @@ def _now_iso():
 
 # ── T3 helpers ─────────────────────────────────────────────────────────────
 
-def _match_constraint_terms(chinese_text, limit=15):
-    """Find Final/Known terms that appear in chinese_text (longest match first)."""
+def _get_book_source_id(chapter_id):
+    """Return the internal sources.id for the book that owns chapter_id.
+
+    Uses trans_books.source_id when set; otherwise falls back to a source whose
+    source_name exactly matches the book title. Returns None if neither resolves.
+    """
     try:
-        all_terms = terms_repo.get_translation_constraint_terms()
+        ch = supabase.table("trans_chapters").select("book_id").eq("id", chapter_id).execute().data
+        if not ch:
+            return None
+        bk = (supabase.table("trans_books").select("source_id,title")
+              .eq("id", ch[0]["book_id"]).execute().data)
+        if not bk:
+            return None
+        if bk[0].get("source_id"):
+            return bk[0]["source_id"]
+        title = (bk[0].get("title") or "").strip()
+        if not title:
+            return None
+        src = supabase.table("sources").select("id").eq("source_name", title).execute().data
+        return src[0]["id"] if src else None
+    except Exception:
+        return None
+
+
+def _match_constraint_terms(chinese_text, limit=15, prefer_source_id=None):
+    """Find Final/Known terms that appear in chinese_text (longest match first).
+
+    prefer_source_id: when a Chinese term has conflicting entries, the entry
+    linked to this source (the book being translated) is used.
+    """
+    try:
+        all_terms = terms_repo.get_translation_constraint_terms(prefer_source_id=prefer_source_id)
     except Exception:
         return []
     hits = [t for t in all_terms if t["chinese"] and t["chinese"] in chinese_text]
@@ -626,7 +655,9 @@ def api_translate_unit(unit_id):
     if not chinese_text.strip():
         return jsonify({"error": "Unit has no Chinese text"}), 400
 
-    term_hits          = _match_constraint_terms(chinese_text)
+    term_hits          = _match_constraint_terms(
+        chinese_text, prefer_source_id=_get_book_source_id(unit["chapter_id"])
+    )
     ctx_before, ctx_after = _get_context(unit["chapter_id"], unit_id)
     active_rules       = _get_active_style_rules()
     similar_examples   = _get_similar_examples(chinese_text)
