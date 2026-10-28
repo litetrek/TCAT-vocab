@@ -4964,6 +4964,7 @@
         lastPara = u.paragraph_index;
         return `${paraBreak}${_transUnitRowHtml(u)}`;
       }).join('');
+      _transAutoGrowAll(list);
     } catch(e) {
       list.innerHTML = `<div class="ext-error-banner">Error: ${escHtml(e.message)}</div>`;
     }
@@ -4980,7 +4981,7 @@
         <span class="trans-unit-status"><span class="${statusCls}">${_STATUS_LABEL[u.status] || u.status}</span></span>
       </div>
       <div class="trans-unit-text">${trdHighlightKnownTerms(u.chinese_text || '')}</div>
-      ${_CAN_TRANSLATE ? `<textarea class="trans-unit-en-input" id="trans-en-${u.id}" rows="2" placeholder="No translation yet — click AI Translate.">${escHtml(englishText)}</textarea>` : (englishText ? `<div class="trans-unit-text" style="color:var(--text-soft);">${escHtml(englishText)}</div>` : '')}
+      ${_CAN_TRANSLATE ? `<textarea class="trans-unit-en-input" id="trans-en-${u.id}" rows="2" oninput="_transAutoGrow(this)" placeholder="No translation yet — click AI Translate.">${escHtml(englishText)}</textarea>` : (englishText ? `<div class="trans-unit-text" style="color:var(--text-soft);">${escHtml(englishText)}</div>` : '')}
       ${_CAN_TRANSLATE ? `<div class="trans-unit-actions">
         <button class="btn btn-sm btn-secondary trans-unit-translate-btn" onclick="transTranslateUnit(${u.id})">${translateLabel}</button>
         <button class="btn btn-sm btn-secondary" onclick="transSaveUnit(${u.id}, false)">Save</button>
@@ -5041,7 +5042,22 @@
     const row = document.querySelector(`.trans-unit-row[data-unit-id="${unit.id}"]`);
     if (!row) return;
     row.outerHTML = _transUnitRowHtml(unit);
+    const fresh = document.querySelector(`.trans-unit-row[data-unit-id="${unit.id}"]`);
+    if (fresh) _transAutoGrowAll(fresh);
   }
+
+  // Grow each English textarea to fit its full text (no inner scrollbar).
+  function _transAutoGrow(el) {
+    if (!el || !el.offsetParent) return;          // hidden → can't measure yet
+    el.style.height = 'auto';
+    el.style.height = (el.scrollHeight + 2) + 'px';
+  }
+  function _transAutoGrowAll(root) {
+    requestAnimationFrame(() => {
+      (root || document).querySelectorAll('.trans-unit-en-input').forEach(_transAutoGrow);
+    });
+  }
+  window.addEventListener('resize', () => _transAutoGrowAll(document));
 
   // ── Create book (metadata only) ───────────────────────────────────────────
 
