@@ -4709,16 +4709,16 @@
     const btn = 'font-size:0.75rem;padding:0.2rem 0.6rem;';
     document.getElementById('ti-versions').innerHTML =
       '<div class="sg-category-heading">Version history</div>' +
-      tiVersions.map(v => `<div class="sg-rule-card${v.is_active ? '' : ' sg-inactive'}">
+      tiVersions.map(v => `<div class="sg-rule-card">
         <div class="sg-rule-body">
           <div class="sg-rule-text">Version ${v.version} — ${escHtml(v.note || '')}</div>
           <div class="sg-rule-example">${escHtml(String(v.created_at || '').slice(0, 16).replace('T', ' '))} · ${escHtml(v.created_by || '')}</div>
           <pre id="ti-view-${v.version}" style="display:none;white-space:pre-wrap;font-family:inherit;font-size:0.85rem;margin:0.5rem 0 0;">${escHtml(v.content)}</pre>
         </div>
-        <div class="sg-rule-actions">
+        <div class="sg-rule-actions" id="ti-actions-${v.version}">
           ${v.is_active ? '<span class="sg-badge sg-badge-active">active</span>' : ''}
           <button class="btn btn-secondary" style="${btn}" onclick="tiToggleView(${v.version})">View</button>
-          ${v.is_active ? '' : `<button class="btn btn-secondary" style="${btn}" onclick="tiRestore(${v.version})">Restore</button>`}
+          ${v.is_active ? '' : `<button class="btn btn-secondary" style="${btn}" onclick="tiAskRestore(${v.version})">Restore</button>`}
         </div>
       </div>`).join('');
   }
@@ -4752,8 +4752,16 @@
     }
   }
 
+  // Confirm in place (no browser pop-up): the actions turn into "Restore version N?" Yes / Cancel.
+  function tiAskRestore(version) {
+    const btn = 'font-size:0.75rem;padding:0.2rem 0.6rem;';
+    document.getElementById('ti-actions-' + version).innerHTML =
+      `<span style="font-size:0.8rem;">Make version ${version} active again?</span>
+       <button class="btn btn-primary" style="${btn}" onclick="tiRestore(${version})">Yes, restore</button>
+       <button class="btn btn-secondary" style="${btn}" onclick="tiRenderVersions()">Cancel</button>`;
+  }
+
   async function tiRestore(version) {
-    if (!confirm(`Make version ${version} the active instructions again? The next AI translations will use it.`)) return;
     try {
       const res = await fetch(`/api/trans/instructions/${version}/activate`, { method: 'POST' });
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || res.statusText); }
@@ -4761,7 +4769,8 @@
       const msg = document.getElementById('ti-msg');
       msg.textContent = `Version ${version} is active again.`; msg.style.color = '#1a6b35';
     } catch (e) {
-      alert('Error: ' + e);
+      const msg = document.getElementById('ti-msg');
+      msg.textContent = 'Error: ' + e; msg.style.color = '#c00';
     }
   }
 
