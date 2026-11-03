@@ -728,8 +728,9 @@
       border: 1px solid var(--border); border-radius: 3px; resize: vertical; margin-bottom: 0.5rem;
       font-family: inherit; box-sizing: border-box;
     }
-    .trans-unit-actions { display: flex; gap: 0.5rem; align-items: center; }
+    .trans-unit-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
     .trans-unit-actions .trans-unit-hint { font-size: 0.72rem; color: var(--text-soft); }
+    .trans-engine-select { font-family: inherit; font-size: 0.78rem; padding: 0.2rem 0.3rem; border: 1px solid var(--border); border-radius: 3px; background: white; color: var(--ink-soft); cursor: pointer; }
     .btn-icon-edit { background: none; border: none; cursor: pointer; font-size: 0.8rem; color: var(--text-soft); padding: 0 0.25rem; flex-shrink: 0; }
     .btn-icon-edit:hover { color: var(--gold); }
     .trans-unit-zh-input {
@@ -1213,12 +1214,6 @@
           <h1 class="main-title" id="trans-unit-title">Units</h1>
         </div>
         <div style="display:flex;align-items:center;gap:1rem;">
-          <label class="trd-showall-label" title="Engine used by AI Translate / Re-translate">AI engine
-            <select id="trans-engine-select" onchange="transSetEngine(this.value)" style="font-size:0.8rem;padding:0.15rem 0.3rem;">
-              <option value="openai">OpenAI</option>
-              <option value="claude">Claude</option>
-            </select>
-          </label>
           <label class="trd-showall-label"><input type="checkbox" class="trd-showall-cb" onchange="trdToggleShowAll(this.checked)"> Show all vocabulary</label>
         </div>
       </div>
@@ -5078,6 +5073,10 @@
       ${(u.missing_terms || []).length ? `<div class="trans-missing-chips">${u.missing_terms.map(m =>
         `<span class="trans-missing-chip" title="Click to open this term" onclick="trdOpenTermFull('${escHtml(String(m.term_id || ''))}')">⚠ ${escHtml(m.chinese)} → ${escHtml(m.english)} ${m.partial ? 'gloss dropped' : 'not used'}</span>`).join('')}</div>` : ''}
       ${_CAN_TRANSLATE ? `<div class="trans-unit-actions">
+        <select class="trans-engine-select" title="AI engine for AI Translate / Re-translate (applies to every sentence)" onchange="transSetEngine(this.value)">
+          <option value="openai"${_transEngine === 'openai' ? ' selected' : ''}>OpenAI</option>
+          <option value="claude"${_transEngine === 'claude' ? ' selected' : ''}>Claude</option>
+        </select>
         <button class="btn btn-sm btn-secondary trans-unit-translate-btn" onclick="transTranslateUnit(${u.id})">${translateLabel}</button>
         <button class="btn btn-sm btn-secondary" onclick="transSaveUnit(${u.id}, false)">Save</button>
         ${_CAN_APPROVE ? `<button class="btn btn-sm btn-primary" onclick="transSaveUnit(${u.id}, true)">Reviewed</button>` : ''}
@@ -5305,10 +5304,11 @@
   const TRANS_ENGINE_KEY = 'tcat_trans_engine';
   let _transEngine = '{{ default_translation_engine }}' || 'openai';
   try { const saved = localStorage.getItem(TRANS_ENGINE_KEY); if (saved === 'openai' || saved === 'claude') _transEngine = saved; } catch(e) {}
-  (function() { const sel = document.getElementById('trans-engine-select'); if (sel) sel.value = _transEngine; })();
 
+  // One engine choice for the whole page: every card's selector shows it.
   function transSetEngine(engine) {
     _transEngine = engine;
+    document.querySelectorAll('.trans-engine-select').forEach(sel => { sel.value = engine; });
     try { localStorage.setItem(TRANS_ENGINE_KEY, engine); } catch(e) {}
   }
 

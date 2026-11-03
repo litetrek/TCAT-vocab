@@ -1199,6 +1199,10 @@ G3 notes → Style Guide rule proposed by anyone, approved only by a Lead).
   it with the 入法門論 badge; Delete → notes freed; test notes deleted (back to rules 2 and 3,
   no notes). Proposed-rule section checked with client-side sample data only — the Member
   submit path was not run (no Member login locally).
+- **Follow-up (2026-11-02)**: the AI engine selector moved from the page toolbar to each card,
+  just before AI Translate / Re-translate; all card selectors stay in sync (`transSetEngine`
+  updates every `.trans-engine-select`; choice still saved in localStorage `tcat_trans_engine`).
+  Card action rows now wrap on narrow screens.
 
 ---
 
