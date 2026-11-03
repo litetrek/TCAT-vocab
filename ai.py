@@ -587,6 +587,74 @@ def translate_unit(chinese_text: str, term_constraints: list = None,
     return result
 
 
+_SG_CATEGORIES = ("honorifics", "proper_nouns", "sentence_splitting", "tone", "other")
+
+
+def suggest_style_rules(notes: list, chinese_text: str = "", english_text: str = "",
+                        existing_rules: list = None) -> dict:
+    """G3: turn translator notes on one sentence into 0–2 Style Guide rule proposals.
+
+    notes: note texts. existing_rules: active rules, so the AI neither repeats nor contradicts them.
+    Returns {"rules": [{"category", "rule_text", "example_before", "example_after"}],
+             "term_notes": [str], "comment": str}, or {"error": str}. Never raises.
+    Notes about how one glossary term should be rendered come back in term_notes (they
+    belong in the term's entry, not in a style rule).
+    """
+    from config import CLAUDE_TRANSLATION_MODEL
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        return {"error": "Anthropic key not configured"}
+    existing = "\n".join(f"- [{r.get('category', '')}] {r.get('rule_text', '')}"
+                         for r in (existing_rules or []) if r.get("rule_text")) or "(none)"
+    note_lines = "\n".join(f"- {n}" for n in notes if n and n.strip())
+    prompt = (
+        "Translators of Chinese Buddhist texts into English left these notes on one sentence.\n"
+        "Turn them into reusable house-style rules that a future AI translation of OTHER sentences "
+        "should follow.\n\n"
+        f"Chinese sentence: {chinese_text}\nCurrent English: {english_text}\n\n"
+        f"Translator notes:\n{note_lines}\n\n"
+        f"Existing style rules (do not repeat or contradict these):\n{existing}\n\n"
+        "Guidelines:\n"
+        "- Propose 0, 1 or 2 rules. Propose none if the notes only concern this one sentence.\n"
+        "- Each rule is one imperative sentence a translator could apply elsewhere, under 40 words.\n"
+        "- example_before / example_after: a short English phrase showing the change, or empty.\n"
+        f"- category: one of {', '.join(_SG_CATEGORIES)}.\n"
+        "- A note that only says how one specific Chinese term should be rendered goes in "
+        "term_notes instead (as 'term → rendering'), not in rules.\n"
+        "- comment: one short sentence for the team on what you did (e.g. why no rule).\n\n"
+        "Reply ONLY with a JSON object, no other text or markdown fences:\n"
+        '{"rules": [{"category": "...", "rule_text": "...", "example_before": "", "example_after": ""}], '
+        '"term_notes": [], "comment": "..."}'
+    )
+    try:
+        ai = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"), timeout=_TRANSLATE_TIMEOUT_S)
+        response = ai.messages.create(
+            model=CLAUDE_TRANSLATION_MODEL,
+            max_tokens=TRANSLATE_MAX_TOKENS + _REASONING_HEADROOM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = "".join(b.text for b in response.content if getattr(b, "type", "") == "text")
+        raw = re.sub(r'^```[a-z]*\n?', '', raw.strip()).rstrip('`').strip()
+        parsed = json.loads(raw)
+    except Exception as exc:
+        print(f"[suggest_style_rules] error: {type(exc).__name__}: {exc}", flush=True)
+        return {"error": f"AI suggestion failed: {type(exc).__name__}"}
+    rules = []
+    for r in (parsed.get("rules") or [])[:2]:
+        text = str(r.get("rule_text") or "").strip()
+        if not text:
+            continue
+        cat = str(r.get("category") or "other").strip()
+        rules.append({
+            "category":       cat if cat in _SG_CATEGORIES else "other",
+            "rule_text":      text[:500],
+            "example_before": str(r.get("example_before") or "").strip()[:300],
+            "example_after":  str(r.get("example_after") or "").strip()[:300],
+        })
+    return {"rules": rules,
+            "term_notes": [str(t).strip() for t in (parsed.get("term_notes") or []) if str(t).strip()][:5],
+            "comment": str(parsed.get("comment") or "").strip()[:300]}
+
+
 def classify_term(term: dict) -> dict:
     """Classify a Buddhist term into entity_type and subject_field.
 

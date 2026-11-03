@@ -1167,6 +1167,39 @@ G3 notes → Style Guide rule proposed by anyone, approved only by a Lead).
 - **Tested** (local, live Supabase): add note on U000344 → "Notes (1)", author + time shown;
   delete → "Notes", server count 0, table empty again. No console errors from G2.
 
+### Stage G3 — Notes → Style Guide Rule (2026-11-02)
+
+- **Migration 020 — `020_g3_rule_proposals.sql`** (applied to TCAT-vocab 2026-11-02):
+  `style_guide` gains `proposed boolean default false`, `book_id` (→ trans_books, on delete
+  cascade; null = all books), `approved_by`, `approved_at`. `active` stays the only switch for
+  prompt injection; a proposed rule is `active=false, proposed=true`.
+- **`ai.py`**: `suggest_style_rules(notes, chinese_text, english_text, existing_rules)` —
+  CLAUDE_TRANSLATION_MODEL; returns 0–2 rules {category, rule_text, example_before,
+  example_after}, `term_notes` (notes about one term's rendering — glossary matters, not
+  rules) and a one-line `comment`. Never raises.
+- **`routes/translate.py`**:
+  - `POST /api/trans/units/<id>/suggest-rule` (Member+): AI drafts from the unit's unused notes
+    (`rule_id` null), given the book's active rules; writes nothing.
+  - `POST /api/trans/styleguide` now accepts `book_id` and `note_ids`. **Leader+ → active at
+    once** (approved_by set, no extra click). **Member → saved as proposed**, allowed only with
+    note_ids. Notes are linked (`rule_id`) so they are not summarised twice.
+  - `PATCH …/styleguide/<id>` with `active: true` also approves a proposed rule; accepts `book_id`.
+  - `DELETE /api/trans/styleguide/<id>` (Leader+): permanent; its notes become unused again.
+  - `_get_active_style_rules(book_id)`: global rules + that book's rules only.
+    `api_translate_unit` and `scripts/compare_engines.py` pass the book.
+  - `GET /api/trans/styleguide` embeds `trans_books(title)` for the scope badge.
+- **`templates/index.html`**: "✦ Suggest rule from notes" in the Notes panel (only while unused
+  notes exist) → `#sg-suggest-modal` with editable category / rule / examples, "Only <book>"
+  (default on), Discard, and "Add rule" (Lead) / "Submit for Lead approval" (Member); term notes
+  shown separately. Style Guide view: "Waiting for Lead approval (n)" section with Approve /
+  Delete, book badge on scoped rules, Delete on every rule for Leaders.
+- **Tested** (local, live Supabase, as admin): 2 test notes on U000344 → Suggest (≈7 s) → 1 rule +
+  1 term note → Add rule → rule active immediately, book 10, both notes linked, Suggest button
+  hidden; `_get_active_style_rules(10)` includes it, book 9 and global do not; Style Guide shows
+  it with the 入法門論 badge; Delete → notes freed; test notes deleted (back to rules 2 and 3,
+  no notes). Proposed-rule section checked with client-side sample data only — the Member
+  submit path was not run (no Member login locally).
+
 ---
 
 ## Known Issues / Notes
@@ -1195,15 +1228,15 @@ G3 notes → Style Guide rule proposed by anyone, approved only by a Lead).
 | **T4.3** | Planned | Three-column review workspace polish, diff highlighting (english_draft vs english_final) |
 | **G1** | **Done** | AI reasoning notes saved per unit and shown collapsed; F3 missing-term chips persisted and re-checked on Save (migration 018) |
 | **G2** | **Done** | Translator notes per unit (`trans_unit_notes`, migration 019; "Notes (n)" beside History; author/Lead delete) |
-| **G3** | Planned | "Suggest rule from notes" → AI-drafted Style Guide rule; members propose, Lead approves/deletes; optional `book_id` scope |
+| **G3** | **Done** | "Suggest rule from notes" → AI-drafted Style Guide rule; Lead's rule active at once, Member's proposed for Lead approval; Lead deletes; optional `book_id` scope (migration 020) |
 | **T5** | Planned | Chapter claiming, collaborative approval flow, annotations (per-unit notes now come from G2) |
 
 ---
 
 ## Next Steps
 
-- **G3 — notes → Style Guide rule** (design agreed 2026-11-02): members propose, only a Lead
-  approves/activates or deletes; style_guide gets a proposed/active/off status and optional `book_id`.
+- **G3 Member path live test**: sign in as a Member → add notes → Suggest → "Submit for Lead
+  approval" → as Lead, Approve it in Style Guide → confirm it reaches the next AI Translate.
 - **Send `docs/compare_2026-11-02.md` to Greg and Weiya** (not the `_key` file); pick the
   default engine from their verdicts.
 - **Fix glossary entry 小法** → "a lesser teaching" (lower-case a).

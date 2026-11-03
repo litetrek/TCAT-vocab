@@ -760,6 +760,20 @@
     .sg-badge-active   { color: #1a6b35; border-color: rgba(58,156,92,0.4); background: rgba(58,156,92,0.09); }
     .sg-badge-inactive { color: #8a6a4a; border-color: rgba(138,106,74,0.3); background: rgba(138,106,74,0.07); }
     .sg-empty { color: var(--text-soft); font-style: italic; font-size: 0.9rem; padding: 1.5rem 0; text-align: center; }
+    .sg-badge-proposed { color: #7a5010; border-color: rgba(201,168,76,0.5); background: rgba(201,168,76,0.12); }
+    .sg-badge-book     { color: #2a6aaa; border-color: rgba(74,144,217,0.4); background: rgba(74,144,217,0.08); max-width: 10rem; overflow: hidden; text-overflow: ellipsis; }
+    .sg-rule-card.sg-proposed { border-left: 3px solid var(--gold); }
+    .trans-note-suggest { margin-top: 0.4rem; }
+    .sg-suggest-intro { font-size: 0.88rem; color: var(--text-soft); margin: 0 0 0.75rem; }
+    .sg-suggest-terms { font-size: 0.82rem; color: var(--ink-soft); background: rgba(240,180,60,0.1); border: 1px solid rgba(214,150,30,0.35); border-radius: 3px; padding: 0.45rem 0.7rem; margin-bottom: 0.75rem; }
+    .sg-suggest-terms ul { margin: 0.25rem 0 0; padding-left: 1.2rem; }
+    .sg-suggest-card { border: 1px solid var(--border); border-radius: 4px; padding: 0.7rem 0.85rem; margin-bottom: 0.6rem; background: white; display: flex; flex-direction: column; gap: 0.45rem; }
+    .sg-suggest-card textarea, .sg-suggest-card input[type=text], .sg-suggest-card select { font-family: inherit; font-size: 0.88rem; padding: 0.35rem 0.5rem; border: 1px solid var(--border); border-radius: 3px; box-sizing: border-box; }
+    .sg-suggest-card textarea { width: 100%; resize: vertical; }
+    .sg-suggest-row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+    .sg-suggest-row input[type=text] { flex: 1; min-width: 10rem; }
+    .sg-suggest-scope { font-size: 0.82rem; color: var(--text-soft); display: flex; align-items: center; gap: 0.3rem; }
+    .sg-suggest-done { color: #1a6b35; font-size: 0.88rem; }
 
     @media (max-width: 768px) {
       #translation-view { min-height: calc(100vh - 96px); }
@@ -1375,6 +1389,17 @@
 <!-- ── TERM CANDIDATE MODAL (direct body child so position:fixed is viewport-relative) -->
 <div id="ext-candidate-panel" style="display:none;"></div>
 <div id="trd-candidate-panel" style="display:none;"></div>
+
+<!-- ── G3: RULE-FROM-NOTES PREVIEW MODAL ─────────────────────────────────── -->
+<div class="modal-overlay" id="sg-suggest-modal" onclick="if (event.target.id === 'sg-suggest-modal') sgCloseSuggest()">
+  <div class="modal modal-xwide">
+    <div class="modal-title">Suggested Style Guide rule</div>
+    <div id="sg-suggest-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="sgCloseSuggest()">Close</button>
+    </div>
+  </div>
+</div>
 
 <script>
   // ── STATE ────────────────────────────────────────────────────────────────
@@ -4553,6 +4578,29 @@
       list.innerHTML = '<div class="sg-empty">No style rules yet.</div>';
       return;
     }
+    const btnStyle = 'font-size:0.75rem;padding:0.2rem 0.6rem;';
+    const scopeBadge = r => r.book_id
+      ? `<span class="sg-badge sg-badge-book" title="Only used when translating this book">${escHtml((r.trans_books || {}).title || 'book ' + r.book_id)}</span>` : '';
+    const deleteBtn = r => isLeader
+      ? `<button class="btn btn-secondary" style="${btnStyle}" onclick="sgDeleteRule(${r.id})" title="Delete this rule permanently">Delete</button>` : '';
+    const exampleHtml = r => (r.example_before && r.example_after)
+      ? `<div class="sg-rule-example">"${escHtml(r.example_before)}" → "${escHtml(r.example_after)}"</div>` : '';
+    // G3: proposed rules (from translator notes) wait at the top for a Leader.
+    const proposed = rules.filter(r => r.proposed);
+    let proposedHtml = '';
+    if (proposed.length) {
+      proposedHtml = `<div class="sg-category-group sg-proposed-group"><div class="sg-category-heading">Waiting for Lead approval (${proposed.length})</div>` +
+        proposed.map(r => `<div class="sg-rule-card sg-proposed">
+          <div class="sg-rule-body">
+            <div class="sg-rule-text">${escHtml(r.rule_text)}</div>
+            ${exampleHtml(r)}
+            <div class="sg-rule-example">[${escHtml(r.category || 'other')}] proposed by ${escHtml(r.created_by || 'unknown')} from translator notes</div>
+          </div>
+          <div class="sg-rule-actions"><span class="sg-badge sg-badge-proposed">proposed</span>${scopeBadge(r)}
+            ${isLeader ? `<button class="btn btn-primary" style="${btnStyle}" onclick="sgToggleActive(${r.id},true)">Approve</button>` : ''}${deleteBtn(r)}</div>
+        </div>`).join('') + '</div>';
+    }
+    rules = rules.filter(r => !r.proposed);
     const byCategory = {};
     for (const r of rules) {
       const cat = r.category || 'other';
@@ -4561,7 +4609,7 @@
     }
     const catOrder = ['honorifics','proper_nouns','sentence_splitting','tone','other'];
     const sortedCats = [...new Set([...catOrder, ...Object.keys(byCategory)])].filter(c => byCategory[c]);
-    let html = '';
+    let html = proposedHtml;
     for (const cat of sortedCats) {
       const catRules = byCategory[cat];
       html += `<div class="sg-category-group"><div class="sg-category-heading">${escHtml(cat)}</div>`;
@@ -4583,12 +4631,23 @@
             <div class="sg-rule-text">${escHtml(r.rule_text)}</div>
             ${example}
           </div>
-          <div class="sg-rule-actions">${badge}${toggleBtn}</div>
+          <div class="sg-rule-actions">${badge}${scopeBadge(r)}${toggleBtn}${deleteBtn(r)}</div>
         </div>`;
       }
       html += '</div>';
     }
-    list.innerHTML = html;
+    list.innerHTML = html || '<div class="sg-empty">No style rules yet.</div>';
+  }
+
+  async function sgDeleteRule(id) {
+    if (!confirm('Delete this rule permanently? Future AI translations will no longer follow it.')) return;
+    try {
+      const res = await fetch(`/api/trans/styleguide/${id}`, { method: 'DELETE' });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || res.statusText); }
+      await sgLoadRules();
+    } catch (e) {
+      alert('Error: ' + e);
+    }
   }
 
   async function sgAddRule() {
@@ -5094,7 +5153,10 @@
           <div class="trans-note-text">${escHtml(n.note_text)}</div>
         </div>`;
       }).join('') : '<p class="trans-notes-empty">No notes yet.</p>';
-      el.innerHTML = list + (_CAN_TRANSLATE ? `<div class="trans-note-add">
+      const unused = notes.filter(n => !n.rule_id).length;
+      const suggestBtn = _CAN_TRANSLATE && unused
+        ? `<div class="trans-note-suggest"><button class="btn btn-sm btn-secondary" onclick="sgSuggestFromNotes(${unitId}, this)" title="AI turns the ${unused} unused note(s) into a Style Guide rule for future translations">✦ Suggest rule from notes</button></div>` : '';
+      el.innerHTML = list + suggestBtn + (_CAN_TRANSLATE ? `<div class="trans-note-add">
           <textarea id="trans-note-input-${unitId}" rows="2" placeholder="Add a note on this translation — why a choice was made, a question for the team…"></textarea>
           <button class="btn btn-sm btn-secondary" onclick="transAddNote(${unitId}, this)">Add note</button>
         </div>` : '');
@@ -5132,6 +5194,100 @@
     } catch(e) {
       showToast('⚠ Delete failed: ' + e.message);
     }
+  }
+
+  // G3: AI drafts Style Guide rule(s) from a unit's unused notes → editable preview.
+  // A Leader's "Add rule" is active at once; a Member's is saved as proposed for a Leader.
+  let _sgSuggest = null;   // {unitId, note_ids, book_id, rules: [...]}
+  const _SG_CATS = ['honorifics','proper_nouns','sentence_splitting','tone','other'];
+
+  async function sgSuggestFromNotes(unitId, btn) {
+    const label = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Asking AI…'; }
+    try {
+      const r = await fetch(`/api/trans/units/${unitId}/suggest-rule`, { method: 'POST' });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || data.error) throw new Error(data.error || `HTTP ${r.status}`);
+      _sgSuggest = { unitId, ...data };
+      sgRenderSuggest();
+      document.getElementById('sg-suggest-modal').classList.add('open');
+    } catch(e) {
+      showToast('⚠ ' + e.message);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = label; }
+    }
+  }
+
+  function sgRenderSuggest() {
+    const s = _sgSuggest;
+    const body = document.getElementById('sg-suggest-body');
+    const n = (s.note_ids || []).length;
+    let html = `<p class="sg-suggest-intro">From ${n} note${n === 1 ? '' : 's'} on this sentence.${s.comment ? ' ' + escHtml(s.comment) : ''}</p>`;
+    if ((s.term_notes || []).length) {
+      html += `<div class="sg-suggest-terms"><b>Term notes</b> — these belong in the term's glossary entry, not a style rule:<ul>${s.term_notes.map(t => `<li>${escHtml(t)}</li>`).join('')}</ul></div>`;
+    }
+    if (!(s.rules || []).length) {
+      body.innerHTML = html + '<p class="sg-empty">No reusable rule suggested.</p>';
+      return;
+    }
+    const bookTitle = escHtml(_transCurrentBookTitle || 'this book');
+    html += s.rules.map((r, i) => r.saved ? `<div class="sg-suggest-card sg-suggest-done">✓ ${r.saved}: ${escHtml(r.rule_text)}</div>` : `
+      <div class="sg-suggest-card">
+        <div class="sg-suggest-row">
+          <select id="sg-sug-cat-${i}">${_SG_CATS.map(c => `<option value="${c}"${c === r.category ? ' selected' : ''}>${c}</option>`).join('')}</select>
+          <label class="sg-suggest-scope"><input type="checkbox" id="sg-sug-book-${i}" ${s.book_id ? 'checked' : 'disabled'}> Only ${bookTitle}</label>
+        </div>
+        <textarea id="sg-sug-text-${i}" rows="2">${escHtml(r.rule_text)}</textarea>
+        <div class="sg-suggest-row">
+          <input type="text" id="sg-sug-before-${i}" placeholder="Example before (optional)" value="${escHtml(r.example_before || '')}">
+          <input type="text" id="sg-sug-after-${i}" placeholder="Example after (optional)" value="${escHtml(r.example_after || '')}">
+        </div>
+        <div class="sg-suggest-row" style="justify-content:flex-end;">
+          <button class="btn btn-sm btn-secondary" onclick="sgDiscardSuggestion(${i})">Discard</button>
+          <button class="btn btn-sm btn-primary" onclick="sgSaveSuggestion(${i}, this)">${_CAN_APPROVE ? 'Add rule' : 'Submit for Lead approval'}</button>
+        </div>
+      </div>`).join('');
+    body.innerHTML = html;
+  }
+
+  function sgDiscardSuggestion(i) {
+    _sgSuggest.rules.splice(i, 1);
+    if (!_sgSuggest.rules.length) { sgCloseSuggest(); return; }
+    sgRenderSuggest();
+  }
+
+  async function sgSaveSuggestion(i, btn) {
+    const s = _sgSuggest;
+    const text = document.getElementById(`sg-sug-text-${i}`).value.trim();
+    if (!text) { showToast('⚠ Rule text is empty'); return; }
+    if (btn) btn.disabled = true;
+    try {
+      const r = await fetch('/api/trans/styleguide', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          category:       document.getElementById(`sg-sug-cat-${i}`).value,
+          rule_text:      text,
+          example_before: document.getElementById(`sg-sug-before-${i}`).value.trim() || null,
+          example_after:  document.getElementById(`sg-sug-after-${i}`).value.trim() || null,
+          book_id:        document.getElementById(`sg-sug-book-${i}`).checked ? s.book_id : null,
+          note_ids:       s.note_ids,
+        }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+      s.rules[i] = { ...s.rules[i], rule_text: text, saved: data.active ? 'Added (active)' : 'Sent to Lead' };
+      sgRenderSuggest();
+      showToast(data.active ? '✓ Rule added — future AI translations will follow it' : '✓ Rule sent to Lead for approval');
+      if (_transNotesOpen.has(s.unitId)) transLoadNotes(s.unitId);
+    } catch(e) {
+      showToast('⚠ Rule not saved: ' + e.message);
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function sgCloseSuggest() {
+    document.getElementById('sg-suggest-modal').classList.remove('open');
+    _sgSuggest = null;
   }
 
   // Toggle the per-unit audit history (reuses loadAuditLog — audit rows are keyed by the unit's display_id)

@@ -63,7 +63,7 @@ def main():
         sys.exit(f"Book {args.book_id} not found")
     book_title = book[0].get("title") or f"Book {args.book_id}"
     source_id = _get_source_id_for_book(args.book_id)
-    style_rules = _get_active_style_rules()
+    style_rules = _get_active_style_rules(args.book_id)
 
     rows = {u["id"]: u for u in supabase.table("trans_units")
             .select("id,chapter_id,chinese_text,english_final,is_long_sentence")

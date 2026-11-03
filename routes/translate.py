@@ -6,7 +6,8 @@ from flask import Blueprint, jsonify, request, session
 from auth import is_logged_in, can_access_translation_module, can_edit_existing, is_leader, is_admin
 from db import supabase
 from segmenter import decode, split_paragraphs, detect_section_type, segment_paragraph
-from ai import group_sentences_by_topic, translate_unit, generate_glossary_entry, check_term_compliance
+from ai import (group_sentences_by_topic, translate_unit, generate_glossary_entry, check_term_compliance,
+                suggest_style_rules)
 from embeddings import get_embeddings, get_voyage_embedding, get_openai_embedding
 from repositories import terms_repo, glossary_repo
 from repositories.audit_repo import write_audit
@@ -102,18 +103,29 @@ def _match_constraint_terms(chinese_text, limit=15, prefer_source_id=None):
     return kept[:limit]
 
 
-def _get_active_style_rules():
-    """Return active style_guide rules for prompt injection; returns [] on error."""
+def _get_active_style_rules(book_id=None):
+    """Return active style_guide rules for prompt injection; returns [] on error.
+
+    G3: rules with a book_id apply only to that book; book_id=None → global rules only.
+    Proposed rules are never active, so they are never sent to the AI.
+    """
     try:
-        result = (
-            supabase.table("style_guide")
-            .select("category,rule_text,example_before,example_after")
-            .eq("active", True)
-            .execute()
-        )
-        return result.data or []
+        q = (supabase.table("style_guide")
+             .select("category,rule_text,example_before,example_after")
+             .eq("active", True))
+        q = q.or_(f"book_id.is.null,book_id.eq.{int(book_id)}") if book_id else q.is_("book_id", "null")
+        return q.execute().data or []
     except Exception:
         return []
+
+
+def _get_chapter_book_id(chapter_id):
+    """Return the book id that owns chapter_id, or None."""
+    try:
+        ch = supabase.table("trans_chapters").select("book_id").eq("id", chapter_id).execute().data
+        return ch[0]["book_id"] if ch else None
+    except Exception:
+        return None
 
 
 def _get_similar_examples(chinese_text: str, match_limit: int = 5, threshold: float = 0.5):
@@ -737,7 +749,7 @@ def api_translate_unit(unit_id):
         chinese_text, prefer_source_id=_get_book_source_id(unit["chapter_id"])
     )
     ctx_before, ctx_after, paragraph = _get_context(unit["chapter_id"], unit_id)
-    active_rules       = _get_active_style_rules()
+    active_rules       = _get_active_style_rules(_get_chapter_book_id(unit["chapter_id"]))
     similar_examples   = _get_similar_examples(chinese_text)
 
     _t0 = time.time()
@@ -812,7 +824,7 @@ def api_list_styleguide():
     try:
         result = (
             supabase.table("style_guide")
-            .select("*")
+            .select("*, trans_books(title)")
             .order("category")
             .order("created_at")
             .execute()
@@ -825,9 +837,16 @@ def api_list_styleguide():
 @translate_bp.route("/api/trans/styleguide", methods=["POST"])
 @_require_translation
 def api_create_styleguide():
-    if not is_leader():
-        return jsonify({"error": "Leader role or higher required"}), 403
+    """Leader+: the rule is active at once. Member (G3, from notes): saved as proposed,
+    inactive until a Leader approves it. Optional book_id scopes the rule to one book;
+    optional note_ids marks those notes as used by this rule."""
+    leader = is_leader()
+    if not (leader or can_edit_existing()):
+        return jsonify({"error": "Member role or higher required"}), 403
     data = request.get_json() or {}
+    note_ids = [int(n) for n in (data.get("note_ids") or []) if str(n).isdigit()]
+    if not leader and not note_ids:
+        return jsonify({"error": "Leader role or higher required"}), 403
     category = (data.get("category") or "").strip()
     rule_text = (data.get("rule_text") or "").strip()
     if not category:
@@ -846,12 +865,69 @@ def api_create_styleguide():
             "rule_text":       rule_text,
             "example_before":  data.get("example_before") or None,
             "example_after":   data.get("example_after") or None,
-            "active":          True,
+            "active":          leader,
+            "proposed":        not leader,
+            "book_id":         data.get("book_id") or None,
+            "approved_by":     session.get("user_email", "") if leader else None,
+            "approved_at":     _now_iso() if leader else None,
             "created_by":      session.get("user_email", ""),
         }).execute()
-        return jsonify(result.data[0]), 201
+        rule = result.data[0]
     except Exception as exc:
         return jsonify({"error": f"Database error: {exc}"}), 500
+    if note_ids:
+        try:
+            (supabase.table("trans_unit_notes").update({"rule_id": rule["id"]})
+             .in_("id", note_ids).is_("rule_id", "null").execute())
+        except Exception:
+            pass
+    return jsonify(rule), 201
+
+
+@translate_bp.route("/api/trans/units/<int:unit_id>/suggest-rule", methods=["POST"])
+@_require_translation
+def api_suggest_rule(unit_id):
+    """G3: AI drafts Style Guide rule(s) from this unit's unused notes. Writes nothing;
+    the client shows an editable preview and saves accepted rules via POST /styleguide."""
+    if not can_edit_existing():
+        return jsonify({"error": "Member role or higher required"}), 403
+    try:
+        unit = supabase.table("trans_units").select("*").eq("id", unit_id).execute().data
+        if not unit:
+            return jsonify({"error": "Unit not found"}), 404
+        unit = unit[0]
+        notes = (supabase.table("trans_unit_notes").select("id,note_text")
+                 .eq("unit_id", unit_id).is_("rule_id", "null").order("created_at")
+                 .execute().data or [])
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+    if not notes:
+        return jsonify({"error": "No unused notes on this sentence"}), 400
+    book_id = _get_chapter_book_id(unit["chapter_id"])
+    result = suggest_style_rules(
+        [n["note_text"] for n in notes],
+        chinese_text=unit.get("chinese_text") or "",
+        english_text=unit.get("english_final") or unit.get("english_draft") or "",
+        existing_rules=_get_active_style_rules(book_id),
+    )
+    if result.get("error"):
+        return jsonify(result), 502
+    return jsonify({**result, "note_ids": [n["id"] for n in notes], "book_id": book_id})
+
+
+@translate_bp.route("/api/trans/styleguide/<int:rule_id>", methods=["DELETE"])
+@_require_translation
+def api_delete_styleguide(rule_id):
+    """Leader+ only. Notes that fed the rule become unused again (rule_id → null)."""
+    if not is_leader():
+        return jsonify({"error": "Leader role or higher required"}), 403
+    try:
+        result = supabase.table("style_guide").delete().eq("id", rule_id).execute()
+        if not result.data:
+            return jsonify({"error": "Rule not found"}), 404
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+    return jsonify({"status": "deleted"})
 
 
 @translate_bp.route("/api/trans/styleguide/<int:rule_id>", methods=["PATCH"])
@@ -874,6 +950,10 @@ def api_patch_styleguide(rule_id):
         updates["example_after"] = data["example_after"] or None
     if "active" in data:
         updates["active"] = bool(data["active"])
+        if updates["active"]:   # enabling a proposed rule approves it (G3)
+            updates.update(proposed=False, approved_by=session.get("user_email", ""), approved_at=_now_iso())
+    if "book_id" in data:
+        updates["book_id"] = data["book_id"] or None
     if not updates:
         return jsonify({"error": "Nothing to update"}), 400
     try:
