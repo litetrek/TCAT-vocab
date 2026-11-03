@@ -522,6 +522,9 @@
     .term-known.term-has-known:hover { background: rgba(70,130,180,0.22); }
     .term-known.term-reviewed { background: rgba(58,156,92,0.16); border-bottom: 1.5px solid rgba(58,156,92,0.75); }
     .term-known.term-reviewed:hover { background: rgba(58,156,92,0.28); }
+    .term-known.term-other-book { background: none; border-bottom: 1px dotted rgba(128,128,128,0.45); }
+    .term-known.term-other-book:hover { background: rgba(128,128,128,0.10); }
+    .trd-showall-label { font-size: 0.8rem; color: var(--text-soft); display: inline-flex; align-items: center; gap: 0.3rem; cursor: pointer; white-space: nowrap; }
     .edit-view-overlay { position: fixed; inset: 0; z-index: 600; background: var(--paper, #fdfaf3); box-shadow: 0 0 40px rgba(26,18,8,0.35); }
     #trans-review-body .term-known { cursor: pointer; }
     #ext-text-zh .term-known { cursor: pointer; }
@@ -1159,6 +1162,7 @@
           <h1 class="main-title" id="trans-review-title">Review Drafts</h1>
         </div>
         <div style="display:flex;align-items:center;gap:1rem;">
+          <label class="trd-showall-label"><input type="checkbox" class="trd-showall-cb" onchange="trdToggleShowAll(this.checked)"> Show all vocabulary</label>
           <span style="font-size:0.85rem;color:var(--text-soft);" id="trans-review-progress"></span>
           <button class="btn btn-sm btn-gold" onclick="trdConfirmAll()">✓ 全部段落確認寫入</button>
         </div>
@@ -1175,6 +1179,7 @@
           <button class="btn-back" onclick="transBackToChapters()">← Chapters</button>
           <h1 class="main-title" id="trans-unit-title">Units</h1>
         </div>
+        <label class="trd-showall-label"><input type="checkbox" class="trd-showall-cb" onchange="trdToggleShowAll(this.checked)"> Show all vocabulary</label>
       </div>
       <div id="trans-unit-list" class="trans-unit-list">
         <div class="loading">☸ Loading sentences…</div>
@@ -1188,6 +1193,7 @@
           <button class="btn-back" onclick="transBackToChapters()">← Chapters</button>
           <h1 class="main-title" id="trans-vocab-title">Review Vocabularies</h1>
         </div>
+        <label class="trd-showall-label"><input type="checkbox" class="trd-showall-cb" onchange="trdToggleShowAll(this.checked)"> Show all vocabulary</label>
       </div>
       <div id="trans-vocab-list" class="trans-unit-list">
         <div class="loading">☸ Loading sentences…</div>
@@ -5175,11 +5181,32 @@
     if (prog) prog.textContent = total ? `${confirmed} / ${total} 段落已確認` : '';
   }
 
+  // "Show all vocabulary" (default off): off = only the current book's vocabulary is
+  // underlined; on = every term, with other books' terms faintly dotted.
+  const TRD_SHOWALL_KEY = 'tcat_trd_show_all';
+  let _trdShowAll = false;
+  try { _trdShowAll = localStorage.getItem(TRD_SHOWALL_KEY) === '1'; } catch(e) {}
+
+  function _trdKnownTermsUrl() {
+    if (!_transCurrentBookId) return '/api/trans/known-terms';
+    return `/api/trans/known-terms?book_id=${encodeURIComponent(_transCurrentBookId)}${_trdShowAll ? '&all=1' : ''}`;
+  }
+
   async function trdFetchKnownTerms() {
+    document.querySelectorAll('.trd-showall-cb').forEach(cb => { cb.checked = _trdShowAll; });
     try {
-      const r = await fetch('/api/trans/known-terms');
+      const r = await fetch(_trdKnownTermsUrl());
       if (r.ok) trdKnownTerms = await r.json();
     } catch(e) {}
+  }
+
+  async function trdToggleShowAll(on) {
+    _trdShowAll = !!on;
+    try { localStorage.setItem(TRD_SHOWALL_KEY, _trdShowAll ? '1' : '0'); } catch(e) {}
+    await trdFetchKnownTerms();
+    document.querySelectorAll('.trans-unit-text, .trd-sent-text').forEach(el => {
+      el.innerHTML = trdHighlightKnownTerms(el.textContent);
+    });
   }
 
   // Populates trdGlossaryMap (term display_id -> glossary entry) for _transCurrentBookId,
@@ -5290,8 +5317,11 @@
           if (claimed[i]) { overlap = true; break; }
         }
         if (!overlap) {
-          const tip = term.trans_known || term.trans1 || '';
-          segs.push({ start: idx, end: idx + ch.length, termId: term.id, ch, tip, hasKnown: !!term.trans_known, isReviewed: term.status === 'reviewed' });
+          const tip = term.final_text  ? 'Final: ' + term.final_text
+                    : term.trans_known ? 'Known: ' + term.trans_known
+                    : term.trans1      ? 'AI suggestion: ' + term.trans1 : '';
+          const otherBook = _trdShowAll && !!_transCurrentBookId && !term.in_book;
+          segs.push({ start: idx, end: idx + ch.length, termId: term.id, ch, tip, hasKnown: !!term.trans_known, isReviewed: term.status === 'reviewed', otherBook });
           for (let i = idx; i < idx + ch.length; i++) claimed[i] = 1;
         }
         pos = idx + 1;
@@ -5302,7 +5332,7 @@
     let html = '', cursor = 0;
     for (const s of segs) {
       if (cursor < s.start) html += escHtml(text.slice(cursor, s.start));
-      const colorClass = s.isReviewed ? ' term-reviewed' : (s.hasKnown ? ' term-has-known' : '');
+      const colorClass = s.otherBook ? ' term-other-book' : s.isReviewed ? ' term-reviewed' : (s.hasKnown ? ' term-has-known' : '');
       html += `<span class="term-known${colorClass}" data-term-id="${s.termId}" title="${escHtml(s.tip)}" onclick="trdHandleTermClick(event,'${escHtml(String(s.termId))}')">${escHtml(s.ch)}</span>`;
       cursor = s.end;
     }
@@ -5820,8 +5850,14 @@
     trdShowCandidatePanel(text);
   }
 
-  function trdShowCandidatePanel(selectedText) {
-    const match = trdKnownTerms.find(t => t.chinese === selectedText);
+  async function trdShowCandidatePanel(selectedText) {
+    let match = trdKnownTerms.find(t => t.chinese === selectedText);
+    // Book-scoped underlines omit terms from other books — still open an existing
+    // term rather than offering to create a duplicate.
+    if (!match) {
+      if (!allTerms.length) await loadTerms();
+      match = allTerms.find(t => t.chinese === selectedText && t.status !== 'inactive');
+    }
     if (match) {
       trdOpenTermFull(match.id, [String(match.id)], 0);
       return;
@@ -5975,7 +6011,7 @@
         setTimeout(async () => {
           trdClearSelection();
           try {
-            const r = await fetch('/api/trans/known-terms');
+            const r = await fetch(_trdKnownTermsUrl());
             if (r.ok) {
               trdKnownTerms = await r.json();
               // Re-highlight in place — works regardless of which sub-view (Review

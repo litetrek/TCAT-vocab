@@ -338,6 +338,8 @@ def translate_unit(chinese_text: str, term_constraints: list = None,
         term_hint = ""
         if term_constraints:
             pairs = "; ".join(
+                f'{t["chinese"]} → one of [{" / ".join(a.strip() for a in t["english"].split(";") if a.strip())}] (choose the one that fits)'
+                if t.get("alternatives") else
                 f'{t["chinese"]} → {t["english"]}'
                 for t in term_constraints if t.get("chinese") and t.get("english")
             )

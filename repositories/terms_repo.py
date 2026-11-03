@@ -494,20 +494,108 @@ def get_classification_source(term_id):
     return result.data[0].get("classification_source")
 
 
+def _final_text(row):
+    """The reviewed Final rendering (translation_first when a Final is chosen), else ""."""
+    if not row.get("final"):
+        return ""
+    return (row.get("translation_first") or "").strip()
+
+
+def _dup_rank(row):
+    """Sort key for duplicate entries of the same Chinese text: reviewed first,
+    then entries with a Final, then the rest (lower sorts first)."""
+    return (
+        0 if (row.get("status") or "").strip() == "reviewed" else 1,
+        0 if _final_text(row) else 1,
+    )
+
+
+def _source_term_ids(source_id):
+    """Return the set of internal term ids linked to one source via term_sources."""
+    ids = set()
+    offset = 0
+    while True:
+        chunk = (
+            supabase.table("term_sources")
+            .select("term_id")
+            .eq("source_id", source_id)
+            .range(offset, offset + _PAGE - 1)
+            .execute()
+            .data
+        )
+        ids.update(r["term_id"] for r in chunk)
+        if len(chunk) < _PAGE:
+            break
+        offset += _PAGE
+    return ids
+
+
+def list_book_known_terms(source_id):
+    """Terms to underline in a book's translation workspace (F1).
+
+    Only active terms linked to source_id; single-character terms only when
+    reviewed. Deduplicated by Chinese text (reviewed > has Final > other).
+    Each item is the usual term response plus "final_text" and "in_book": True.
+    """
+    rows = []
+    offset = 0
+    while True:
+        chunk = (
+            supabase.table("term_sources")
+            .select("terms(*)")
+            .eq("source_id", source_id)
+            .range(offset, offset + _PAGE - 1)
+            .execute()
+            .data
+        )
+        rows.extend(r["terms"] for r in chunk if r.get("terms"))
+        if len(chunk) < _PAGE:
+            break
+        offset += _PAGE
+
+    best = {}  # chinese -> row
+    for r in rows:
+        chinese = (r.get("chinese") or "").strip()
+        status  = (r.get("status") or "").strip()
+        if not chinese or status == "inactive":
+            continue
+        if len(chinese) == 1 and status != "reviewed":
+            continue
+        cur = best.get(chinese)
+        if cur is None or _dup_rank(r) < _dup_rank(cur):
+            best[chinese] = r
+
+    keys = ("id", "chinese", "pinyin", "pali", "sanskrit", "trans_known",
+            "trans1", "trans2", "trans3", "status", "final")
+    out = []
+    for r in best.values():
+        resp = _row_to_response(r)
+        item = {k: resp[k] for k in keys}
+        item["final_text"] = _final_text(r)
+        item["in_book"]    = True
+        out.append(item)
+    return out
+
+
 def get_translation_constraint_terms(prefer_source_id=None):
     """Return terms usable as AI translation constraints (T3): those with a
     non-empty Final selection or a TranslationKnown value.
     Inactive (merged/deleted) terms are excluded.
 
-    prefer_source_id: internal sources.id of the book being translated. When the
-    same Chinese text has several entries with different English, entries linked
-    to that source win and the others are dropped, so a book's own curated
-    vocabulary takes precedence over entries from other books. If none of the
-    duplicates is linked to the source, all are kept (previous behaviour).
+    English per term: the reviewed Final (translation_first) first; only when
+    there is no Final, translation_known. A Known value with several options
+    separated by ";" is passed whole and flagged "alternatives": True.
 
-    Each item: {"chinese": str, "english": str}. Filtered client-side (rather
-    than a PostgREST .or_() filter) to keep the query shape identical to the
-    rest of this module's paginated fetches.
+    prefer_source_id: internal sources.id of the book being translated. When the
+    same Chinese text has several entries, entries linked to that source win
+    and only the best of them is used (reviewed > has Final > other), so a
+    book's own curated vocabulary takes precedence over entries from other
+    books. If none of the duplicates is linked to the source, all distinct
+    renderings are kept (previous behaviour), best first.
+
+    Each item: {"chinese": str, "english": str, "alternatives": bool}. Filtered
+    client-side (rather than a PostgREST .or_() filter) to keep the query shape
+    identical to the rest of this module's paginated fetches.
     """
     rows = []
     offset = 0
@@ -527,25 +615,12 @@ def get_translation_constraint_terms(prefer_source_id=None):
     preferred_ids = set()
     if prefer_source_id:
         try:
-            offset = 0
-            while True:
-                chunk = (
-                    supabase.table("term_sources")
-                    .select("term_id")
-                    .eq("source_id", prefer_source_id)
-                    .range(offset, offset + _PAGE - 1)
-                    .execute()
-                    .data
-                )
-                preferred_ids.update(r["term_id"] for r in chunk)
-                if len(chunk) < _PAGE:
-                    break
-                offset += _PAGE
+            preferred_ids = _source_term_ids(prefer_source_id)
         except Exception as exc:
             logger.warning("term_sources lookup failed for source %s: %s", prefer_source_id, exc)
             preferred_ids = set()
 
-    # chinese -> list of (english, is_preferred), in first-seen order
+    # chinese -> list of (rank, english, alternatives, is_preferred), in first-seen order
     by_chinese = {}
     for r in rows:
         chinese = (r.get("chinese") or "").strip()
@@ -553,22 +628,26 @@ def get_translation_constraint_terms(prefer_source_id=None):
             continue
         if (r.get("status") or "").strip() == "inactive":
             continue  # merged/deleted terms must not constrain AI translation
-        english = (r.get("translation_known") or "").strip()
-        if not english and r.get("final"):
-            english = (r.get("translation_first") or "").strip()
+        english = _final_text(r)
+        alternatives = False
+        if not english:
+            english = (r.get("translation_known") or "").strip()
+            alternatives = ";" in english
         if english:
-            by_chinese.setdefault(chinese, []).append((english, r.get("id") in preferred_ids))
+            by_chinese.setdefault(chinese, []).append(
+                (_dup_rank(r), english, alternatives, r.get("id") in preferred_ids))
 
     out = []
     for chinese, cands in by_chinese.items():
-        if any(pref for _, pref in cands):
-            cands = [c for c in cands if c[1]]
+        cands = sorted(cands, key=lambda c: c[0])  # stable: keeps first-seen order on ties
+        if any(c[3] for c in cands):
+            cands = [c for c in cands if c[3]][:1]
         seen = set()
-        for english, _ in cands:
+        for _, english, alternatives, _ in cands:
             if english in seen:
                 continue
             seen.add(english)
-            out.append({"chinese": chinese, "english": english})
+            out.append({"chinese": chinese, "english": english, "alternatives": alternatives})
     return out
 
 

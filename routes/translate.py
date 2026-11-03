@@ -38,17 +38,25 @@ def _now_iso():
 # ── T3 helpers ─────────────────────────────────────────────────────────────
 
 def _get_book_source_id(chapter_id):
-    """Return the internal sources.id for the book that owns chapter_id.
+    """Return the internal sources.id for the book that owns chapter_id."""
+    try:
+        ch = supabase.table("trans_chapters").select("book_id").eq("id", chapter_id).execute().data
+        if not ch:
+            return None
+        return _get_source_id_for_book(ch[0]["book_id"])
+    except Exception:
+        return None
+
+
+def _get_source_id_for_book(book_id):
+    """Return the internal sources.id for a book.
 
     Uses trans_books.source_id when set; otherwise falls back to a source whose
     source_name exactly matches the book title. Returns None if neither resolves.
     """
     try:
-        ch = supabase.table("trans_chapters").select("book_id").eq("id", chapter_id).execute().data
-        if not ch:
-            return None
         bk = (supabase.table("trans_books").select("source_id,title")
-              .eq("id", ch[0]["book_id"]).execute().data)
+              .eq("id", book_id).execute().data)
         if not bk:
             return None
         if bk[0].get("source_id"):
@@ -150,7 +158,26 @@ def _get_context(chapter_id, unit_id):
 @translate_bp.route("/api/trans/known-terms", methods=["GET"])
 @_require_translation
 def api_trans_known_terms():
+    """Terms to underline in the translation workspace.
+
+    ?book_id=N        only active terms linked to that book's source, deduplicated
+                      by Chinese (reviewed > has Final > other); single characters
+                      only when reviewed.
+    ?book_id=N&all=1  every term (previous behaviour), with in_book flags.
+    no book_id        every term (previous behaviour), in_book False.
+    A book whose source cannot be resolved falls back to every term.
+    """
     try:
+        book_id   = request.args.get("book_id", type=int)
+        show_all  = request.args.get("all") == "1"
+        source_id = _get_source_id_for_book(book_id) if book_id else None
+        if source_id and not show_all:
+            return jsonify(terms_repo.list_book_known_terms(source_id))
+
+        book_source = ""  # sources.display_id, matched against each term's "sources" list
+        if source_id:
+            src = supabase.table("sources").select("display_id").eq("id", source_id).execute().data
+            book_source = src[0]["display_id"] if src else ""
         all_terms = terms_repo.list_terms()
         result = [
             {
@@ -165,6 +192,8 @@ def api_trans_known_terms():
                 "trans3":      t.get("trans3",      ""),
                 "status":      t.get("status",      "pending"),
                 "final":       t.get("final",       ""),
+                "final_text":  (t.get("trans_first") or "").strip() if t.get("final") else "",
+                "in_book":     bool(book_source) and book_source in (t.get("sources") or []),
             }
             for t in all_terms
         ]

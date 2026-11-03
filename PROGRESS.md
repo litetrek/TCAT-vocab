@@ -973,6 +973,58 @@ leftover rows.
 Exporting/printing the glossary as a book appendix; custom (non-alphabetical) sort/reorder;
 copying a glossary entry to another book; a live glossary-count badge on the Book List cards.
 
+### Stage F1 — Glossary Links + Constraint Priority (2026-11-02)
+
+First stage of `docs/TCAT_Translation_Fix_Prompts.md` (Greg's 入法門論 comparison: underlines did
+not reflect the reviewed glossary, and a Known value could override a reviewed Final).
+
+#### `repositories/terms_repo.py`
+- `get_translation_constraint_terms()`: English per term is now the Final (`translation_first`
+  when `final` is set) **first**, `translation_known` only as fallback. A Known fallback containing
+  ";" is passed whole with `"alternatives": True`. Duplicates linked to the book: only the best one
+  is used (reviewed > has Final > other). Unlinked duplicates: all distinct renderings kept, best
+  first (previous behaviour). Inactive exclusion unchanged.
+- New `list_book_known_terms(source_id)`: active terms linked to the source via `term_sources`,
+  deduplicated by Chinese with the same ranking; single characters only when reviewed. Adds
+  `final_text` and `in_book: true`.
+- Helpers `_final_text()`, `_dup_rank()`, `_source_term_ids()`.
+
+#### `routes/translate.py`
+- `_get_source_id_for_book(book_id)` (trans_books.source_id, else sources.source_name == title);
+  `_get_book_source_id(chapter_id)` now delegates to it.
+- `GET /api/trans/known-terms`: `?book_id=N` → book-scoped list; `?book_id=N&all=1` → full list
+  (old behaviour) with `in_book` flags; no `book_id` → old behaviour. Every item has `final_text`
+  and `in_book`. A book whose source cannot be resolved falls back to the full list.
+  `/api/extract/known-terms` untouched.
+
+#### `ai.py`
+- `translate_unit()` term hint renders alternatives as `X → one of [a / b] (choose the one that
+  fits)` so ";"-separated options no longer blur into the "; "-joined pair list. Rest of the
+  prompt unchanged (F3 rewrites it).
+
+#### `templates/index.html`
+- `trdFetchKnownTerms()` sends `_transCurrentBookId` (fetched on every chapter/review open, so a
+  book change re-fetches). Tooltip priority: `Final: …` → `Known: …` → `AI suggestion: …`.
+- "Show all vocabulary" checkbox (default off, `localStorage` key `tcat_trd_show_all`, try/catch)
+  in the Work on Units, Review Vocabularies and Review Drafts toolbars; on = full list, non-book
+  terms get faint dotted `.term-other-book`.
+- Click opens the same deduplicated term id the tooltip came from (span `data-term-id`).
+- Select-to-add panel: if the selected text is not in the book-scoped list, it now checks the full
+  term list before offering "New term", so unlinked existing terms are opened instead of duplicated.
+
+#### Acceptance tests (Flask test client, live Supabase, admin session) — all PASS
+- Book 10 (入法門論) resolves to source 5 by title (trans_books.source_id is null).
+- Book-scoped list (807 terms): 輪迴 → T002904 "Samsara (the cycle of rebirth)", 無始 → T002874
+  "without beginning", 中陰 → T003074 "intermediate state (Bardo in Tibetan)", 修行 → T002894,
+  法 → T002861 "Dharma", 傳法 → T002899 "transmit the Dharma".
+- 學佛 and 道 not in the book-scoped list; no single unreviewed characters; no inactive terms.
+- `?book_id=10&all=1` returns the same 3,797 terms as the old no-book call (superset of the book list).
+- `get_translation_constraint_terms(prefer_source_id=5)`: 傳法 → "transmit the Dharma",
+  成就 → "attainment" (Final, not the Known value), 輪迴 → T002904 text, 修行 → T002894 text.
+
+**Not verified in a browser:** tooltip text, checkbox toggle/persistence, dotted underline style,
+and the select-to-add fallback.
+
 ---
 
 ## Known Issues / Notes
@@ -1005,6 +1057,9 @@ copying a glossary entry to another book; a live glossary-count badge on the Boo
 
 ## Next Steps
 
+- **F1 browser test**: open 入法門論 → a chapter → hover 輪迴, 無始, 中陰, 傳法 (expect "Final: …");
+  confirm 學佛/道 are not underlined; toggle "Show all vocabulary" and reload to check it persists.
+  Then Stage F2 (`docs/TCAT_Translation_Fix_Prompts.md`).
 - **Book Glossary live UI test** (backend fully verified via live Supabase + a real Flask
   test-client HTTP cycle, but never clicked through in an actual browser): open a book → Chapters
   → "📖 Glossary" button (Leader+ only — confirm it's absent for Members) → open a term from
