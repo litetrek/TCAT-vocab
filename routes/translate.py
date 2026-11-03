@@ -447,7 +447,21 @@ def api_list_units(chapter_id):
         )
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
-    return jsonify(result.data)
+    units = result.data or []
+    # G2: note count per unit for the "Notes (n)" button; 0s if the lookup fails.
+    counts = {}
+    try:
+        ids = [u["id"] for u in units]
+        if ids:
+            rows = (supabase.table("trans_unit_notes").select("unit_id")
+                    .in_("unit_id", ids).execute().data or [])
+            for r in rows:
+                counts[r["unit_id"]] = counts.get(r["unit_id"], 0) + 1
+    except Exception:
+        pass
+    for u in units:
+        u["note_count"] = counts.get(u["id"], 0)
+    return jsonify(units)
 
 
 # ── GET /api/trans/chapters/<chapter_id>/drafts ───────────────────────────────
@@ -1144,6 +1158,71 @@ def api_delete_unit(unit_id):
 
     write_audit(unit.get("display_id", ""), "", session.get("user_email", ""), session.get("user_name", ""),
                 "updated", details="Deleted empty unit")
+    return jsonify({"status": "deleted"})
+
+
+# ── G2 — Translator notes per unit ──────────────────────────────────────────
+# Any translation-module user can read; Member+ can add; the author or a Leader+
+# can delete. G3 summarises notes into Style Guide rules (rule_id).
+
+@translate_bp.route("/api/trans/units/<int:unit_id>/notes", methods=["GET"])
+@_require_translation
+def api_list_unit_notes(unit_id):
+    try:
+        rows = (supabase.table("trans_unit_notes").select("*")
+                .eq("unit_id", unit_id).order("created_at").execute().data or [])
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(rows)
+
+
+@translate_bp.route("/api/trans/units/<int:unit_id>/notes", methods=["POST"])
+@_require_translation
+def api_add_unit_note(unit_id):
+    if not can_edit_existing():
+        return jsonify({"error": "Member role or higher required"}), 403
+    text = ((request.get_json() or {}).get("note_text") or "").strip()
+    if not text:
+        return jsonify({"error": "note_text is required"}), 400
+    if len(text) > 2000:
+        return jsonify({"error": "Note is too long (2000 characters max)"}), 400
+    try:
+        unit = (supabase.table("trans_units").select("id,display_id,chinese_text")
+                .eq("id", unit_id).execute().data)
+        if not unit:
+            return jsonify({"error": "Unit not found"}), 404
+        row = supabase.table("trans_unit_notes").insert({
+            "unit_id":      unit_id,
+            "note_text":    text,
+            "author_email": session.get("user_email", ""),
+            "author_name":  session.get("user_name", ""),
+        }).execute().data
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+    write_audit(unit[0].get("display_id", ""), unit[0].get("chinese_text") or "",
+                session.get("user_email", ""), session.get("user_name", ""),
+                "note_added", new_value=text)
+    return jsonify(row[0]), 201
+
+
+@translate_bp.route("/api/trans/notes/<int:note_id>", methods=["DELETE"])
+@_require_translation
+def api_delete_unit_note(note_id):
+    try:
+        note = supabase.table("trans_unit_notes").select("*").eq("id", note_id).execute().data
+        if not note:
+            return jsonify({"error": "Note not found"}), 404
+        note = note[0]
+        if note.get("author_email") != session.get("user_email") and not is_leader():
+            return jsonify({"error": "Only the note's author or a Leader can delete it"}), 403
+        supabase.table("trans_unit_notes").delete().eq("id", note_id).execute()
+        unit = (supabase.table("trans_units").select("display_id,chinese_text")
+                .eq("id", note["unit_id"]).execute().data or [{}])[0]
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+    write_audit(unit.get("display_id", ""), unit.get("chinese_text") or "",
+                session.get("user_email", ""), session.get("user_name", ""),
+                "note_deleted", old_value=note.get("note_text") or "")
     return jsonify({"status": "deleted"})
 
 

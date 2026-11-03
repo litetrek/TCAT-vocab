@@ -1150,6 +1150,23 @@ G3 notes → Style Guide rule proposed by anyone, approved only by a Lead).
   U000344 (OpenAI gpt-5.6-sol) returned 3 notes, saved and shown after reload, no console errors.
   Not tested live: Save re-check of missing terms (would change a unit's status).
 
+### Stage G2 — Translator Notes per Unit (2026-11-02)
+
+- **Migration 019 — `019_g2_unit_notes.sql`** (applied to TCAT-vocab 2026-11-02): new
+  `trans_unit_notes` (unit_id → trans_units on delete cascade, note_text, author_email,
+  author_name, created_at, rule_id → style_guide on delete set null — filled in G3).
+- **`routes/translate.py`**: `GET /api/trans/units/<id>/notes` (any module user),
+  `POST /api/trans/units/<id>/notes` (Member+, 2000 chars max), `DELETE /api/trans/notes/<id>`
+  (author or Leader+). Add/delete write audit rows `note_added` / `note_deleted`.
+  `GET /api/trans/chapters/<id>/units` now adds `note_count` per unit (one extra query; 0s if it fails).
+- **`templates/index.html`**: "Notes (n)" button beside History on every Translation card;
+  panel lists notes (author · time · text, "used in a rule" once G3 links it), 🗑 for the
+  author or Leader/Admin, add box for Member+. Counts kept client-side (`_transNoteCounts`)
+  because translate/save responses don't carry note_count; an open panel reloads after Save /
+  Re-translate re-renders the card.
+- **Tested** (local, live Supabase): add note on U000344 → "Notes (1)", author + time shown;
+  delete → "Notes", server count 0, table empty again. No console errors from G2.
+
 ---
 
 ## Known Issues / Notes
@@ -1177,7 +1194,7 @@ G3 notes → Style Guide rule proposed by anyone, approved only by a Lead).
 | **T4.2** | **Done** | Dual-provider embeddings (Voyage + OpenAI, migration 010), `find_similar_revisions_*` RPCs, RAG example injection with cold-start similarity threshold, `scripts/compare_embedding_providers.py` |
 | **T4.3** | Planned | Three-column review workspace polish, diff highlighting (english_draft vs english_final) |
 | **G1** | **Done** | AI reasoning notes saved per unit and shown collapsed; F3 missing-term chips persisted and re-checked on Save (migration 018) |
-| **G2** | Planned | Translator notes per unit (`trans_unit_notes`, "Notes (n)" beside History; author/Lead delete) |
+| **G2** | **Done** | Translator notes per unit (`trans_unit_notes`, migration 019; "Notes (n)" beside History; author/Lead delete) |
 | **G3** | Planned | "Suggest rule from notes" → AI-drafted Style Guide rule; members propose, Lead approves/deletes; optional `book_id` scope |
 | **T5** | Planned | Chapter claiming, collaborative approval flow, annotations (per-unit notes now come from G2) |
 
@@ -1185,7 +1202,8 @@ G3 notes → Style Guide rule proposed by anyone, approved only by a Lead).
 
 ## Next Steps
 
-- **G2 — translator notes**, then **G3 — notes → Style Guide rule** (design agreed 2026-11-02).
+- **G3 — notes → Style Guide rule** (design agreed 2026-11-02): members propose, only a Lead
+  approves/activates or deletes; style_guide gets a proposed/active/off status and optional `book_id`.
 - **Send `docs/compare_2026-11-02.md` to Greg and Weiya** (not the `_key` file); pick the
   default engine from their verdicts.
 - **Fix glossary entry 小法** → "a lesser teaching" (lower-case a).
