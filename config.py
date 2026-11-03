@@ -9,6 +9,15 @@ load_dotenv(os.path.join(BASE_DIR, '.env'))
 SUPER_ADMIN_EMAIL = os.getenv("SUPER_ADMIN_EMAIL", "vlin77@gmail.com")
 SHEET_ID          = os.getenv("SHEET_ID")
 
+# ── Sentence-translation engines (F2) ─────────────────────────────────────
+# Only translate_unit() uses these; vocabulary AI functions stay on Claude Haiku.
+TRANSLATION_ENGINES        = ("openai", "claude")
+CLAUDE_TRANSLATION_MODEL   = os.getenv("CLAUDE_TRANSLATION_MODEL", "claude-opus-5-5")
+OPENAI_TRANSLATION_MODEL   = os.getenv("OPENAI_TRANSLATION_MODEL", "gpt-5.6-sol")
+DEFAULT_TRANSLATION_ENGINE = os.getenv("DEFAULT_TRANSLATION_ENGINE", "openai").strip().lower()
+if DEFAULT_TRANSLATION_ENGINE not in TRANSLATION_ENGINES:
+    DEFAULT_TRANSLATION_ENGINE = "openai"
+
 # ── Column indices for Terms sheet (1-based for gspread) ──────────────────
 COL = {
     "id": 1, "chinese": 2, "pinyin": 3, "pali": 4, "sanskrit": 5,

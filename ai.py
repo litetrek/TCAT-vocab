@@ -278,12 +278,122 @@ def group_sentences_by_topic(sentences: list) -> list:
         return fallback
 
 
+def build_translate_prompt(chinese_text: str, term_constraints: list = None,
+                           context_before: str = "", context_after: str = "",
+                           is_long_sentence: bool = False,
+                           style_rules: list = None,
+                           similar_examples: list = None) -> str:
+    """The sentence-translation prompt, shared by every engine (see translate_unit)."""
+    style_hint = ""
+    if style_rules:
+        lines = []
+        for r in style_rules:
+            cat = r.get("category", "")
+            rule = r.get("rule_text", "")
+            if not rule:
+                continue
+            line = f"- [{cat}] {rule}"
+            ex_before = r.get("example_before", "")
+            ex_after  = r.get("example_after", "")
+            if ex_before and ex_after:
+                line += f' (e.g. "{ex_before}" → "{ex_after}")'
+            lines.append(line)
+        if lines:
+            style_hint = "\nStyle guide — house rules to follow:\n" + "\n".join(lines)
+
+    example_hint = ""
+    if similar_examples:
+        lines = []
+        for ex in similar_examples:
+            zh = ex.get("chinese", "")
+            en = ex.get("english", "")
+            if zh and en:
+                lines.append(f"中文: {zh} → English: {en}")
+        if lines:
+            example_hint = (
+                "\nSimilar past translations (for tone/style reference only"
+                " — do not copy verbatim unless the source text is identical):\n"
+                + "\n".join(lines)
+            )
+
+    term_hint = ""
+    if term_constraints:
+        pairs = "; ".join(
+            f'{t["chinese"]} → one of [{" / ".join(a.strip() for a in t["english"].split(";") if a.strip())}] (choose the one that fits)'
+            if t.get("alternatives") else
+            f'{t["chinese"]} → {t["english"]}'
+            for t in term_constraints if t.get("chinese") and t.get("english")
+        )
+        if pairs:
+            term_hint = (
+                "\nFixed terminology — these terms MUST be rendered exactly as "
+                f"given, wherever they appear: {pairs}"
+            )
+
+    context_hint = ""
+    if context_before:
+        context_hint += f"\nPrevious sentence (context only — do not translate this): {context_before}"
+    if context_after:
+        context_hint += f"\nNext sentence (context only — do not translate this): {context_after}"
+
+    split_hint = ""
+    if is_long_sentence:
+        split_hint = (
+            "\nThis is a long sentence. If it reads more naturally in English as two or "
+            "more shorter sentences, split it. Also return split_map: a list of "
+            "{\"zh\": \"...\", \"en\": \"...\"} pairs showing which portion of the original "
+            "Chinese text corresponds to each English sentence (the zh portions together "
+            "should cover the whole original sentence)."
+        )
+
+    return (
+        "You are an expert translator of Chinese Buddhist texts into English, "
+        "writing for a scholarly but accessible general readership. Translate "
+        "faithfully; prefer natural, readable English over a literal word-for-word "
+        f"rendering.{style_hint}{example_hint}{term_hint}{context_hint}{split_hint}\n\n"
+        f"Chinese sentence to translate: {chinese_text}\n\n"
+        "Reply ONLY with a JSON object, no other text or markdown fences:\n"
+        "{\"english\": \"the English translation\", \"split_map\": null or "
+        "[{\"zh\": \"...\", \"en\": \"...\"}, ...]}"
+    )
+
+
+TRANSLATE_MAX_TOKENS = 2000  # visible output: long sentences + split_map
+_REASONING_HEADROOM  = 6000  # both top models think before answering; that counts against the same limit
+_TRANSLATE_TIMEOUT_S = 90
+
+
+def _translate_with_claude(prompt: str, model: str) -> str:
+    ai = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"), timeout=_TRANSLATE_TIMEOUT_S)
+    response = ai.messages.create(
+        model=model,
+        max_tokens=TRANSLATE_MAX_TOKENS + _REASONING_HEADROOM,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    # Newer models may return a thinking block before the text block.
+    return "".join(b.text for b in response.content if getattr(b, "type", "") == "text")
+
+
+def _translate_with_openai(prompt: str, model: str) -> str:
+    import openai
+    client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"), timeout=_TRANSLATE_TIMEOUT_S)
+    # GPT-5.x are reasoning models: Responses API, max_output_tokens (not max_tokens)
+    # covers reasoning + visible output.
+    response = client.responses.create(
+        model=model,
+        input=prompt,
+        max_output_tokens=TRANSLATE_MAX_TOKENS + _REASONING_HEADROOM,
+    )
+    return response.output_text
+
+
 def translate_unit(chinese_text: str, term_constraints: list = None,
                     context_before: str = "", context_after: str = "",
                     is_long_sentence: bool = False,
                     style_rules: list = None,
-                    similar_examples: list = None) -> dict:
-    """Draft an English translation for one trans_unit via Claude (T3).
+                    similar_examples: list = None,
+                    engine: str = "openai") -> dict:
+    """Draft an English translation for one trans_unit (T3; engines added in F2).
 
     term_constraints: [{"chinese": str, "english": str}, ...] — terms hit in
     chinese_text that already have a Final or Known translation; these must
@@ -292,106 +402,43 @@ def translate_unit(chinese_text: str, term_constraints: list = None,
     (must not be re-translated).
     is_long_sentence: if True, also ask for a split_map (long sentence broken
     into shorter English sentences, mapped back to the Chinese portions).
+    engine: "openai" (OPENAI_TRANSLATION_MODEL) or "claude" (CLAUDE_TRANSLATION_MODEL).
 
-    Returns {"english": str, "split_map": list[{"zh","en"}] | None}.
-    Never raises — falls back to a best-effort result on any API/parse error.
+    Returns {"english": str, "split_map": list[{"zh","en"}] | None, "model": str},
+    plus "error": str when the draft failed (english is then "").
+    Never raises — provider errors are logged and returned as "error".
     """
+    from config import CLAUDE_TRANSLATION_MODEL, OPENAI_TRANSLATION_MODEL
+
+    if engine == "openai":
+        model, key_name, call = OPENAI_TRANSLATION_MODEL, "OPENAI_API_KEY", _translate_with_openai
+    else:
+        model, key_name, call = CLAUDE_TRANSLATION_MODEL, "ANTHROPIC_API_KEY", _translate_with_claude
+
+    result = {"english": "", "split_map": None, "model": model}
     if not chinese_text or not chinese_text.strip():
-        return {"english": "", "split_map": None}
+        return result
+    if not os.getenv(key_name):
+        result["error"] = ("OpenAI" if engine == "openai" else "Anthropic") + " key not configured"
+        return result
 
-    fallback = {"english": "", "split_map": None}
     try:
-        ai = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-
-        style_hint = ""
-        if style_rules:
-            lines = []
-            for r in style_rules:
-                cat = r.get("category", "")
-                rule = r.get("rule_text", "")
-                if not rule:
-                    continue
-                line = f"- [{cat}] {rule}"
-                ex_before = r.get("example_before", "")
-                ex_after  = r.get("example_after", "")
-                if ex_before and ex_after:
-                    line += f' (e.g. "{ex_before}" → "{ex_after}")'
-                lines.append(line)
-            if lines:
-                style_hint = "\nStyle guide — house rules to follow:\n" + "\n".join(lines)
-
-        example_hint = ""
-        if similar_examples:
-            lines = []
-            for ex in similar_examples:
-                zh = ex.get("chinese", "")
-                en = ex.get("english", "")
-                if zh and en:
-                    lines.append(f"中文: {zh} → English: {en}")
-            if lines:
-                example_hint = (
-                    "\nSimilar past translations (for tone/style reference only"
-                    " — do not copy verbatim unless the source text is identical):\n"
-                    + "\n".join(lines)
-                )
-
-        term_hint = ""
-        if term_constraints:
-            pairs = "; ".join(
-                f'{t["chinese"]} → one of [{" / ".join(a.strip() for a in t["english"].split(";") if a.strip())}] (choose the one that fits)'
-                if t.get("alternatives") else
-                f'{t["chinese"]} → {t["english"]}'
-                for t in term_constraints if t.get("chinese") and t.get("english")
-            )
-            if pairs:
-                term_hint = (
-                    "\nFixed terminology — these terms MUST be rendered exactly as "
-                    f"given, wherever they appear: {pairs}"
-                )
-
-        context_hint = ""
-        if context_before:
-            context_hint += f"\nPrevious sentence (context only — do not translate this): {context_before}"
-        if context_after:
-            context_hint += f"\nNext sentence (context only — do not translate this): {context_after}"
-
-        split_hint = ""
-        if is_long_sentence:
-            split_hint = (
-                "\nThis is a long sentence. If it reads more naturally in English as two or "
-                "more shorter sentences, split it. Also return split_map: a list of "
-                "{\"zh\": \"...\", \"en\": \"...\"} pairs showing which portion of the original "
-                "Chinese text corresponds to each English sentence (the zh portions together "
-                "should cover the whole original sentence)."
-            )
-
-        response = ai.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=800,
-            messages=[{
-                "role": "user",
-                "content": (
-                    "You are an expert translator of Chinese Buddhist texts into English, "
-                    "writing for a scholarly but accessible general readership. Translate "
-                    "faithfully; prefer natural, readable English over a literal word-for-word "
-                    f"rendering.{style_hint}{example_hint}{term_hint}{context_hint}{split_hint}\n\n"
-                    f"Chinese sentence to translate: {chinese_text}\n\n"
-                    "Reply ONLY with a JSON object, no other text or markdown fences:\n"
-                    "{\"english\": \"the English translation\", \"split_map\": null or "
-                    "[{\"zh\": \"...\", \"en\": \"...\"}, ...]}"
-                )
-            }]
+        prompt = build_translate_prompt(
+            chinese_text, term_constraints, context_before, context_after,
+            is_long_sentence, style_rules, similar_examples,
         )
-        raw = response.content[0].text.strip()
+        raw = call(prompt, model).strip()
         raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
         parsed = json.loads(raw)
-        english = str(parsed.get("english", "")).strip()
+        result["english"] = str(parsed.get("english", "")).strip()
         split_map = parsed.get("split_map")
-        if not isinstance(split_map, list):
-            split_map = None
-        return {"english": english, "split_map": split_map}
-    except Exception:
-        return fallback
+        result["split_map"] = split_map if isinstance(split_map, list) else None
+        if not result["english"]:
+            result["error"] = f"{model} returned an empty translation"
+    except Exception as exc:
+        print(f"[translate_unit] engine={engine} model={model} error: {type(exc).__name__}: {exc}", flush=True)
+        result["error"] = f"{model} failed: {type(exc).__name__}"
+    return result
 
 
 def classify_term(term: dict) -> dict:

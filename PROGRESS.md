@@ -1032,6 +1032,48 @@ Select-to-add fallback not exercised.
 Local login note: `.env` has the production `GOOGLE_REDIRECT_URI`; for local testing run with
 `GOOGLE_REDIRECT_URI=http://127.0.0.1:5000/callback` and open http://127.0.0.1:5000 (not localhost).
 
+### Stage F2 — Selectable Translation Engine: OpenAI (default) or Claude (2026-11-02)
+
+Sentence translation can use OpenAI or Claude. **OpenAI is the default** (Vincent's choice:
+Greg's good results with ChatGPT). Vocabulary AI functions and `group_sentences_by_topic` stay on
+Claude Haiku, unchanged.
+
+- **`config.py` / `.env.example`:** `DEFAULT_TRANSLATION_ENGINE` (default `openai`; `openai|claude`),
+  `OPENAI_TRANSLATION_MODEL` (default `gpt-5.6-sol`), `CLAUDE_TRANSLATION_MODEL` (default
+  `claude-opus-5-5`). `OPENAI_API_KEY` is shared with embeddings. Both default models confirmed
+  available on our accounts (model list API, 2026-11-02).
+- **`ai.py`:** `build_translate_prompt()` returns the exact previous prompt text;
+  `_translate_with_openai()` uses the Responses API with `max_output_tokens` (GPT-5.x are reasoning
+  models, so `max_tokens` does not apply); `_translate_with_claude()` joins the text blocks (Opus 5.5
+  returns a thinking block first, which broke `content[0].text`). Limit: 2,000 visible tokens + 6,000
+  reasoning headroom; 90 s client timeout. `translate_unit(..., engine=)` returns
+  `{english, split_map, model}` and `error` on failure; provider errors are printed to the server log.
+- **`routes/translate.py`:** `POST /api/trans/units/<id>/translate` takes `{"engine"}` (400 on other
+  values). A failed draft writes nothing (400 for a missing key, 502 for a provider error) — before,
+  a failure silently wrote an empty `english_final`. `ai_model` stores the real model; the response
+  adds `engine` and `model`; the `[translate_unit]` log line shows both; the audit detail adds the
+  model. `AI_MODEL_NAME` removed.
+- **`templates/index.html`:** "AI engine" selector (OpenAI / Claude) in the Work on Units toolbar,
+  preselected from `DEFAULT_TRANSLATION_ENGINE`, viewer's choice remembered in `localStorage`
+  (`tcat_trans_engine`). Each unit shows "AI draft: <model>" under its translation. Errors show as a
+  toast instead of an alert. `app.py` passes `default_translation_engine` to the template.
+- **Timeouts:** `vercel.json` build config `maxDuration: 60`. GreenGeeks CGI has no app-side
+  setting; drafts measured at 4–8 s, well inside Apache's limit.
+
+#### Tests (2026-11-02)
+- Flask test client, unit 354 (U000354 "一 先說大小法 又看邪與正", in_review): engine=openai → 200,
+  `ai_model` = `gpt-5.6-sol`; no body → default openai; engine=gemini → 400; `OPENAI_API_KEY` unset →
+  400 "OpenAI key not configured" with no write. **Unit 354 was restored** to its original
+  english_final / english_draft / status / ai_model / split_map / translated_by / last_modified_*
+  afterwards (verified). Three `ai_translate` audit rows from `f2-test@local` remain on U000354.
+- engine=claude first failed (thinking block, see above); after the fix it was verified by calling
+  `translate_unit()` directly (no DB write) — both engines return English for unit 354's text.
+- Browser (local): selector defaults to OpenAI, switch is remembered, model labels render
+  (e.g. "AI draft: claude-haiku-4-5-20251001"). AI Translate was not clicked in the browser (it
+  would overwrite a live unit).
+- Glossary note: both engines rendered 小法 as "A lesser teaching" (capital A), copied from the
+  glossary constraint — worth checking that term's Final.
+
 ---
 
 ## Known Issues / Notes
@@ -1064,7 +1106,10 @@ Local login note: `.env` has the production `GOOGLE_REDIRECT_URI`; for local tes
 
 ## Next Steps
 
-- **Stage F2** (`docs/TCAT_Translation_Fix_Prompts.md`): selectable Claude / OpenAI translation engine.
+- **F2 live setup**: add `DEFAULT_TRANSLATION_ENGINE`, `OPENAI_TRANSLATION_MODEL`,
+  `CLAUDE_TRANSLATION_MODEL` (optional, defaults apply) and confirm `OPENAI_API_KEY` in the
+  GreenGeeks `.env`; then translate one unit with each engine.
+- **Stage F3** (`docs/TCAT_Translation_Fix_Prompts.md`): better prompt + glossary compliance check.
 - **Book Glossary live UI test** (backend fully verified via live Supabase + a real Flask
   test-client HTTP cycle, but never clicked through in an actual browser): open a book → Chapters
   → "📖 Glossary" button (Leader+ only — confirm it's absent for Members) → open a term from

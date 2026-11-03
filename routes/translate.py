@@ -10,11 +10,11 @@ from ai import group_sentences_by_topic, translate_unit, generate_glossary_entry
 from embeddings import get_embeddings, get_voyage_embedding, get_openai_embedding
 from repositories import terms_repo, glossary_repo
 from repositories.audit_repo import write_audit
+from config import TRANSLATION_ENGINES, DEFAULT_TRANSLATION_ENGINE
 
 translate_bp = Blueprint("translate", __name__)
 
 MAX_FILE_SIZE = 2 * 1024 * 1024  # 2 MB
-AI_MODEL_NAME = "claude-haiku-4-5-20251001"
 
 
 # ── Access guard ──────────────────────────────────────────────────────────────
@@ -668,9 +668,17 @@ def api_translate_unit(unit_id):
     First run: writes english_draft (never overwritten again) and english_final.
     Re-run ("regenerate"): english_draft is preserved; the new attempt is written
     to english_final only, for side-by-side comparison against the current text.
+
+    Body (optional): {"engine": "openai" | "claude"}; default DEFAULT_TRANSLATION_ENGINE.
+    A failed draft (missing key, provider error) writes nothing and returns an error.
     """
     if not can_edit_existing():
         return jsonify({"error": "Member role or higher required"}), 403
+
+    body   = request.get_json(silent=True) or {}
+    engine = (body.get("engine") or DEFAULT_TRANSLATION_ENGINE).strip().lower()
+    if engine not in TRANSLATION_ENGINES:
+        return jsonify({"error": f"engine must be one of: {', '.join(TRANSLATION_ENGINES)}"}), 400
 
     try:
         result = supabase.table("trans_units").select("*").eq("id", unit_id).execute()
@@ -700,22 +708,26 @@ def api_translate_unit(unit_id):
         is_long_sentence=bool(unit.get("is_long_sentence")),
         style_rules=active_rules,
         similar_examples=similar_examples,
+        engine=engine,
     )
     _elapsed = time.time() - _t0
     _long_flag = "LONG_SENTENCE" if bool(unit.get("is_long_sentence")) else "normal"
     print(
-        f"[translate_unit] unit_id={unit_id} {_long_flag} "
+        f"[translate_unit] unit_id={unit_id} engine={engine} model={ai_result['model']} {_long_flag} "
         f"terms={len(term_hits)} examples={len(similar_examples)} "
-        f"elapsed={_elapsed:.2f}s",
+        f"elapsed={_elapsed:.2f}s{' error=' + ai_result['error'] if ai_result.get('error') else ''}",
         flush=True,
     )
+    if ai_result.get("error"):
+        status = 400 if "not configured" in ai_result["error"] else 502
+        return jsonify({"error": ai_result["error"], "engine": engine, "model": ai_result["model"]}), status
 
     is_first_draft = not (unit.get("english_draft") or "").strip()
     modifier = session.get("user_email", "")
 
     updates = {
         "english_final":     ai_result["english"],
-        "ai_model":          AI_MODEL_NAME,
+        "ai_model":          ai_result["model"],
         "translated_by":     modifier,
         "status":            "ai_drafted",
         "last_modified_by":  modifier,
@@ -737,10 +749,10 @@ def api_translate_unit(unit_id):
         unit.get("display_id", ""), chinese_text, modifier, session.get("user_name", ""),
         "ai_translate", field_changed="english_final",
         old_value=unit.get("english_final") or "", new_value=ai_result["english"],
-        details="initial draft" if is_first_draft else "regenerate",
+        details=("initial draft" if is_first_draft else "regenerate") + f" ({ai_result['model']})",
     )
 
-    return jsonify(upd.data[0])
+    return jsonify({**upd.data[0], "engine": engine, "model": ai_result["model"]})
 
 
 # ── T4.1 — Style Guide ──────────────────────────────────────────────────────

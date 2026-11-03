@@ -3,7 +3,7 @@ from flask_cors import CORS
 from authlib.integrations.flask_client import OAuth
 import os
 
-from config import BASE_DIR, SUPER_ADMIN_EMAIL
+from config import BASE_DIR, SUPER_ADMIN_EMAIL, DEFAULT_TRANSLATION_ENGINE
 from repositories.members_repo import lookup_member
 from auth import is_logged_in, is_admin, is_leader, can_access_translation_module
 from routes.terms     import terms_bp
@@ -52,6 +52,7 @@ def home():
                            is_leader=is_leader(),
                            user_role=role,
                            can_access_translation=can_access_translation_module(role),
+                           default_translation_engine=DEFAULT_TRANSLATION_ENGINE,
                            super_admin=SUPER_ADMIN_EMAIL)
 
 

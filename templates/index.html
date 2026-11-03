@@ -1179,7 +1179,15 @@
           <button class="btn-back" onclick="transBackToChapters()">← Chapters</button>
           <h1 class="main-title" id="trans-unit-title">Units</h1>
         </div>
-        <label class="trd-showall-label"><input type="checkbox" class="trd-showall-cb" onchange="trdToggleShowAll(this.checked)"> Show all vocabulary</label>
+        <div style="display:flex;align-items:center;gap:1rem;">
+          <label class="trd-showall-label" title="Engine used by AI Translate / Re-translate">AI engine
+            <select id="trans-engine-select" onchange="transSetEngine(this.value)" style="font-size:0.8rem;padding:0.15rem 0.3rem;">
+              <option value="openai">OpenAI</option>
+              <option value="claude">Claude</option>
+            </select>
+          </label>
+          <label class="trd-showall-label"><input type="checkbox" class="trd-showall-cb" onchange="trdToggleShowAll(this.checked)"> Show all vocabulary</label>
+        </div>
       </div>
       <div id="trans-unit-list" class="trans-unit-list">
         <div class="loading">☸ Loading sentences…</div>
@@ -4988,6 +4996,7 @@
       </div>
       <div class="trans-unit-text">${trdHighlightKnownTerms(u.chinese_text || '')}</div>
       ${_CAN_TRANSLATE ? `<textarea class="trans-unit-en-input" id="trans-en-${u.id}" rows="2" oninput="_transAutoGrow(this)" placeholder="No translation yet — click AI Translate.">${escHtml(englishText)}</textarea>` : (englishText ? `<div class="trans-unit-text" style="color:var(--text-soft);">${escHtml(englishText)}</div>` : '')}
+      ${u.ai_model ? `<div class="trans-unit-model" style="font-size:0.72rem;color:var(--text-soft);margin-top:0.15rem;">AI draft: ${escHtml(u.ai_model)}</div>` : ''}
       ${_CAN_TRANSLATE ? `<div class="trans-unit-actions">
         <button class="btn btn-sm btn-secondary trans-unit-translate-btn" onclick="transTranslateUnit(${u.id})">${translateLabel}</button>
         <button class="btn btn-sm btn-secondary" onclick="transSaveUnit(${u.id}, false)">Save</button>
@@ -5011,18 +5020,33 @@
     loadAuditLog(displayId);
   }
 
+  // Sentence-translation engine (F2): server default, overridden by the viewer's last choice.
+  const TRANS_ENGINE_KEY = 'tcat_trans_engine';
+  let _transEngine = '{{ default_translation_engine }}' || 'openai';
+  try { const saved = localStorage.getItem(TRANS_ENGINE_KEY); if (saved === 'openai' || saved === 'claude') _transEngine = saved; } catch(e) {}
+  (function() { const sel = document.getElementById('trans-engine-select'); if (sel) sel.value = _transEngine; })();
+
+  function transSetEngine(engine) {
+    _transEngine = engine;
+    try { localStorage.setItem(TRANS_ENGINE_KEY, engine); } catch(e) {}
+  }
+
   async function transTranslateUnit(unitId) {
     const row = document.querySelector(`.trans-unit-row[data-unit-id="${unitId}"]`);
     const btn = row ? row.querySelector('.trans-unit-translate-btn') : null;
-    if (btn) { btn.disabled = true; btn.textContent = 'Translating…'; }
+    const label = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = `Translating (${_transEngine === 'claude' ? 'Claude' : 'OpenAI'})…`; }
     try {
-      const r = await fetch(`/api/trans/units/${unitId}/translate`, { method: 'POST' });
-      if (!r.ok) throw new Error(await r.text());
-      const unit = await r.json();
-      _transReplaceUnitRow(unit);
+      const r = await fetch(`/api/trans/units/${unitId}/translate`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ engine: _transEngine }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || data.error) throw new Error(data.error || `HTTP ${r.status}`);
+      _transReplaceUnitRow(data);
     } catch(e) {
-      alert('AI translation failed: ' + e.message);
-      if (btn) btn.disabled = false;
+      showToast('⚠ AI translation failed: ' + e.message);
+      if (btn) { btn.disabled = false; btn.textContent = label; }
     }
   }
 
