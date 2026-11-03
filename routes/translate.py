@@ -7,9 +7,9 @@ from auth import is_logged_in, can_access_translation_module, can_edit_existing,
 from db import supabase
 from segmenter import decode, split_paragraphs, detect_section_type, segment_paragraph
 from ai import (group_sentences_by_topic, translate_unit, generate_glossary_entry, check_term_compliance,
-                suggest_style_rules)
+                suggest_style_rules, TRANSLATE_PROMPT_KEY)
 from embeddings import get_embeddings, get_voyage_embedding, get_openai_embedding
-from repositories import terms_repo, glossary_repo
+from repositories import terms_repo, glossary_repo, prompts_repo
 from repositories.audit_repo import write_audit
 from config import TRANSLATION_ENGINES, DEFAULT_TRANSLATION_ENGINE
 
@@ -786,6 +786,7 @@ def api_translate_unit(unit_id):
         "ai_reasoning":      ai_result.get("reasoning") or [],
         "missing_terms":     ai_result.get("missing_terms") or [],
         "ai_translated_at":  _now_iso(),
+        "prompt_version":    ai_result.get("prompt_version"),
         "translated_by":     modifier,
         "status":            "ai_drafted",
         "last_modified_by":  modifier,
@@ -963,6 +964,68 @@ def api_patch_styleguide(rule_id):
         return jsonify(result.data[0])
     except Exception as exc:
         return jsonify({"error": f"Database error: {exc}"}), 500
+
+
+# ── H1 — Editable translation instructions ───────────────────────────────────
+
+MAX_INSTRUCTIONS_LEN = 20000
+
+
+@translate_bp.route("/api/trans/instructions", methods=["GET"])
+@_require_translation
+def api_list_instructions():
+    """Leader+: every version of the base translation instructions, newest first."""
+    if not is_leader():
+        return jsonify({"error": "Leader role or higher required"}), 403
+    try:
+        return jsonify(prompts_repo.list_versions(TRANSLATE_PROMPT_KEY))
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+
+
+@translate_bp.route("/api/trans/instructions", methods=["POST"])
+@_require_translation
+def api_save_instructions():
+    """Leader+: body {content, note} → saved as a new version and made active."""
+    if not is_leader():
+        return jsonify({"error": "Leader role or higher required"}), 403
+    data = request.get_json() or {}
+    content = (data.get("content") or "").strip()
+    note = (data.get("note") or "").strip()
+    if not content:
+        return jsonify({"error": "Instructions text is required"}), 400
+    if len(content) > MAX_INSTRUCTIONS_LEN:
+        return jsonify({"error": f"Instructions are limited to {MAX_INSTRUCTIONS_LEN} characters"}), 400
+    if not note:
+        return jsonify({"error": "Please say what changed"}), 400
+    user = session.get("user_email", "")
+    try:
+        row = prompts_repo.save_new_version(TRANSLATE_PROMPT_KEY, content, note, user)
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+    write_audit("", "", user, session.get("user_name", ""), "instructions_save",
+                field_changed=TRANSLATE_PROMPT_KEY, new_value=f"version {row['version']}", details=note)
+    return jsonify(row), 201
+
+
+@translate_bp.route("/api/trans/instructions/<int:version>/activate", methods=["POST"])
+@_require_translation
+def api_activate_instructions(version):
+    """Leader+: make an older version the active one again."""
+    if not is_leader():
+        return jsonify({"error": "Leader role or higher required"}), 403
+    user = session.get("user_email", "")
+    try:
+        before = prompts_repo.get_active(TRANSLATE_PROMPT_KEY)
+        row = prompts_repo.activate_version(TRANSLATE_PROMPT_KEY, version)
+    except Exception as exc:
+        return jsonify({"error": f"Database error: {exc}"}), 500
+    if not row:
+        return jsonify({"error": "Version not found"}), 404
+    write_audit("", "", user, session.get("user_name", ""), "instructions_activate",
+                field_changed=TRANSLATE_PROMPT_KEY,
+                old_value=f"version {before['version']}" if before else "", new_value=f"version {version}")
+    return jsonify(row)
 
 
 # ── PATCH /api/trans/units/<id> ───────────────────────────────────────────────

@@ -1300,6 +1300,19 @@
           <span id="sg-add-msg" style="font-size:0.82rem;"></span>
         </div>
       </div>
+
+      <!-- H1: editable base translation instructions — leader only -->
+      <details class="trans-upload-section" id="ti-panel" style="margin-bottom:2rem;" ontoggle="if (this.open) tiLoad()">
+        <summary class="trans-upload-title" style="cursor:pointer;">Translation instructions <span id="ti-active-label" style="font-weight:400;font-size:0.8rem;color:#666;"></span></summary>
+        <p style="font-size:0.82rem;color:#666;margin:0.5rem 0 0.8rem;">These instructions are sent with every AI translation. Glossary terms, Style Guide rules and similar past translations are added automatically.</p>
+        <textarea id="ti-content" rows="10" style="width:100%;padding:0.5rem 0.6rem;border:1px solid var(--border);border-radius:3px;font-size:0.88rem;font-family:inherit;box-sizing:border-box;"></textarea>
+        <div style="display:flex;align-items:center;gap:0.75rem;margin-top:0.6rem;flex-wrap:wrap;">
+          <input type="text" id="ti-note" placeholder="What changed? (required)" style="flex:1;min-width:14rem;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:3px;font-size:0.9rem;">
+          <button class="btn btn-primary" onclick="tiSave()">Save as new version</button>
+          <span id="ti-msg" style="font-size:0.82rem;"></span>
+        </div>
+        <div id="ti-versions" style="margin-top:1.2rem;"></div>
+      </details>
       {% endif %}
 
       <!-- Rule list -->
@@ -4670,6 +4683,85 @@
       await sgLoadRules();
     } catch (e) {
       msg.textContent = String(e); msg.style.color = '#c00';
+    }
+  }
+
+  // ── H1 — Editable translation instructions (leader only) ─────────────────
+  let tiVersions = [];
+
+  async function tiLoad() {
+    const box = document.getElementById('ti-versions');
+    box.innerHTML = '<div class="loading">☸ Loading versions…</div>';
+    try {
+      const res = await fetch('/api/trans/instructions');
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || res.statusText); }
+      tiVersions = await res.json();
+      const active = tiVersions.find(v => v.is_active);
+      document.getElementById('ti-content').value = active ? active.content : '';
+      document.getElementById('ti-active-label').textContent = active ? `— version ${active.version} active` : '';
+      tiRenderVersions();
+    } catch (e) {
+      box.innerHTML = `<div class="sg-empty">Error loading instructions: ${escHtml(String(e))}</div>`;
+    }
+  }
+
+  function tiRenderVersions() {
+    const btn = 'font-size:0.75rem;padding:0.2rem 0.6rem;';
+    document.getElementById('ti-versions').innerHTML =
+      '<div class="sg-category-heading">Version history</div>' +
+      tiVersions.map(v => `<div class="sg-rule-card${v.is_active ? '' : ' sg-inactive'}">
+        <div class="sg-rule-body">
+          <div class="sg-rule-text">Version ${v.version} — ${escHtml(v.note || '')}</div>
+          <div class="sg-rule-example">${escHtml(String(v.created_at || '').slice(0, 16).replace('T', ' '))} · ${escHtml(v.created_by || '')}</div>
+          <pre id="ti-view-${v.version}" style="display:none;white-space:pre-wrap;font-family:inherit;font-size:0.85rem;margin:0.5rem 0 0;">${escHtml(v.content)}</pre>
+        </div>
+        <div class="sg-rule-actions">
+          ${v.is_active ? '<span class="sg-badge sg-badge-active">active</span>' : ''}
+          <button class="btn btn-secondary" style="${btn}" onclick="tiToggleView(${v.version})">View</button>
+          ${v.is_active ? '' : `<button class="btn btn-secondary" style="${btn}" onclick="tiRestore(${v.version})">Restore</button>`}
+        </div>
+      </div>`).join('');
+  }
+
+  function tiToggleView(version) {
+    const el = document.getElementById('ti-view-' + version);
+    el.style.display = el.style.display === 'none' ? '' : 'none';
+  }
+
+  async function tiSave() {
+    const content = document.getElementById('ti-content').value.trim();
+    const note    = document.getElementById('ti-note').value.trim();
+    const msg     = document.getElementById('ti-msg');
+    msg.textContent = ''; msg.style.color = '';
+    if (!content) { msg.textContent = 'The instructions cannot be empty.'; msg.style.color = '#c00'; return; }
+    if (!note) { msg.textContent = 'Please say what changed.'; msg.style.color = '#c00'; return; }
+    const active = tiVersions.find(v => v.is_active);
+    if (active && active.content.trim() === content) { msg.textContent = 'No change to save.'; msg.style.color = '#c00'; return; }
+    try {
+      const res = await fetch('/api/trans/instructions', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ content, note }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      document.getElementById('ti-note').value = '';
+      await tiLoad();
+      msg.textContent = `Saved as version ${data.version}. It is used from the next translation.`; msg.style.color = '#1a6b35';
+    } catch (e) {
+      msg.textContent = String(e); msg.style.color = '#c00';
+    }
+  }
+
+  async function tiRestore(version) {
+    if (!confirm(`Make version ${version} the active instructions again? The next AI translations will use it.`)) return;
+    try {
+      const res = await fetch(`/api/trans/instructions/${version}/activate`, { method: 'POST' });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || res.statusText); }
+      await tiLoad();
+      const msg = document.getElementById('ti-msg');
+      msg.textContent = `Version ${version} is active again.`; msg.style.color = '#1a6b35';
+    } catch (e) {
+      alert('Error: ' + e);
     }
   }
 

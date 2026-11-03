@@ -55,7 +55,8 @@ buddhist-vocab/
 │   ├── sources_repo.py
 │   ├── terms_repo.py
 │   ├── extraction_repo.py
-│   └── audit_repo.py
+│   ├── audit_repo.py
+│   └── prompts_repo.py         # H1: editable prompt texts with version history (prompt_versions)
 ├── migrations/
 │   ├── 001_initial_schema.sql  # Full Postgres DDL — 11 tables per design guide
 │   ├── 002_rpc_functions.sql   # next_display_id RPC + atomic write RPCs
@@ -1235,6 +1236,41 @@ Buddha would transmit the Dharma", and "1." at the start of a prose draft (sourc
   Title Case). Claude 58.0 s, 9,093 in / 5,673 out tokens; OpenAI 62.3 s, 6,083 in / 5,273 out.
   `docs/compare_2026-11-02.md` and `_key.md` regenerated (overwritten).
 
+### Stage H1 — Editable Translation Instructions with Version History (2026-11-02)
+
+- **Migration 021 — `021_h1_prompt_versions.sql`** (applied to TCAT-vocab 2026-11-02): table
+  `prompt_versions` (prompt_key, version, content, note, created_by, created_at, is_active;
+  unique (prompt_key, version); partial unique index = one active row per key; RLS on, no
+  policies). Functions `save_prompt_version` (inserts max+1 as the only active row) and
+  `activate_prompt_version` (restore) make the switch atomic. Seeded version 1 of
+  `translate_base` = the pre-H1 text. `trans_units.prompt_version int` records which version
+  produced each AI draft (null = built-in default was used).
+- **What is editable**: the base instructions = the system prompt (translator persona and general
+  guidance). Fixed in code: the user message — Style Guide rules, RAG examples, REQUIRED
+  TERMINOLOGY block and its adaptation rules (they match the compliance check), context, split,
+  heading and retry hints, and the JSON output format. So an edit can never break parsing.
+- **`ai.py`**: `_TRANSLATE_SYSTEM` → `DEFAULT_TRANSLATION_INSTRUCTIONS` (unchanged text).
+  `get_translation_instructions()` returns (text, version) of the active version, or the default
+  with a logged warning if the DB read fails / finds nothing — translation never fails because of
+  this. `build_translate_prompt(..., instructions=None)`; `translate_unit` resolves the text once
+  per draft (draft + retry use the same) and returns `prompt_version`.
+- **`repositories/prompts_repo.py`**: `get_active` (60 s in-process cache, cleared on save /
+  restore), `list_versions`, `save_new_version`, `activate_version`.
+- **Endpoints** (Leader/Admin, server-enforced; audit_log `instructions_save` /
+  `instructions_activate`): `GET /api/trans/instructions`, `POST /api/trans/instructions`
+  {content, note — both required, max 20,000 chars}, `POST /api/trans/instructions/<v>/activate`.
+- **UI**: collapsible "Translation instructions" panel on the Style Guide screen (Leaders only):
+  textarea with the active text, required "What changed?" note, Save as new version; version
+  history with date, author, note, View (expands the text), Restore (with confirm).
+- **Acceptance tests** (Flask test client + live Supabase, 12/12 pass): with version 1 the prompt
+  for unit 351 is byte-for-byte identical to a copy captured before the change; saving version 2
+  with an extra sentence puts it in the next prompt, restoring version 1 removes it; Member gets
+  403 on list / save / restore; unknown version 404; note required; a real OpenAI draft records
+  prompt_version 1; with `prompt_versions` made unreachable (simulated) the prompt is still identical
+  and translation still works (prompt_version null). **Cleanup**: deleted test version 2 and the 2
+  test audit_log rows; version 1 is active. No trans_units rows were written.
+- Not yet clicked through in a browser.
+
 ---
 
 ## Known Issues / Notes
@@ -1264,12 +1300,18 @@ Buddha would transmit the Dharma", and "1." at the start of a prose draft (sourc
 | **G1** | **Done** | AI reasoning notes saved per unit and shown collapsed; F3 missing-term chips persisted and re-checked on Save (migration 018) |
 | **G2** | **Done** | Translator notes per unit (`trans_unit_notes`, migration 019; "Notes (n)" beside History; author/Lead delete) |
 | **G3** | **Done** | "Suggest rule from notes" → AI-drafted Style Guide rule; Lead's rule active at once, Member's proposed for Lead approval; Lead deletes; optional `book_id` scope (migration 020) |
+| **H1** | **Done** | Base translation instructions editable by Leads in the Style Guide screen, every version kept, restore any; draft records its version (migration 021) |
+| **H2** | Planned | AI suggests Style Guide rules from the team's corrections (button + weekly GitHub Actions run) |
+| **H3** | Planned | Fixed test set to check that an instructions / rule change didn't make translations worse |
 | **T5** | Planned | Chapter claiming, collaborative approval flow, annotations (per-unit notes now come from G2) |
 
 ---
 
 ## Next Steps
 
+- **H1 browser test** (Vincent): as Lead, Style Guide → Translation instructions → add one
+  harmless sentence as version 2 → translate one unit → Restore version 1. Then start Stage H2
+  (`docs/TCAT_H1-H3_Prompts.md`) in a new session.
 - **G3 Member path live test**: sign in as a Member → add notes → Suggest → "Submit for Lead
   approval" → as Lead, Approve it in Style Guide → confirm it reaches the next AI Translate.
 - **Send `docs/compare_2026-11-02.md` to Greg and Weiya** (not the `_key` file); pick the

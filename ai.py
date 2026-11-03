@@ -278,7 +278,10 @@ def group_sentences_by_topic(sentences: list) -> list:
         return fallback
 
 
-_TRANSLATE_SYSTEM = (
+# H1: the base instructions (system prompt) are editable in the app — prompt_versions,
+# key 'translate_base'. This is version 1 and the fallback when the database is unreachable.
+# The output format and the dynamic blocks (terms, rules, examples, context) stay in code.
+DEFAULT_TRANSLATION_INSTRUCTIONS = (
     "You are an expert translator of Chinese Buddhist texts — Vajrayana and Chinese Buddhist "
     "teaching literature — into English, writing for a scholarly but accessible readership.\n"
     "- Be faithful to the meaning of the source; do not add content that is not in it.\n"
@@ -287,6 +290,22 @@ _TRANSLATE_SYSTEM = (
     "- Use the REQUIRED TERMINOLOGY, adapted grammatically to the sentence as its rules allow.\n"
     "- Translate only the target sentence; any surrounding text is context."
 )
+TRANSLATE_PROMPT_KEY = "translate_base"
+
+
+def get_translation_instructions() -> tuple:
+    """(text, version) of the active base instructions; (default, None) if the
+    database read fails or finds nothing. Never raises."""
+    try:
+        from repositories import prompts_repo
+        row = prompts_repo.get_active(TRANSLATE_PROMPT_KEY)
+        if row and (row.get("content") or "").strip():
+            return row["content"], row["version"]
+        print("[translate] WARNING: no active translation instructions in DB — using built-in default", flush=True)
+    except Exception as exc:
+        print(f"[translate] WARNING: translation instructions unavailable ({type(exc).__name__}: {exc})"
+              " — using built-in default", flush=True)
+    return DEFAULT_TRANSLATION_INSTRUCTIONS, None
 
 
 def _rendering_options(t: dict) -> list:
@@ -324,12 +343,16 @@ def build_translate_prompt(chinese_text: str, term_constraints: list = None,
                            style_rules: list = None,
                            similar_examples: list = None,
                            paragraph_text: str = "",
-                           missing_terms: list = None) -> dict:
+                           missing_terms: list = None,
+                           instructions: str = None) -> dict:
     """The sentence-translation prompt, shared by every engine (see translate_unit).
 
     Returns {"system": str, "user": str}. missing_terms (retry only) lists required
-    renderings the previous draft left out.
+    renderings the previous draft left out. instructions: the base instructions
+    (system prompt); default = the active version (get_translation_instructions).
     """
+    if instructions is None:
+        instructions = get_translation_instructions()[0]
     style_hint = ""
     if style_rules:
         lines = []
@@ -440,7 +463,7 @@ def build_translate_prompt(chinese_text: str, term_constraints: list = None,
         "term choices, any restructuring or sentence split, and any ambiguity in the Chinese and "
         "how you resolved it. Do not restate the translation."
     ).lstrip()
-    return {"system": _TRANSLATE_SYSTEM, "user": user}
+    return {"system": instructions, "user": user}
 
 
 # Parentheticals that label a usage rather than gloss the term: not required in the output.
@@ -619,7 +642,8 @@ def translate_unit(chinese_text: str, term_constraints: list = None,
     if any is missing the sentence is translated once more with the missing terms
     named, and the draft with fewer missing terms is kept.
 
-    Returns {"english", "split_map", "reasoning", "model", "missing_terms", "retried", "usage"}, plus
+    Returns {"english", "split_map", "reasoning", "model", "missing_terms", "retried", "usage",
+    "prompt_version"} (the base-instructions version used; None = built-in default), plus
     "error": str when the draft failed (english is then "").
     Never raises — provider errors are logged and returned as "error".
     """
@@ -632,17 +656,18 @@ def translate_unit(chinese_text: str, term_constraints: list = None,
 
     usage  = {"calls": 0, "input_tokens": 0, "output_tokens": 0}
     result = {"english": "", "split_map": None, "reasoning": [], "model": model, "missing_terms": [], "retried": False,
-              "usage": usage}
+              "usage": usage, "prompt_version": None}
     if not chinese_text or not chinese_text.strip():
         return result
     if not os.getenv(key_name):
         result["error"] = ("OpenAI" if engine == "openai" else "Anthropic") + " key not configured"
         return result
 
+    instructions, result["prompt_version"] = get_translation_instructions()
     args = dict(term_constraints=term_constraints, context_before=context_before,
                 context_after=context_after, is_long_sentence=is_long_sentence,
                 style_rules=style_rules, similar_examples=similar_examples,
-                paragraph_text=paragraph_text)
+                paragraph_text=paragraph_text, instructions=instructions)
     try:
         english, split_map, reasoning = _parse_translation(call(build_translate_prompt(chinese_text, **args), model, usage))
         if not english:
