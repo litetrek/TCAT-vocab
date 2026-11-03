@@ -1022,8 +1022,15 @@ not reflect the reviewed glossary, and a Known value could override a reviewed F
 - `get_translation_constraint_terms(prefer_source_id=5)`: 傳法 → "transmit the Dharma",
   成就 → "attainment" (Final, not the Known value), 輪迴 → T002904 text, 修行 → T002894 text.
 
-**Not verified in a browser:** tooltip text, checkbox toggle/persistence, dotted underline style,
-and the select-to-add fallback.
+**Browser test (local, 127.0.0.1:5000, 入法門論 ch. 01, 2026-11-02) — PASS:** tooltips show
+"Final: …" for 輪迴/無始/中陰/傳法/修行/法; 學佛, 道, 成就 occur in the chapter but are not
+underlined (360 underlines); "Show all vocabulary" ON → 514 underlines, other-book terms dotted,
+setting survives a reload, OFF → back to 360; clicking 輪迴 opens T002904. Show-all mode is the
+old list without deduplication, so there 輪迴 again shows the older T000911 (by design).
+Select-to-add fallback not exercised.
+
+Local login note: `.env` has the production `GOOGLE_REDIRECT_URI`; for local testing run with
+`GOOGLE_REDIRECT_URI=http://127.0.0.1:5000/callback` and open http://127.0.0.1:5000 (not localhost).
 
 ---
 
@@ -1057,9 +1064,7 @@ and the select-to-add fallback.
 
 ## Next Steps
 
-- **F1 browser test**: open 入法門論 → a chapter → hover 輪迴, 無始, 中陰, 傳法 (expect "Final: …");
-  confirm 學佛/道 are not underlined; toggle "Show all vocabulary" and reload to check it persists.
-  Then Stage F2 (`docs/TCAT_Translation_Fix_Prompts.md`).
+- **Stage F2** (`docs/TCAT_Translation_Fix_Prompts.md`): selectable Claude / OpenAI translation engine.
 - **Book Glossary live UI test** (backend fully verified via live Supabase + a real Flask
   test-client HTTP cycle, but never clicked through in an actual browser): open a book → Chapters
   → "📖 Glossary" button (Leader+ only — confirm it's absent for Members) → open a term from
