@@ -391,8 +391,11 @@ def build_translate_prompt(chinese_text: str, term_constraints: list = None,
         f"{style_hint}{example_hint}{term_hint}{context_hint}{split_hint}{retry_hint}\n\n"
         f"TARGET SENTENCE — translate this: {chinese_text}\n\n"
         "Reply ONLY with a JSON object, no other text or markdown fences:\n"
-        "{\"english\": \"the English translation\", \"split_map\": null or "
-        "[{\"zh\": \"...\", \"en\": \"...\"}, ...]}"
+        "{\"english\": \"the English translation\", \"reasoning\": [\"...\", ...], \"split_map\": null or "
+        "[{\"zh\": \"...\", \"en\": \"...\"}, ...]}\n"
+        "reasoning: 2–4 short notes (each under 25 words) for the human translator — the key "
+        "term choices, any restructuring or sentence split, and any ambiguity in the Chinese and "
+        "how you resolved it. Do not restate the translation."
     ).lstrip()
     return {"system": _TRANSLATE_SYSTEM, "user": user}
 
@@ -504,7 +507,14 @@ def _parse_translation(raw: str) -> tuple:
     raw = re.sub(r'^```[a-z]*\n?', '', raw.strip()).rstrip('`').strip()
     parsed = json.loads(raw)
     split_map = parsed.get("split_map")
-    return str(parsed.get("english", "")).strip(), (split_map if isinstance(split_map, list) else None)
+    reasoning = parsed.get("reasoning") or []
+    if isinstance(reasoning, str):
+        reasoning = reasoning.splitlines()
+    reasoning = [str(r).strip().lstrip("-•* ").strip()[:300] for r in reasoning if str(r).strip()][:4] \
+        if isinstance(reasoning, list) else []
+    return (str(parsed.get("english", "")).strip(),
+            (split_map if isinstance(split_map, list) else None),
+            reasoning)
 
 
 def translate_unit(chinese_text: str, term_constraints: list = None,
@@ -527,7 +537,7 @@ def translate_unit(chinese_text: str, term_constraints: list = None,
     if any is missing the sentence is translated once more with the missing terms
     named, and the draft with fewer missing terms is kept.
 
-    Returns {"english", "split_map", "model", "missing_terms", "retried", "usage"}, plus
+    Returns {"english", "split_map", "reasoning", "model", "missing_terms", "retried", "usage"}, plus
     "error": str when the draft failed (english is then "").
     Never raises — provider errors are logged and returned as "error".
     """
@@ -539,7 +549,7 @@ def translate_unit(chinese_text: str, term_constraints: list = None,
         model, key_name, call = CLAUDE_TRANSLATION_MODEL, "ANTHROPIC_API_KEY", _translate_with_claude
 
     usage  = {"calls": 0, "input_tokens": 0, "output_tokens": 0}
-    result = {"english": "", "split_map": None, "model": model, "missing_terms": [], "retried": False,
+    result = {"english": "", "split_map": None, "reasoning": [], "model": model, "missing_terms": [], "retried": False,
               "usage": usage}
     if not chinese_text or not chinese_text.strip():
         return result
@@ -552,7 +562,7 @@ def translate_unit(chinese_text: str, term_constraints: list = None,
                 style_rules=style_rules, similar_examples=similar_examples,
                 paragraph_text=paragraph_text)
     try:
-        english, split_map = _parse_translation(call(build_translate_prompt(chinese_text, **args), model, usage))
+        english, split_map, reasoning = _parse_translation(call(build_translate_prompt(chinese_text, **args), model, usage))
         if not english:
             result["error"] = f"{model} returned an empty translation"
             return result
@@ -566,14 +576,14 @@ def translate_unit(chinese_text: str, term_constraints: list = None,
         result["retried"] = True
         try:
             prompt2 = build_translate_prompt(chinese_text, missing_terms=missing, **args)
-            english2, split_map2 = _parse_translation(call(prompt2, model, usage))
+            english2, split_map2, reasoning2 = _parse_translation(call(prompt2, model, usage))
             missing2 = check_term_compliance(english2, term_constraints) if english2 else None
             if missing2 is not None and _missing_score(missing2) < _missing_score(missing):
-                english, split_map, missing = english2, split_map2, missing2
+                english, split_map, reasoning, missing = english2, split_map2, reasoning2, missing2
         except Exception as exc:  # the first draft still stands
             print(f"[translate_unit] engine={engine} model={model} retry error: {type(exc).__name__}: {exc}", flush=True)
 
-    result.update(english=english, split_map=split_map, missing_terms=missing)
+    result.update(english=english, split_map=split_map, reasoning=reasoning, missing_terms=missing)
     return result
 
 

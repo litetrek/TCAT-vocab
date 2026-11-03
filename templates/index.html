@@ -527,6 +527,12 @@
     .trans-missing-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.35rem; }
     .trans-missing-chip { font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 999px; cursor: pointer; border: 1px solid rgba(214,150,30,0.6); background: rgba(240,180,60,0.15); color: #8a5a00; }
     .trans-missing-chip:hover { background: rgba(240,180,60,0.3); }
+    .trans-reasoning { font-size: 0.8rem; color: var(--text-soft); margin: 0.1rem 0 0.4rem; }
+    .trans-reasoning summary { cursor: pointer; width: fit-content; user-select: none; }
+    .trans-reasoning summary:hover { color: var(--gold); }
+    .trans-reasoning-meta { font-size: 0.72rem; opacity: 0.8; }
+    .trans-reasoning ul { margin: 0.3rem 0 0; padding: 0.4rem 0.75rem 0.4rem 1.6rem; background: rgba(201,168,76,0.06); border-left: 2px solid rgba(201,168,76,0.5); border-radius: 2px; color: var(--ink-soft); line-height: 1.5; }
+    .trans-reasoning li { margin: 0.1rem 0; }
     .trd-showall-label { font-size: 0.8rem; color: var(--text-soft); display: inline-flex; align-items: center; gap: 0.3rem; cursor: pointer; white-space: nowrap; }
     .edit-view-overlay { position: fixed; inset: 0; z-index: 600; background: var(--paper, #fdfaf3); box-shadow: 0 0 40px rgba(26,18,8,0.35); }
     #trans-review-body .term-known { cursor: pointer; }
@@ -4999,7 +5005,7 @@
       </div>
       <div class="trans-unit-text">${trdHighlightKnownTerms(u.chinese_text || '')}</div>
       ${_CAN_TRANSLATE ? `<textarea class="trans-unit-en-input" id="trans-en-${u.id}" rows="2" oninput="_transAutoGrow(this)" placeholder="No translation yet — click AI Translate.">${escHtml(englishText)}</textarea>` : (englishText ? `<div class="trans-unit-text" style="color:var(--text-soft);">${escHtml(englishText)}</div>` : '')}
-      ${u.ai_model ? `<div class="trans-unit-model" style="font-size:0.72rem;color:var(--text-soft);margin-top:0.15rem;">AI draft: ${escHtml(u.ai_model)}</div>` : ''}
+      ${_transReasoningHtml(u)}
       ${(u.missing_terms || []).length ? `<div class="trans-missing-chips">${u.missing_terms.map(m =>
         `<span class="trans-missing-chip" title="Click to open this term" onclick="trdOpenTermFull('${escHtml(String(m.term_id || ''))}')">⚠ ${escHtml(m.chinese)} → ${escHtml(m.english)} ${m.partial ? 'gloss dropped' : 'not used'}</span>`).join('')}</div>` : ''}
       ${_CAN_TRANSLATE ? `<div class="trans-unit-actions">
@@ -5012,6 +5018,24 @@
       </div>`}
       <div class="trans-unit-history" id="audit-log-${escHtml(u.display_id || '')}" style="display:none;margin-top:0.5rem;"></div>
     </div>`;
+  }
+
+  // G1: the AI's notes on its latest draft, collapsed by default. Units drafted before G1
+  // have no reasoning and keep the plain "AI draft: model" line.
+  const _transReasonOpen = new Set();   // unit ids left expanded — survives a row re-render
+  function _transReasoningHtml(u) {
+    const notes = Array.isArray(u.ai_reasoning) ? u.ai_reasoning : [];
+    if (!notes.length) {
+      return u.ai_model ? `<div class="trans-unit-model" style="font-size:0.72rem;color:var(--text-soft);margin-top:0.15rem;">AI draft: ${escHtml(u.ai_model)}</div>` : '';
+    }
+    const when = u.ai_translated_at
+      ? new Date(u.ai_translated_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '';
+    const meta = [u.ai_model, when].filter(Boolean).map(escHtml).join(' · ');
+    return `<details class="trans-reasoning"${_transReasonOpen.has(u.id) ? ' open' : ''}
+        ontoggle="this.open ? _transReasonOpen.add(${u.id}) : _transReasonOpen.delete(${u.id})">
+      <summary>Why this translation (${notes.length})${meta ? ` <span class="trans-reasoning-meta">— AI draft, ${meta}</span>` : ''}</summary>
+      <ul>${notes.map(n => `<li>${escHtml(String(n))}</li>`).join('')}</ul>
+    </details>`;
   }
 
   // Toggle the per-unit audit history (reuses loadAuditLog — audit rows are keyed by the unit's display_id)

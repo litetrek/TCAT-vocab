@@ -6,7 +6,7 @@ from flask import Blueprint, jsonify, request, session
 from auth import is_logged_in, can_access_translation_module, can_edit_existing, is_leader, is_admin
 from db import supabase
 from segmenter import decode, split_paragraphs, detect_section_type, segment_paragraph
-from ai import group_sentences_by_topic, translate_unit, generate_glossary_entry
+from ai import group_sentences_by_topic, translate_unit, generate_glossary_entry, check_term_compliance
 from embeddings import get_embeddings, get_voyage_embedding, get_openai_embedding
 from repositories import terms_repo, glossary_repo
 from repositories.audit_repo import write_audit
@@ -757,6 +757,9 @@ def api_translate_unit(unit_id):
     updates = {
         "english_final":     ai_result["english"],
         "ai_model":          ai_result["model"],
+        "ai_reasoning":      ai_result.get("reasoning") or [],
+        "missing_terms":     ai_result.get("missing_terms") or [],
+        "ai_translated_at":  _now_iso(),
         "translated_by":     modifier,
         "status":            "ai_drafted",
         "last_modified_by":  modifier,
@@ -781,8 +784,7 @@ def api_translate_unit(unit_id):
         details=("initial draft" if is_first_draft else "regenerate") + f" ({ai_result['model']})",
     )
 
-    return jsonify({**upd.data[0], "engine": engine, "model": ai_result["model"],
-                    "missing_terms": ai_result.get("missing_terms") or []})
+    return jsonify({**upd.data[0], "engine": engine, "model": ai_result["model"]})
 
 
 # ── T4.1 — Style Guide ──────────────────────────────────────────────────────
@@ -918,6 +920,16 @@ def api_patch_unit(unit_id):
         updates["approved_by"] = modifier
     else:
         updates["status"] = "in_review"
+
+    # G1: re-check the glossary on the edited text so the ⚠ chips stay accurate.
+    if changed:
+        try:
+            term_hits = _match_constraint_terms(
+                unit.get("chinese_text") or "", prefer_source_id=_get_book_source_id(unit["chapter_id"])
+            )
+            updates["missing_terms"] = check_term_compliance(new_text, term_hits) if new_text else []
+        except Exception:
+            pass
 
     # Feed the AI learning loop (RAG) on every save — Save or Reviewed.
     # Compare against the original AI draft (not the last saved text), so a

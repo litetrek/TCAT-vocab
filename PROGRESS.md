@@ -1128,6 +1128,28 @@ Claude Haiku, unchanged.
 - Glossary data issue seen: 小法 → "A lesser teaching" (capital A) is copied verbatim mid-sentence
   ("disparages A lesser teaching"); the term's Known/Final text should be "a lesser teaching".
 
+### Stage G1 — AI Translation Reasoning (2026-11-02)
+
+First of three stages giving translators more to decide with (G1 reasoning, G2 notes,
+G3 notes → Style Guide rule proposed by anyone, approved only by a Lead).
+
+- **Migration 018 — `018_g1_ai_reasoning.sql`** (applied to TCAT-vocab 2026-11-02):
+  `trans_units` gains `ai_reasoning jsonb`, `missing_terms jsonb`, `ai_translated_at timestamptz`.
+- **`ai.py`**: the translate prompt now asks for `"reasoning"`: 2–4 notes under 25 words (key
+  term choices, restructuring/splits, ambiguities and how they were resolved).
+  `_parse_translation` returns `(english, split_map, reasoning)`, accepting a list or a
+  newline string, capped at 4 notes × 300 chars. A retry keeps the reasoning of the draft kept.
+  `translate_unit` returns `reasoning`.
+- **`routes/translate.py`**: AI Translate saves `ai_reasoning`, `missing_terms` and
+  `ai_translated_at` (re-translate overwrites them). Save re-runs `check_term_compliance` on
+  changed text, so the F3 ⚠ chips now persist across reloads and clear once a term is fixed.
+- **`templates/index.html`**: `_transReasoningHtml(u)` — collapsed `<details>` under the English
+  box, "Why this translation (n) — AI draft, model · date"; open state kept across row re-renders
+  (`_transReasonOpen`). Units drafted before G1 keep the plain "AI draft: model" line.
+- **Tested**: parser on list / newline-string / missing reasoning; live local AI Translate on
+  U000344 (OpenAI gpt-5.6-sol) returned 3 notes, saved and shown after reload, no console errors.
+  Not tested live: Save re-check of missing terms (would change a unit's status).
+
 ---
 
 ## Known Issues / Notes
@@ -1154,12 +1176,16 @@ Claude Haiku, unchanged.
 | **T4.1** | **Done** | Style guide CRUD (`/api/trans/styleguide`), leader-only management UI, prompt injection into `translate_unit()` |
 | **T4.2** | **Done** | Dual-provider embeddings (Voyage + OpenAI, migration 010), `find_similar_revisions_*` RPCs, RAG example injection with cold-start similarity threshold, `scripts/compare_embedding_providers.py` |
 | **T4.3** | Planned | Three-column review workspace polish, diff highlighting (english_draft vs english_final) |
-| **T5** | Planned | Chapter claiming, collaborative approval flow, annotations |
+| **G1** | **Done** | AI reasoning notes saved per unit and shown collapsed; F3 missing-term chips persisted and re-checked on Save (migration 018) |
+| **G2** | Planned | Translator notes per unit (`trans_unit_notes`, "Notes (n)" beside History; author/Lead delete) |
+| **G3** | Planned | "Suggest rule from notes" → AI-drafted Style Guide rule; members propose, Lead approves/deletes; optional `book_id` scope |
+| **T5** | Planned | Chapter claiming, collaborative approval flow, annotations (per-unit notes now come from G2) |
 
 ---
 
 ## Next Steps
 
+- **G2 — translator notes**, then **G3 — notes → Style Guide rule** (design agreed 2026-11-02).
 - **Send `docs/compare_2026-11-02.md` to Greg and Weiya** (not the `_key` file); pick the
   default engine from their verdicts.
 - **Fix glossary entry 小法** → "a lesser teaching" (lower-case a).
