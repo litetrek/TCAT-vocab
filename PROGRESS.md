@@ -1203,6 +1203,8 @@ G3 notes → Style Guide rule proposed by anyone, approved only by a Lead).
   just before AI Translate / Re-translate; all card selectors stay in sync (`transSetEngine`
   updates every `.trans-engine-select`; choice still saved in localStorage `tcat_trans_engine`).
   Card action rows now wrap on narrow screens.
+- **Follow-up**: card buttons are now [engine] [AI Translate/Re-translate] [Notes] [Save]
+  [Reviewed] [History]; Notes and History panels are mutually exclusive (opening one closes the other).
 
 ---
 
