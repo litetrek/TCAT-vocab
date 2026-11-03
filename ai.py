@@ -463,7 +463,7 @@ _REASONING_HEADROOM  = 6000  # both top models think before answering; that coun
 _TRANSLATE_TIMEOUT_S = 90
 
 
-def _translate_with_claude(prompt: dict, model: str) -> str:
+def _translate_with_claude(prompt: dict, model: str, usage: dict = None) -> str:
     ai = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"), timeout=_TRANSLATE_TIMEOUT_S)
     response = ai.messages.create(
         model=model,
@@ -471,11 +471,12 @@ def _translate_with_claude(prompt: dict, model: str) -> str:
         system=prompt["system"],
         messages=[{"role": "user", "content": prompt["user"]}],
     )
+    _add_usage(usage, response.usage.input_tokens, response.usage.output_tokens)
     # Newer models may return a thinking block before the text block.
     return "".join(b.text for b in response.content if getattr(b, "type", "") == "text")
 
 
-def _translate_with_openai(prompt: dict, model: str) -> str:
+def _translate_with_openai(prompt: dict, model: str, usage: dict = None) -> str:
     import openai
     client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"), timeout=_TRANSLATE_TIMEOUT_S)
     # GPT-5.x are reasoning models: Responses API, max_output_tokens (not max_tokens)
@@ -486,7 +487,17 @@ def _translate_with_openai(prompt: dict, model: str) -> str:
         input=prompt["user"],
         max_output_tokens=TRANSLATE_MAX_TOKENS + _REASONING_HEADROOM,
     )
+    if response.usage:
+        _add_usage(usage, response.usage.input_tokens, response.usage.output_tokens)
     return response.output_text
+
+
+def _add_usage(usage: dict, input_tokens: int, output_tokens: int) -> None:
+    """Accumulate token counts across the draft and any retry (output includes reasoning)."""
+    if usage is not None:
+        usage["calls"] += 1
+        usage["input_tokens"] += input_tokens or 0
+        usage["output_tokens"] += output_tokens or 0
 
 
 def _parse_translation(raw: str) -> tuple:
@@ -516,7 +527,7 @@ def translate_unit(chinese_text: str, term_constraints: list = None,
     if any is missing the sentence is translated once more with the missing terms
     named, and the draft with fewer missing terms is kept.
 
-    Returns {"english", "split_map", "model", "missing_terms", "retried"}, plus
+    Returns {"english", "split_map", "model", "missing_terms", "retried", "usage"}, plus
     "error": str when the draft failed (english is then "").
     Never raises — provider errors are logged and returned as "error".
     """
@@ -527,7 +538,9 @@ def translate_unit(chinese_text: str, term_constraints: list = None,
     else:
         model, key_name, call = CLAUDE_TRANSLATION_MODEL, "ANTHROPIC_API_KEY", _translate_with_claude
 
-    result = {"english": "", "split_map": None, "model": model, "missing_terms": [], "retried": False}
+    usage  = {"calls": 0, "input_tokens": 0, "output_tokens": 0}
+    result = {"english": "", "split_map": None, "model": model, "missing_terms": [], "retried": False,
+              "usage": usage}
     if not chinese_text or not chinese_text.strip():
         return result
     if not os.getenv(key_name):
@@ -539,7 +552,7 @@ def translate_unit(chinese_text: str, term_constraints: list = None,
                 style_rules=style_rules, similar_examples=similar_examples,
                 paragraph_text=paragraph_text)
     try:
-        english, split_map = _parse_translation(call(build_translate_prompt(chinese_text, **args), model))
+        english, split_map = _parse_translation(call(build_translate_prompt(chinese_text, **args), model, usage))
         if not english:
             result["error"] = f"{model} returned an empty translation"
             return result
@@ -553,7 +566,7 @@ def translate_unit(chinese_text: str, term_constraints: list = None,
         result["retried"] = True
         try:
             prompt2 = build_translate_prompt(chinese_text, missing_terms=missing, **args)
-            english2, split_map2 = _parse_translation(call(prompt2, model))
+            english2, split_map2 = _parse_translation(call(prompt2, model, usage))
             missing2 = check_term_compliance(english2, term_constraints) if english2 else None
             if missing2 is not None and _missing_score(missing2) < _missing_score(missing):
                 english, split_map, missing = english2, split_map2, missing2

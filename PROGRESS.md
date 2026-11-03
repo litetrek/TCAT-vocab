@@ -1109,6 +1109,25 @@ Claude Haiku, unchanged.
 - Browser (local): chips render for unit 353 with sample data and clicking 傳法 opens T002899; no
   console errors. A live AI Translate click with chips was not done (it would overwrite a unit).
 
+### Stage F4 — Blind Engine Comparison for Reviewers (2026-11-02)
+
+- **`scripts/compare_engines.py`** (new): `--book-id` (default 10), `--units` (default
+  354,353,352,351,348,349,350 = 入法門論 sentences 1–7), `--seed` (repeatable A/B order). Builds
+  constraints / context / style rules / RAG examples with the same functions as
+  `api_translate_unit`, drafts with both engines in parallel, writes nothing to Supabase.
+  Outputs `docs/compare_<date>.md` (Version A/B per sentence, random order, required terms and
+  missing terms per version; send to reviewers) and `docs/compare_<date>_key.md` (engine per
+  version, plus current T-CAT English for reference; keep back). Prints time and tokens per call.
+- **`ai.py`**: `translate_unit` now also returns `usage` {calls, input_tokens, output_tokens},
+  summed over the draft and any retry (OpenAI output includes reasoning).
+
+#### Run 2026-11-02
+- All 14 drafts succeeded first time, no retries, no missing glossary terms.
+- Claude opus-5-5: 48.7 s total, 6,922 in / 4,956 out tokens. OpenAI gpt-5.6-sol: 41.2 s,
+  4,716 in / 3,902 out. Slowest single call 12.2 s.
+- Glossary data issue seen: 小法 → "A lesser teaching" (capital A) is copied verbatim mid-sentence
+  ("disparages A lesser teaching"); the term's Known/Final text should be "a lesser teaching".
+
 ---
 
 ## Known Issues / Notes
@@ -1141,8 +1160,9 @@ Claude Haiku, unchanged.
 
 ## Next Steps
 
-- **Stage F4** (`docs/TCAT_Translation_Fix_Prompts.md`): blind OpenAI vs Claude comparison of
-  入法門論 sentences 1–7 for Greg and Weiya (`scripts/compare_engines.py`, no DB writes).
+- **Send `docs/compare_2026-11-02.md` to Greg and Weiya** (not the `_key` file); pick the
+  default engine from their verdicts.
+- **Fix glossary entry 小法** → "a lesser teaching" (lower-case a).
 - **Book Glossary live UI test** (backend fully verified via live Supabase + a real Flask
   test-client HTTP cycle, but never clicked through in an actual browser): open a book → Chapters
   → "📖 Glossary" button (Leader+ only — confirm it's absent for Members) → open a term from
