@@ -593,7 +593,8 @@ def get_translation_constraint_terms(prefer_source_id=None):
     books. If none of the duplicates is linked to the source, all distinct
     renderings are kept (previous behaviour), best first.
 
-    Each item: {"chinese": str, "english": str, "alternatives": bool}. Filtered
+    Each item: {"chinese": str, "english": str, "alternatives": bool,
+    "term_id": display_id}. Filtered
     client-side (rather than a PostgREST .or_() filter) to keep the query shape
     identical to the rest of this module's paginated fetches.
     """
@@ -602,7 +603,7 @@ def get_translation_constraint_terms(prefer_source_id=None):
     while True:
         chunk = (
             supabase.table("terms")
-            .select("id,chinese,translation_known,translation_first,final,status")
+            .select("id,display_id,chinese,translation_known,translation_first,final,status")
             .range(offset, offset + _PAGE - 1)
             .execute()
             .data
@@ -620,7 +621,7 @@ def get_translation_constraint_terms(prefer_source_id=None):
             logger.warning("term_sources lookup failed for source %s: %s", prefer_source_id, exc)
             preferred_ids = set()
 
-    # chinese -> list of (rank, english, alternatives, is_preferred), in first-seen order
+    # chinese -> list of (rank, english, alternatives, is_preferred, display_id), in first-seen order
     by_chinese = {}
     for r in rows:
         chinese = (r.get("chinese") or "").strip()
@@ -635,7 +636,7 @@ def get_translation_constraint_terms(prefer_source_id=None):
             alternatives = ";" in english
         if english:
             by_chinese.setdefault(chinese, []).append(
-                (_dup_rank(r), english, alternatives, r.get("id") in preferred_ids))
+                (_dup_rank(r), english, alternatives, r.get("id") in preferred_ids, r.get("display_id") or ""))
 
     out = []
     for chinese, cands in by_chinese.items():
@@ -643,11 +644,12 @@ def get_translation_constraint_terms(prefer_source_id=None):
         if any(c[3] for c in cands):
             cands = [c for c in cands if c[3]][:1]
         seen = set()
-        for _, english, alternatives, _ in cands:
+        for _, english, alternatives, _, display_id in cands:
             if english in seen:
                 continue
             seen.add(english)
-            out.append({"chinese": chinese, "english": english, "alternatives": alternatives})
+            out.append({"chinese": chinese, "english": english, "alternatives": alternatives,
+                        "term_id": display_id})
     return out
 
 

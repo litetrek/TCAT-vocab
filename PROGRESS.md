@@ -1074,6 +1074,41 @@ Claude Haiku, unchanged.
 - Glossary note: both engines rendered 小法 as "A lesser teaching" (capital A), copied from the
   glossary constraint — worth checking that term's Final.
 
+### Stage F3 — Better Prompt + Glossary Compliance Check (2026-11-02)
+
+- **Prompt (`ai.build_translate_prompt`, both engines):** now returns `{system, user}` — system
+  instructions (expert translator of Vajrayana / Chinese Buddhist teaching literature; faithful, no
+  added content; natural English; split long sentences; translate only the target). Separate
+  "REQUIRED TERMINOLOGY — reviewed by the translation team…" block, one term per line; alternatives
+  say "choose the alternative that fits the context"; (noun)/(verb) labels explained as not part of
+  the translation. Context = the whole paragraph (all units with the same chapter + paragraph_index,
+  "context only"), plus the previous/next unit when it lies outside the paragraph. Style rules and
+  RAG examples unchanged. Claude gets `system=`, OpenAI `instructions=`.
+- **Constraint selection (`routes/translate._match_constraint_terms`):** longest match claims its
+  characters, as the workspace underlines do, so 法 is not required inside 傳法 / 小法. Constraint
+  items carry `term_id` (display_id) from `terms_repo.get_translation_constraint_terms`.
+- **Compliance check (`ai.check_term_compliance`):** for each required term: case-insensitive,
+  punctuation ignored, simple inflections allowed (transmit → transmitted, practice → practicing,
+  being → beings), a leading infinitive "to" ignored, any ";"-separated option counts, usage labels
+  not required. A rendering found without its parenthetical gloss is reported as `partial`
+  ("gloss dropped"). Diacritics are required (Vajrayana ≠ Vajrayāna).
+- **Retry:** any missing term → one more call naming the missing renderings; the draft with the
+  lower score (missing = 1, partial = 0.5) is kept. Retry errors leave the first draft in place.
+- **API:** `POST /api/trans/units/<id>/translate` response adds `missing_terms`
+  `[{chinese, english, term_id, partial}]` (not stored). Log line adds `retried=yes|no missing=N`.
+- **UI:** amber chips under the unit after AI Translate — "⚠ 傳法 → transmit the Dharma not used" or
+  "… gloss dropped"; clicking opens the term. Chips disappear on reload (not stored, by design).
+
+#### Tests (2026-11-02) — no DB writes
+- Checker unit cases (offline): case/punctuation, missing, gloss dropped → partial, gloss kept,
+  (verb) label, alternatives, inflections, plurals, diacritics — all pass.
+- Unit 353 text (傳法), built exactly as the route builds it: OpenAI first wrote "transmitted the
+  Dharma" (reported as missing before inflections were allowed → retry); Claude kept "transmit the
+  Dharma" after a retry. Unit 351 text (中陰): both engines kept "intermediate state (Bardo in
+  Tibetan)". Drafts took 11–26 s including a retry (within Vercel's 60 s).
+- Browser (local): chips render for unit 353 with sample data and clicking 傳法 opens T002899; no
+  console errors. A live AI Translate click with chips was not done (it would overwrite a unit).
+
 ---
 
 ## Known Issues / Notes
@@ -1106,10 +1141,8 @@ Claude Haiku, unchanged.
 
 ## Next Steps
 
-- **F2 live setup**: add `DEFAULT_TRANSLATION_ENGINE`, `OPENAI_TRANSLATION_MODEL`,
-  `CLAUDE_TRANSLATION_MODEL` (optional, defaults apply) and confirm `OPENAI_API_KEY` in the
-  GreenGeeks `.env`; then translate one unit with each engine.
-- **Stage F3** (`docs/TCAT_Translation_Fix_Prompts.md`): better prompt + glossary compliance check.
+- **Stage F4** (`docs/TCAT_Translation_Fix_Prompts.md`): blind OpenAI vs Claude comparison of
+  入法門論 sentences 1–7 for Greg and Weiya (`scripts/compare_engines.py`, no DB writes).
 - **Book Glossary live UI test** (backend fully verified via live Supabase + a real Flask
   test-client HTTP cycle, but never clicked through in an actual browser): open a book → Chapters
   → "📖 Glossary" button (Leader+ only — confirm it's absent for Members) → open a term from

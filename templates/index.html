@@ -524,6 +524,9 @@
     .term-known.term-reviewed:hover { background: rgba(58,156,92,0.28); }
     .term-known.term-other-book { background: none; border-bottom: 1px dotted rgba(128,128,128,0.45); }
     .term-known.term-other-book:hover { background: rgba(128,128,128,0.10); }
+    .trans-missing-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.35rem; }
+    .trans-missing-chip { font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 999px; cursor: pointer; border: 1px solid rgba(214,150,30,0.6); background: rgba(240,180,60,0.15); color: #8a5a00; }
+    .trans-missing-chip:hover { background: rgba(240,180,60,0.3); }
     .trd-showall-label { font-size: 0.8rem; color: var(--text-soft); display: inline-flex; align-items: center; gap: 0.3rem; cursor: pointer; white-space: nowrap; }
     .edit-view-overlay { position: fixed; inset: 0; z-index: 600; background: var(--paper, #fdfaf3); box-shadow: 0 0 40px rgba(26,18,8,0.35); }
     #trans-review-body .term-known { cursor: pointer; }
@@ -4997,6 +5000,8 @@
       <div class="trans-unit-text">${trdHighlightKnownTerms(u.chinese_text || '')}</div>
       ${_CAN_TRANSLATE ? `<textarea class="trans-unit-en-input" id="trans-en-${u.id}" rows="2" oninput="_transAutoGrow(this)" placeholder="No translation yet — click AI Translate.">${escHtml(englishText)}</textarea>` : (englishText ? `<div class="trans-unit-text" style="color:var(--text-soft);">${escHtml(englishText)}</div>` : '')}
       ${u.ai_model ? `<div class="trans-unit-model" style="font-size:0.72rem;color:var(--text-soft);margin-top:0.15rem;">AI draft: ${escHtml(u.ai_model)}</div>` : ''}
+      ${(u.missing_terms || []).length ? `<div class="trans-missing-chips">${u.missing_terms.map(m =>
+        `<span class="trans-missing-chip" title="Click to open this term" onclick="trdOpenTermFull('${escHtml(String(m.term_id || ''))}')">⚠ ${escHtml(m.chinese)} → ${escHtml(m.english)} ${m.partial ? 'gloss dropped' : 'not used'}</span>`).join('')}</div>` : ''}
       ${_CAN_TRANSLATE ? `<div class="trans-unit-actions">
         <button class="btn btn-sm btn-secondary trans-unit-translate-btn" onclick="transTranslateUnit(${u.id})">${translateLabel}</button>
         <button class="btn btn-sm btn-secondary" onclick="transSaveUnit(${u.id}, false)">Save</button>

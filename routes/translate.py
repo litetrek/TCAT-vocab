@@ -82,7 +82,24 @@ def _match_constraint_terms(chinese_text, limit=15, prefer_source_id=None):
         return []
     hits = [t for t in all_terms if t["chinese"] and t["chinese"] in chinese_text]
     hits.sort(key=lambda t: len(t["chinese"]), reverse=True)
-    return hits[:limit]
+    # Longest match claims its characters (as the workspace underlines do): a term
+    # is required only where it is not part of a longer matched term — 法 is not
+    # required inside 傳法 or 小法.
+    claimed = [False] * len(chinese_text)
+    kept, seen = [], set()
+    for t in hits:
+        ch, free_hit, pos = t["chinese"], False, chinese_text.find(t["chinese"])
+        while pos != -1:
+            span = range(pos, pos + len(ch))
+            if not any(claimed[i] for i in span):
+                free_hit = True
+                for i in span:
+                    claimed[i] = True
+            pos = chinese_text.find(ch, pos + 1)
+        if free_hit or ch in seen:  # duplicates of a kept Chinese term stay together
+            kept.append(t)
+            seen.add(ch)
+    return kept[:limit]
 
 
 def _get_active_style_rules():
@@ -132,25 +149,35 @@ def _get_similar_examples(chinese_text: str, match_limit: int = 5, threshold: fl
 
 
 def _get_context(chapter_id, unit_id):
-    """Return (prev_chinese, next_chinese) — adjacent confirmed units in the same chapter."""
+    """Return (prev_chinese, next_chinese, paragraph_chinese) for a unit.
+
+    paragraph_chinese: all units of the unit's paragraph, in order (F3).
+    prev/next: the adjacent units in the chapter, only when they lie outside that
+    paragraph (inside it they are already part of paragraph_chinese).
+    """
     try:
         result = (
             supabase.table("trans_units")
-            .select("id,chinese_text")
+            .select("id,chinese_text,paragraph_index")
             .eq("chapter_id", chapter_id)
             .order("paragraph_index")
             .order("unit_order")
             .execute()
         )
     except Exception:
-        return "", ""
+        return "", "", ""
     rows = result.data or []
     idx = next((i for i, r in enumerate(rows) if r["id"] == unit_id), None)
     if idx is None:
-        return "", ""
-    prev_text = rows[idx - 1]["chinese_text"] if idx > 0 else ""
-    next_text = rows[idx + 1]["chinese_text"] if idx < len(rows) - 1 else ""
-    return prev_text or "", next_text or ""
+        return "", "", ""
+    para = rows[idx]["paragraph_index"]
+    para_rows = [r for r in rows if r["paragraph_index"] == para]
+    paragraph = "".join((r["chinese_text"] or "") for r in para_rows) if len(para_rows) > 1 else ""
+    prev_row = rows[idx - 1] if idx > 0 else None
+    next_row = rows[idx + 1] if idx < len(rows) - 1 else None
+    prev_text = prev_row["chinese_text"] if prev_row and (not paragraph or prev_row["paragraph_index"] != para) else ""
+    next_text = next_row["chinese_text"] if next_row and (not paragraph or next_row["paragraph_index"] != para) else ""
+    return prev_text or "", next_text or "", paragraph
 
 
 # ── GET /api/trans/known-terms ───────────────────────────────────────────────
@@ -695,7 +722,7 @@ def api_translate_unit(unit_id):
     term_hits          = _match_constraint_terms(
         chinese_text, prefer_source_id=_get_book_source_id(unit["chapter_id"])
     )
-    ctx_before, ctx_after = _get_context(unit["chapter_id"], unit_id)
+    ctx_before, ctx_after, paragraph = _get_context(unit["chapter_id"], unit_id)
     active_rules       = _get_active_style_rules()
     similar_examples   = _get_similar_examples(chinese_text)
 
@@ -709,12 +736,14 @@ def api_translate_unit(unit_id):
         style_rules=active_rules,
         similar_examples=similar_examples,
         engine=engine,
+        paragraph_text=paragraph,
     )
     _elapsed = time.time() - _t0
     _long_flag = "LONG_SENTENCE" if bool(unit.get("is_long_sentence")) else "normal"
     print(
         f"[translate_unit] unit_id={unit_id} engine={engine} model={ai_result['model']} {_long_flag} "
         f"terms={len(term_hits)} examples={len(similar_examples)} "
+        f"retried={'yes' if ai_result.get('retried') else 'no'} missing={len(ai_result.get('missing_terms') or [])} "
         f"elapsed={_elapsed:.2f}s{' error=' + ai_result['error'] if ai_result.get('error') else ''}",
         flush=True,
     )
@@ -752,7 +781,8 @@ def api_translate_unit(unit_id):
         details=("initial draft" if is_first_draft else "regenerate") + f" ({ai_result['model']})",
     )
 
-    return jsonify({**upd.data[0], "engine": engine, "model": ai_result["model"]})
+    return jsonify({**upd.data[0], "engine": engine, "model": ai_result["model"],
+                    "missing_terms": ai_result.get("missing_terms") or []})
 
 
 # ── T4.1 — Style Guide ──────────────────────────────────────────────────────
