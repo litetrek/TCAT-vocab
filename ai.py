@@ -284,7 +284,7 @@ _TRANSLATE_SYSTEM = (
     "- Be faithful to the meaning of the source; do not add content that is not in it.\n"
     "- Write natural, readable English rather than a word-for-word rendering.\n"
     "- Where it helps the English, split a long Chinese sentence into several English sentences.\n"
-    "- Use the REQUIRED TERMINOLOGY exactly as given.\n"
+    "- Use the REQUIRED TERMINOLOGY, adapted grammatically to the sentence as its rules allow.\n"
     "- Translate only the target sentence; any surrounding text is context."
 )
 
@@ -293,6 +293,29 @@ def _rendering_options(t: dict) -> list:
     """The acceptable English options of one constraint term (";"-separated parts)."""
     parts = [p.strip() for p in (t.get("english") or "").split(";")]
     return [p for p in parts if p]
+
+
+_ZH_DIGITS = {"零": 0, "〇": 0, "一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
+              "六": 6, "七": 7, "八": 8, "九": 9}
+# "一 ", "二、", "三．", "（四）", "(五)" at the start of a unit
+_HEADING_RE = re.compile(r"^\s*(?:[（(]\s*([一二三四五六七八九十〇零]{1,3})\s*[）)]\s*"
+                         r"|([一二三四五六七八九十〇零]{1,3})\s*(?:[、．.]\s*|\s+))(?=\S)")
+
+
+def _zh_number(numeral: str) -> int:
+    """一 → 1, 十 → 10, 十二 → 12, 二十三 → 23 (up to 99)."""
+    if "十" not in numeral:
+        return _ZH_DIGITS.get(numeral, 0) if len(numeral) == 1 else 0
+    tens, _, ones = numeral.partition("十")
+    return (_ZH_DIGITS.get(tens, 0) if tens else 1) * 10 + (_ZH_DIGITS.get(ones, 0) if ones else 0)
+
+
+def heading_number(chinese_text: str):
+    """Section number if the unit starts with a Chinese numeral heading marker, else None."""
+    m = _HEADING_RE.match(chinese_text or "")
+    if not m:
+        return None
+    return _zh_number(m.group(1) or m.group(2)) or None
 
 
 def build_translate_prompt(chinese_text: str, term_constraints: list = None,
@@ -352,10 +375,19 @@ def build_translate_prompt(chinese_text: str, term_constraints: list = None,
                 lines.append(f'- {t["chinese"]} → "{t["english"]}"')
         if lines:
             term_hint = (
-                "\n\nREQUIRED TERMINOLOGY — reviewed by the translation team. Use these renderings "
-                "exactly, including any parenthetical gloss, capitalisation and diacritics. Where a "
-                "rendering lists usages such as (noun) / (verb), use the one that fits; those labels "
-                "themselves are not part of the translation.\n" + "\n".join(lines)
+                "\n\nREQUIRED TERMINOLOGY — reviewed by the translation team. Keep each term's key "
+                "words, diacritics and any parenthetical gloss, but adapt the rendering grammatically "
+                "to the sentence:\n"
+                "- Capitalisation follows the sentence: capitalise a term only at the start of a "
+                "sentence or heading. Never carry a glossary entry's leading capital into the middle "
+                "of a sentence (\"A lesser teaching\" → \"a lesser teaching\" mid-sentence). Proper "
+                "nouns, \"Dharma\", \"Buddha\" and Sanskrit names keep their capitals as given.\n"
+                "- Verbs take the tense and form the sentence needs (transmit → transmitted / "
+                "transmitting); nouns may be singular or plural.\n"
+                "- Articles (a / an / the) may be added, dropped or changed.\n"
+                "- Do not bend the sentence's grammar just to fit a rendering's exact wording.\n"
+                "- Where a rendering lists usages such as (noun) / (verb), use the one that fits; "
+                "those labels themselves are not part of the translation.\n" + "\n".join(lines)
             )
 
     context_hint = ""
@@ -379,16 +411,27 @@ def build_translate_prompt(chinese_text: str, term_constraints: list = None,
             "should cover the whole original sentence)."
         )
 
+    heading_hint = ""
+    section = heading_number(chinese_text)
+    if section:
+        heading_hint = (
+            f"\n\nThis unit is a section heading, section number {section}: the leading Chinese "
+            "numeral is the section marker. Translate the rest as a heading (concise, no final full "
+            f"stop), not as a sentence, and begin the English with \"{section}. \". Do not use list "
+            "numbers anywhere else."
+        )
+
     retry_hint = ""
     if missing_terms:
         lines = "\n".join(f'- {m["chinese"]} → "{m["english"]}"' for m in missing_terms)
         retry_hint = (
             "\n\nIMPORTANT: a previous draft of this sentence did not use these required "
-            f"renderings. Use them this time:\n{lines}"
+            "renderings (or dropped their parenthetical gloss). Use them this time, adapted "
+            f"grammatically as above:\n{lines}"
         )
 
     user = (
-        f"{style_hint}{example_hint}{term_hint}{context_hint}{split_hint}{retry_hint}\n\n"
+        f"{style_hint}{example_hint}{term_hint}{context_hint}{split_hint}{heading_hint}{retry_hint}\n\n"
         f"TARGET SENTENCE — translate this: {chinese_text}\n\n"
         "Reply ONLY with a JSON object, no other text or markdown fences:\n"
         "{\"english\": \"the English translation\", \"reasoning\": [\"...\", ...], \"split_map\": null or "
@@ -410,26 +453,66 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+_ARTICLES = {"a", "an", "the"}
+
+# Irregular forms: any word in a group matches any other in the same group.
+_IRREGULAR_GROUPS = [
+    "be is are was were been being am", "have has had having", "do does did done doing",
+    "teach teaches taught teaching", "give gives gave given giving", "take takes took taken taking",
+    "see sees saw seen seeing", "go goes went gone going", "come comes came coming",
+    "become becomes became becoming", "speak speaks spoke spoken speaking",
+    "arise arises arose arisen arising", "bring brings brought bringing",
+    "seek seeks sought seeking", "think thinks thought thinking", "fall falls fell fallen falling",
+    "know knows knew known knowing", "hold holds held holding", "make makes made making",
+    "say says said saying", "hear hears heard hearing", "leave leaves left leaving",
+    "lead leads led leading", "write writes wrote written writing", "bear bears bore borne born bearing",
+    "abide abides abode abiding", "understand understands understood understanding",
+    "child children", "man men", "woman women", "person people",
+]
+_IRREGULAR = {w: set(g.split()) for g in _IRREGULAR_GROUPS for w in g.split()}
+
+
+def _word_forms(w: str) -> set:
+    """w plus its regular plural / verb forms and any irregular forms."""
+    forms = {w} | _IRREGULAR.get(w, set())
+    if not w.isalpha() or len(w) < 2:
+        return forms
+    forms |= {w + "s", w + "es", w + "ed", w + "ing"}
+    if w.endswith("e"):
+        forms |= {w + "d", w[:-1] + "ing"}
+    if w.endswith("y") and len(w) > 2 and w[-2] not in "aeiou":
+        forms |= {w[:-1] + "ies", w[:-1] + "ied"}
+    if len(w) >= 3 and w[-1] not in "aeiouwxy" and w[-2] in "aeiou" and w[-3] not in "aeiou":
+        forms |= {w + w[-1] + "ed", w + w[-1] + "ing"}           # transmit → transmitted
+    # a glossary entry that is already inflected also matches its base form
+    for suf in ("ies", "es", "s", "ed", "ing"):
+        if w.endswith(suf) and len(w) > len(suf) + 2:
+            forms.add(w[:-len(suf)])
+    return forms
+
+
 def _phrase_in(phrase: str, hay: str) -> bool:
     """Whether normalized phrase occurs in normalized hay as whole words, allowing
-    simple inflections (transmit → transmitted, practice → practicing)."""
-    words = phrase.split()
+    inflections (transmit → transmitted, being → beings, teach → taught) and
+    articles added, dropped or changed (transmit the Dharma → transmit Dharma)."""
+    words = [w for w in phrase.split() if w not in _ARTICLES]   # articles never required
     if not words:
         return False
-    parts = []
-    for w in words:
-        stem = w[:-1] if w.endswith("e") and len(w) > 3 else w
-        parts.append(re.escape(stem) + r"(?:e|s|es|d|ed|ing|[a-z]?ed|[a-z]?ing)?" if w.isalpha() else re.escape(w))
-    return re.search(r"(?<!\w)" + r"\s+".join(parts) + r"(?!\w)", hay) is not None
+    article = r"(?:(?:a|an|the)\s+)?"
+    parts = ["(?:" + "|".join(re.escape(f) for f in sorted(_word_forms(w), key=len, reverse=True)) + ")"
+             for w in words]
+    pattern = r"(?<!\w)" + (r"\s+" + article).join(parts) + r"(?!\w)"
+    return re.search(pattern, hay) is not None
 
 
 def check_term_compliance(english: str, term_constraints: list) -> list:
     """Required renderings missing from english.
 
-    Case-insensitive, punctuation ignored, simple inflections allowed. Any
-    ";"-separated option counts. A rendering with a parenthetical gloss that
-    appears without its gloss is a partial match, reported with "partial": True.
-    Usage labels such as (noun) are not required.
+    Tolerant of legitimate grammatical adaptation: case, punctuation, articles
+    (a / an / the added, dropped or changed), plural and verb inflections incl.
+    common irregulars. Any ";"-separated option counts. Usage labels such as
+    (noun) are not required. A parenthetical gloss is checked separately: main
+    part present but gloss absent → "partial": True ("gloss dropped").
     Returns [{"chinese", "english", "term_id", "partial"}].
     """
     hay = _norm(english)
@@ -440,16 +523,15 @@ def check_term_compliance(english: str, term_constraints: list) -> list:
             continue
         full_hit = partial_hit = False
         for opt in options:
-            required = opt
-            for g in re.findall(r"\(([^)]*)\)", opt):
-                if _norm(g) in _USAGE_LABELS:
-                    required = required.replace(f"({g})", " ")
-            required = re.sub(r"^\s*to\s+", "", required, flags=re.I)  # infinitive marker of a verb rendering
-            if _phrase_in(_norm(required), hay):
+            glosses = [g for g in re.findall(r"\(([^)]*)\)", opt) if _norm(g) not in _USAGE_LABELS]
+            main = re.sub(r"\([^)]*\)", " ", opt)
+            main = re.sub(r"^\s*to\s+", "", main, flags=re.I)  # infinitive marker of a verb rendering
+            if not _phrase_in(_norm(main), hay):
+                continue
+            if all(_phrase_in(_norm(g), hay) for g in glosses):
                 full_hit = True
                 break
-            if _phrase_in(_norm(re.sub(r"\([^)]*\)", " ", required)), hay):
-                partial_hit = True
+            partial_hit = True
         if not full_hit:
             missing.append({"chinese": t["chinese"], "english": t["english"],
                             "term_id": t.get("term_id", ""), "partial": partial_hit})

@@ -1206,6 +1206,35 @@ G3 notes → Style Guide rule proposed by anyone, approved only by a Lead).
 - **Follow-up**: card buttons are now [engine] [AI Translate/Re-translate] [Notes] [Save]
   [Reviewed] [History]; Notes and History panels are mutually exclusive (opening one closes the other).
 
+### Stage F5 — Grammatically Adapted Glossary Terms + Section Headings (2026-11-02)
+
+Problem: "use the glossary rendering exactly" produced "A lesser teaching" mid-sentence, "the
+Buddha would transmit the Dharma", and "1." at the start of a prose draft (source starts with 一).
+
+- **`ai.py` prompt** (both engines): REQUIRED TERMINOLOGY now says keep key words, diacritics and
+  any gloss, but adapt capitalisation (no glossary leading capital mid-sentence; Dharma, Buddha,
+  proper and Sanskrit names keep theirs), verb tense/form, singular/plural and articles; do not
+  bend grammar to fit. The system line and the retry hint say the same.
+- **Section headings**: `heading_number(chinese_text)` detects a leading Chinese numeral marker
+  ("一 ", "二、", "三．", "（四）", up to 99). The prompt then says the unit is a heading with
+  section number N: translate it as a heading, begin with "N. ", no list numbers elsewhere.
+- **`check_term_compliance`** is tolerant: case, punctuation, articles (a/an/the) added, dropped or
+  changed anywhere in the term, plural -s/-es/-ies, verb -s/-ed/-ing incl. e-drop and consonant
+  doubling (transmit → transmitted), plus a built-in irregular map (teach/taught, give/gave/given,
+  be/is/are/was/were, …). No new dependency. The parenthetical gloss is checked separately:
+  main part present, gloss absent → "gloss dropped" chip (partial).
+- **`test_term_compliance.py`** (new, 9 tests, runs with pytest or `python test_term_compliance.py`;
+  pytest is not in .venv): A lesser teaching ↔ a lesser teaching; transmit the Dharma ↔
+  transmitted the Dharma; sentient being ↔ sentient beings; gloss dropped → partial; plus gloss
+  kept, really missing, irregulars, usage labels / alternatives, heading detection. 9/9 pass.
+
+#### Re-run of `scripts/compare_engines.py` (2026-11-02, no DB writes)
+- 小法 glossary entry (T002950) still read "A lesser teaching" at run time.
+- 14/14 drafts, no retries, no missing terms. Both engines now write "a lesser teaching" and "the
+  Buddha transmitted the Dharma"; sentence 1 comes out as a heading starting "1." (OpenAI used
+  Title Case). Claude 58.0 s, 9,093 in / 5,673 out tokens; OpenAI 62.3 s, 6,083 in / 5,273 out.
+  `docs/compare_2026-11-02.md` and `_key.md` regenerated (overwritten).
+
 ---
 
 ## Known Issues / Notes
@@ -1245,7 +1274,8 @@ G3 notes → Style Guide rule proposed by anyone, approved only by a Lead).
   approval" → as Lead, Approve it in Style Guide → confirm it reaches the next AI Translate.
 - **Send `docs/compare_2026-11-02.md` to Greg and Weiya** (not the `_key` file); pick the
   default engine from their verdicts.
-- **Fix glossary entry 小法** → "a lesser teaching" (lower-case a).
+- **Fix glossary entry 小法** (T002950) → "a lesser teaching" (lower-case a); the prompt now
+  copes with the capital, but the glossary should still be right.
 - **Book Glossary live UI test** (backend fully verified via live Supabase + a real Flask
   test-client HTTP cycle, but never clicked through in an actual browser): open a book → Chapters
   → "📖 Glossary" button (Leader+ only — confirm it's absent for Members) → open a term from
